@@ -1,0 +1,1172 @@
+"""Assignment management commands for awsideman.
+
+This module provides commands for managing permission set assignments in AWS Identity Center.
+Assignments link permission sets to principals (users or groups) for specific AWS accounts.
+
+Commands:
+    list: List all assignments in the Identity Center
+    get: Get detailed information about a specific assignment
+    assign: Assign a permission set to a principal for a specific account
+    revoke: Revoke a permission set assignment from a principal
+
+Examples:
+    # List all assignments
+    $ awsideman assignment list
+
+    # List assignments for a specific account
+    $ awsideman assignment list --account-id 123456789012
+
+    # Get details for a specific assignment
+    $ awsideman assignment get arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012
+
+    # Assign a permission set to a user
+    $ awsideman assignment assign arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012
+
+    # Revoke a permission set assignment
+    $ awsideman assignment revoke arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012
+"""
+import typer
+import sys
+from typing import Optional
+from rich.console import Console
+from rich.table import Table
+from botocore.exceptions import ClientError
+
+from ..utils.config import Config
+from ..utils.aws_client import AWSClientManager
+from ..utils.validators import validate_profile, validate_sso_instance
+from ..utils.error_handler import handle_aws_error, handle_network_error
+
+app = typer.Typer(help="Manage permission set assignments in AWS Identity Center. List, get, assign, and revoke permission set assignments.")
+console = Console()
+config = Config()
+
+
+
+
+
+def get_single_key():
+    """
+    Get a single key press without requiring Enter.
+    
+    Used for interactive pagination in the list command.
+    Handles platform-specific keyboard input with fallbacks.
+    """
+    try:
+        # Try to import platform-specific modules
+        if sys.platform == "win32":
+            import msvcrt
+            return msvcrt.getch().decode('utf-8')
+        else:
+            import termios
+            import tty
+            
+            # Save the terminal settings
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            
+            try:
+                # Set terminal to raw mode
+                tty.setraw(sys.stdin.fileno())
+                # Read a single character
+                key = sys.stdin.read(1)
+                return key
+            finally:
+                # Restore terminal settings
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except ImportError:
+        # Fallback to input() if platform-specific modules are not available
+        return input()
+    except Exception:
+        # Fallback to input() if anything goes wrong
+        return input()
+
+
+@app.command("list")
+def list_assignments(
+    account_id: Optional[str] = typer.Option(None, "--account-id", "-a", help="Filter by AWS account ID"),
+    permission_set_arn: Optional[str] = typer.Option(None, "--permission-set-arn", "-p", help="Filter by permission set ARN"),
+    principal_id: Optional[str] = typer.Option(None, "--principal-id", help="Filter by principal ID"),
+    principal_type: Optional[str] = typer.Option(None, "--principal-type", help="Filter by principal type (USER or GROUP)"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum number of assignments to return"),
+    next_token: Optional[str] = typer.Option(None, "--next-token", "-n", help="Pagination token"),
+    interactive: bool = typer.Option(True, "--interactive/--no-interactive", help="Enable/disable interactive pagination"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
+):
+    """List all permission set assignments.
+    
+    Displays a table of assignments with permission set name, principal name, principal type, and target account.
+    Results can be filtered by account ID, permission set ARN, and principal ID.
+    
+    Examples:
+        # List all assignments
+        $ awsideman assignment list
+        
+        # List assignments for a specific account
+        $ awsideman assignment list --account-id 123456789012
+        
+        # List assignments for a specific permission set
+        $ awsideman assignment list --permission-set-arn arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef
+        
+        # List assignments for a specific principal
+        $ awsideman assignment list --principal-id user-1234567890abcdef
+        
+        # List assignments with a specific limit
+        $ awsideman assignment list --limit 10
+    """
+    # Validate profile and get profile data
+    profile_name, profile_data = validate_profile(profile)
+    
+    # Validate SSO instance and get instance ARN and identity store ID
+    instance_arn, identity_store_id = validate_sso_instance(profile_data)
+    
+    # Validate principal type if provided
+    if principal_type and principal_type.upper() not in ["USER", "GROUP"]:
+        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
+        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Convert principal type to uppercase if provided
+    if principal_type:
+        principal_type = principal_type.upper()
+    
+    # Validate limit if provided
+    if limit is not None and limit <= 0:
+        console.print("[red]Error: Limit must be a positive integer.[/red]")
+        raise typer.Exit(1)
+    
+    # Create AWS client manager
+    aws_client = AWSClientManager(profile_name)
+    
+    # Get SSO admin client
+    try:
+        sso_admin_client = aws_client.get_sso_admin_client()
+    except ClientError as e:
+        handle_aws_error(e, "CreateSSOAdminClient")
+    except Exception as e:
+        handle_network_error(e)
+    
+    # Get identity store client
+    try:
+        identity_store_client = aws_client.get_identity_store_client()
+    except ClientError as e:
+        handle_aws_error(e, "CreateIdentityStoreClient")
+    except Exception as e:
+        handle_network_error(e)
+    
+    # Initialize pagination variables
+    current_token = next_token
+    page_number = 1
+    
+    # Display a message indicating that we're fetching assignments
+    with console.status("[blue]Fetching permission set assignments...[/blue]"):
+        try:
+            # Set up the base parameters for the list_account_assignments API call
+            list_params = {
+                "InstanceArn": instance_arn,
+            }
+            
+            # Add filters if provided
+            if account_id:
+                list_params["AccountId"] = account_id
+            
+            if permission_set_arn:
+                list_params["PermissionSetArn"] = permission_set_arn
+            
+            # We can only filter by principal ID and type if both are provided
+            if principal_id and principal_type:
+                list_params["PrincipalId"] = principal_id
+                list_params["PrincipalType"] = principal_type
+            elif principal_id and not principal_type:
+                console.print("[yellow]Warning: Principal ID provided without principal type. Using default type 'USER'.[/yellow]")
+                list_params["PrincipalId"] = principal_id
+                list_params["PrincipalType"] = "USER"
+            
+            # Set the maximum number of results to return if limit is provided
+            if limit:
+                list_params["MaxResults"] = min(limit, 100)  # AWS API typically limits to 100 items per page
+            
+            # Initialize variables for pagination
+            all_assignments = []
+            
+            # Fetch assignments with pagination
+            while True:
+                # Add the pagination token if available
+                if current_token:
+                    list_params["NextToken"] = current_token
+                
+                # Make the API call to list account assignments
+                response = sso_admin_client.list_account_assignments(**list_params)
+                
+                # Extract assignments from the response
+                assignments = response.get("AccountAssignments", [])
+                
+                # Add assignments to the list
+                all_assignments.extend(assignments)
+                
+                # Check if there are more assignments to fetch
+                current_token = response.get("NextToken")
+                
+                # If there's no next token or we've reached the limit, break the loop
+                if not current_token or (limit and len(all_assignments) >= limit):
+                    break
+            
+            # Process assignments to resolve names
+            processed_assignments = []
+            
+            # Create a dictionary to cache permission set and principal information
+            permission_set_cache = {}
+            principal_cache = {}
+            
+            # Process each assignment
+            for assignment in all_assignments:
+                # Extract assignment information
+                assignment_info = {
+                    "PermissionSetArn": assignment.get("PermissionSetArn"),
+                    "PrincipalId": assignment.get("PrincipalId"),
+                    "PrincipalType": assignment.get("PrincipalType"),
+                    "TargetId": assignment.get("AccountId"),
+                    "TargetType": "AWS_ACCOUNT"
+                }
+                
+                # Resolve permission set name if not already in cache
+                if assignment_info["PermissionSetArn"] not in permission_set_cache:
+                    try:
+                        permission_set_info = resolve_permission_set_info(
+                            instance_arn,
+                            assignment_info["PermissionSetArn"],
+                            sso_admin_client
+                        )
+                        permission_set_cache[assignment_info["PermissionSetArn"]] = permission_set_info
+                    except typer.Exit:
+                        # If we can't resolve the permission set, use a placeholder
+                        permission_set_cache[assignment_info["PermissionSetArn"]] = {
+                            "Name": "Unknown Permission Set"
+                        }
+                
+                # Add permission set name to assignment info
+                assignment_info["PermissionSetName"] = permission_set_cache[assignment_info["PermissionSetArn"]].get("Name")
+                
+                # Create a cache key for the principal
+                principal_cache_key = f"{assignment_info['PrincipalType']}:{assignment_info['PrincipalId']}"
+                
+                # Resolve principal name if not already in cache
+                if principal_cache_key not in principal_cache:
+                    try:
+                        principal_info = resolve_principal_info(
+                            identity_store_id,
+                            assignment_info["PrincipalId"],
+                            assignment_info["PrincipalType"],
+                            identity_store_client
+                        )
+                        principal_cache[principal_cache_key] = principal_info
+                    except typer.Exit:
+                        # If we can't resolve the principal, use a placeholder
+                        principal_cache[principal_cache_key] = {
+                            "DisplayName": "Unknown Principal"
+                        }
+                
+                # Add principal name to assignment info
+                assignment_info["PrincipalName"] = principal_cache[principal_cache_key].get("DisplayName")
+                
+                # Add the processed assignment to the list
+                processed_assignments.append(assignment_info)
+            
+            # Check if there are any assignments to display
+            if not processed_assignments:
+                console.print("[yellow]No assignments found.[/yellow]")
+                if account_id or permission_set_arn or principal_id:
+                    console.print("[yellow]Try removing filters to see more results.[/yellow]")
+                raise typer.Exit(0)
+            
+            # Create a table for displaying assignments
+            table = Table(show_header=True, header_style="bold blue")
+            table.add_column("Permission Set", style="green")
+            table.add_column("Principal Name", style="cyan")
+            table.add_column("Principal Type", style="magenta")
+            table.add_column("Account ID", style="yellow")
+            
+            # Add rows to the table
+            for assignment in processed_assignments:
+                table.add_row(
+                    assignment.get("PermissionSetName", "Unknown"),
+                    assignment.get("PrincipalName", "Unknown"),
+                    assignment.get("PrincipalType", "Unknown"),
+                    assignment.get("TargetId", "Unknown")
+                )
+            
+            # Display filter information if any filters are applied
+            filters_applied = []
+            if account_id:
+                filters_applied.append(f"Account ID: {account_id}")
+            if permission_set_arn:
+                filters_applied.append(f"Permission Set ARN: {permission_set_arn}")
+            if principal_id:
+                filters_applied.append(f"Principal ID: {principal_id}")
+            if principal_type:
+                filters_applied.append(f"Principal Type: {principal_type}")
+            
+            if filters_applied:
+                console.print("Filters applied:", ", ".join(filters_applied), style="dim")
+            
+            # Display the table
+            console.print(table)
+            
+            # Display pagination information if there's a next token and interactive mode is enabled
+            if current_token and interactive:
+                console.print(f"More results available. Use --next-token {current_token} to fetch the next page.", style="dim")
+                
+        except ClientError as e:
+            # Handle AWS API errors with enhanced error handling
+            handle_aws_error(e, "ListAccountAssignments")
+        except Exception as e:
+            # Handle other unexpected errors
+            console.print(f"[red]Error: {str(e)}[/red]")
+            raise typer.Exit(1)
+
+
+@app.command("get")
+def get_assignment(
+    permission_set_arn: str = typer.Argument(..., help="Permission set ARN"),
+    principal_id: str = typer.Argument(..., help="Principal ID (user or group)"),
+    account_id: str = typer.Argument(..., help="AWS account ID"),
+    principal_type: str = typer.Option("USER", "--principal-type", help="Principal type (USER or GROUP)"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
+):
+    """Get details about a specific permission set assignment.
+    
+    Retrieves and displays comprehensive information about an assignment by its permission set ARN,
+    principal ID, and account ID. Shows detailed assignment information including creation date
+    and resolved names for user-friendly display.
+    
+    Examples:
+        # Get assignment details for a user
+        $ awsideman assignment get arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012
+        
+        # Get assignment details for a group
+        $ awsideman assignment get arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef group-1234567890abcdef 123456789012 --principal-type GROUP
+    """
+    # Validate profile and get profile data
+    profile_name, profile_data = validate_profile(profile)
+    
+    # Validate SSO instance and get instance ARN and identity store ID
+    instance_arn, identity_store_id = validate_sso_instance(profile_data)
+    
+    # Validate principal type
+    if principal_type.upper() not in ["USER", "GROUP"]:
+        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
+        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Convert principal type to uppercase
+    principal_type = principal_type.upper()
+    
+    # Validate permission set ARN format (basic validation)
+    if not permission_set_arn.startswith("arn:aws:sso:::permissionSet/"):
+        console.print(f"[red]Error: Invalid permission set ARN format.[/red]")
+        console.print("[yellow]Permission set ARN should start with 'arn:aws:sso:::permissionSet/'.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Validate account ID format (basic validation - should be 12 digits)
+    if not account_id.isdigit() or len(account_id) != 12:
+        console.print(f"[red]Error: Invalid account ID format.[/red]")
+        console.print("[yellow]Account ID should be a 12-digit number.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Validate principal ID format (basic validation - should not be empty)
+    if not principal_id.strip():
+        console.print(f"[red]Error: Principal ID cannot be empty.[/red]")
+        raise typer.Exit(1)
+    
+    # Create AWS client manager
+    aws_client = AWSClientManager(profile_name)
+    
+    # Get SSO admin client
+    try:
+        sso_admin_client = aws_client.get_sso_admin_client()
+    except Exception as e:
+        console.print(f"[red]Error: Failed to create SSO admin client: {str(e)}[/red]")
+        raise typer.Exit(1)
+    
+    # Get identity store client
+    try:
+        identity_store_client = aws_client.get_identity_store_client()
+    except Exception as e:
+        console.print(f"[red]Error: Failed to create identity store client: {str(e)}[/red]")
+        raise typer.Exit(1)
+    
+    # Display a message indicating that we're fetching assignment details
+    with console.status("[blue]Fetching assignment details...[/blue]"):
+        try:
+            # Check if assignment exists by listing assignments with specific filters
+            list_params = {
+                "InstanceArn": instance_arn,
+                "AccountId": account_id,
+                "PermissionSetArn": permission_set_arn,
+                "PrincipalId": principal_id,
+                "PrincipalType": principal_type
+            }
+            
+            # Make the API call to list account assignments with filters
+            response = sso_admin_client.list_account_assignments(**list_params)
+            
+            # Extract assignments from the response
+            assignments = response.get("AccountAssignments", [])
+            
+            # Check if the assignment exists
+            if not assignments:
+                console.print(f"[red]Error: Assignment not found.[/red]")
+                console.print(f"[yellow]No assignment found for:[/yellow]")
+                console.print(f"  Permission Set ARN: {permission_set_arn}")
+                console.print(f"  Principal ID: {principal_id}")
+                console.print(f"  Principal Type: {principal_type}")
+                console.print(f"  Account ID: {account_id}")
+                console.print("[yellow]Use 'awsideman assignment list' to see all available assignments.[/yellow]")
+                raise typer.Exit(1)
+            
+            # Get the first (and should be only) assignment
+            assignment = assignments[0]
+            
+            # Extract assignment information
+            assignment_info = {
+                "PermissionSetArn": assignment.get("PermissionSetArn"),
+                "PrincipalId": assignment.get("PrincipalId"),
+                "PrincipalType": assignment.get("PrincipalType"),
+                "AccountId": assignment.get("AccountId"),
+                "CreatedDate": assignment.get("CreatedDate")
+            }
+            
+            # Resolve permission set information
+            try:
+                permission_set_info = resolve_permission_set_info(
+                    instance_arn,
+                    assignment_info["PermissionSetArn"],
+                    sso_admin_client
+                )
+                assignment_info["PermissionSetName"] = permission_set_info.get("Name")
+                assignment_info["PermissionSetDescription"] = permission_set_info.get("Description")
+                assignment_info["SessionDuration"] = permission_set_info.get("SessionDuration")
+            except typer.Exit:
+                # If we can't resolve the permission set, use placeholder values
+                assignment_info["PermissionSetName"] = "Unknown Permission Set"
+                assignment_info["PermissionSetDescription"] = None
+                assignment_info["SessionDuration"] = None
+            
+            # Resolve principal information
+            try:
+                principal_info = resolve_principal_info(
+                    identity_store_id,
+                    assignment_info["PrincipalId"],
+                    assignment_info["PrincipalType"],
+                    identity_store_client
+                )
+                assignment_info["PrincipalName"] = principal_info.get("PrincipalName")
+                assignment_info["PrincipalDisplayName"] = principal_info.get("DisplayName")
+            except typer.Exit:
+                # If we can't resolve the principal, use placeholder values
+                assignment_info["PrincipalName"] = "Unknown Principal"
+                assignment_info["PrincipalDisplayName"] = "Unknown Principal"
+            
+            # Display comprehensive assignment information in panel format
+            from rich.panel import Panel
+            from rich.text import Text
+            
+            # Create the assignment details content
+            details_content = []
+            
+            # Permission Set Information
+            details_content.append(f"[bold blue]Permission Set Information[/bold blue]")
+            details_content.append(f"  Name: [green]{assignment_info.get('PermissionSetName', 'Unknown')}[/green]")
+            details_content.append(f"  ARN: [dim]{assignment_info['PermissionSetArn']}[/dim]")
+            if assignment_info.get('PermissionSetDescription'):
+                details_content.append(f"  Description: {assignment_info['PermissionSetDescription']}")
+            if assignment_info.get('SessionDuration'):
+                details_content.append(f"  Session Duration: {assignment_info['SessionDuration']}")
+            details_content.append("")
+            
+            # Principal Information
+            details_content.append(f"[bold cyan]Principal Information[/bold cyan]")
+            details_content.append(f"  Display Name: [cyan]{assignment_info.get('PrincipalDisplayName', 'Unknown')}[/cyan]")
+            details_content.append(f"  Principal Name: {assignment_info.get('PrincipalName', 'Unknown')}")
+            details_content.append(f"  Principal ID: [dim]{assignment_info['PrincipalId']}[/dim]")
+            details_content.append(f"  Principal Type: [magenta]{assignment_info['PrincipalType']}[/magenta]")
+            details_content.append("")
+            
+            # Account Information
+            details_content.append(f"[bold yellow]Account Information[/bold yellow]")
+            details_content.append(f"  Account ID: [yellow]{assignment_info['AccountId']}[/yellow]")
+            details_content.append("")
+            
+            # Assignment Metadata
+            details_content.append(f"[bold white]Assignment Metadata[/bold white]")
+            if assignment_info.get('CreatedDate'):
+                # Format the creation date for better readability
+                created_date = assignment_info['CreatedDate']
+                if hasattr(created_date, 'strftime'):
+                    formatted_date = created_date.strftime('%Y-%m-%d %H:%M:%S UTC')
+                else:
+                    formatted_date = str(created_date)
+                details_content.append(f"  Created Date: [white]{formatted_date}[/white]")
+            else:
+                details_content.append(f"  Created Date: [dim]Not available[/dim]")
+            
+            # Join all content with newlines
+            content_text = "\n".join(details_content)
+            
+            # Create and display the panel
+            panel = Panel(
+                content_text,
+                title="[bold]Assignment Details[/bold]",
+                title_align="left",
+                border_style="blue",
+                padding=(1, 2)
+            )
+            
+            console.print(panel)
+            
+        except ClientError as e:
+            # Handle AWS API errors with enhanced error handling
+            handle_aws_error(e, "ListAccountAssignments")
+        except Exception as e:
+            # Handle other unexpected errors
+            console.print(f"[red]Error: {str(e)}[/red]")
+            raise typer.Exit(1)
+
+
+@app.command("assign")
+def assign_permission_set(
+    permission_set_arn: str = typer.Argument(..., help="Permission set ARN"),
+    principal_id: str = typer.Argument(..., help="Principal ID (user or group)"),
+    account_id: str = typer.Argument(..., help="AWS account ID"),
+    principal_type: str = typer.Option("USER", "--principal-type", help="Principal type (USER or GROUP)"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
+):
+    """Assign a permission set to a principal for a specific account.
+    
+    Creates an assignment linking a permission set to a principal (user or group) for a specific AWS account.
+    This allows the principal to assume the permission set's role in the specified account.
+    
+    Examples:
+        # Assign a permission set to a user
+        $ awsideman assignment assign arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012
+        
+        # Assign a permission set to a group
+        $ awsideman assignment assign arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef group-1234567890abcdef 123456789012 --principal-type GROUP
+    """
+    # Validate profile and get profile data
+    profile_name, profile_data = validate_profile(profile)
+    
+    # Validate SSO instance and get instance ARN and identity store ID
+    instance_arn, identity_store_id = validate_sso_instance(profile_data)
+    
+    # Validate principal type
+    if principal_type.upper() not in ["USER", "GROUP"]:
+        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
+        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Convert principal type to uppercase
+    principal_type = principal_type.upper()
+    
+    # Validate permission set ARN format (basic validation)
+    if not permission_set_arn.startswith("arn:aws:sso:::permissionSet/"):
+        console.print(f"[red]Error: Invalid permission set ARN format.[/red]")
+        console.print("[yellow]Permission set ARN should start with 'arn:aws:sso:::permissionSet/'.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Validate account ID format (basic validation - should be 12 digits)
+    if not account_id.isdigit() or len(account_id) != 12:
+        console.print(f"[red]Error: Invalid account ID format.[/red]")
+        console.print("[yellow]Account ID should be a 12-digit number.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Validate principal ID format (basic validation - should not be empty)
+    if not principal_id.strip():
+        console.print(f"[red]Error: Principal ID cannot be empty.[/red]")
+        raise typer.Exit(1)
+    
+    # Create AWS client manager
+    aws_client = AWSClientManager(profile_name)
+    
+    # Get SSO admin client
+    try:
+        sso_admin_client = aws_client.get_sso_admin_client()
+    except Exception as e:
+        console.print(f"[red]Error: Failed to create SSO admin client: {str(e)}[/red]")
+        raise typer.Exit(1)
+    
+    # Get identity store client
+    try:
+        identity_store_client = aws_client.get_identity_store_client()
+    except Exception as e:
+        console.print(f"[red]Error: Failed to create identity store client: {str(e)}[/red]")
+        raise typer.Exit(1)
+    
+    # Display a message indicating that we're creating the assignment
+    with console.status("[blue]Creating permission set assignment...[/blue]"):
+        try:
+            # First, check if the assignment already exists
+            list_params = {
+                "InstanceArn": instance_arn,
+                "AccountId": account_id,
+                "PermissionSetArn": permission_set_arn,
+                "PrincipalId": principal_id,
+                "PrincipalType": principal_type
+            }
+            
+            # Check for existing assignment
+            existing_response = sso_admin_client.list_account_assignments(**list_params)
+            existing_assignments = existing_response.get("AccountAssignments", [])
+            
+            if existing_assignments:
+                console.print(f"[yellow]Assignment already exists.[/yellow]")
+                console.print(f"Permission set is already assigned to this principal for the specified account.")
+                
+                # Resolve names for display
+                try:
+                    permission_set_info = resolve_permission_set_info(
+                        instance_arn,
+                        permission_set_arn,
+                        sso_admin_client
+                    )
+                    permission_set_name = permission_set_info.get("Name", "Unknown")
+                except typer.Exit:
+                    permission_set_name = "Unknown"
+                
+                try:
+                    principal_info = resolve_principal_info(
+                        identity_store_id,
+                        principal_id,
+                        principal_type,
+                        identity_store_client
+                    )
+                    principal_name = principal_info.get("DisplayName", "Unknown")
+                except typer.Exit:
+                    principal_name = "Unknown"
+                
+                console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                raise typer.Exit(0)
+            
+            # Create the assignment
+            create_params = {
+                "InstanceArn": instance_arn,
+                "TargetId": account_id,
+                "TargetType": "AWS_ACCOUNT",
+                "PermissionSetArn": permission_set_arn,
+                "PrincipalType": principal_type,
+                "PrincipalId": principal_id
+            }
+            
+            # Make the API call to create the assignment
+            response = sso_admin_client.create_account_assignment(**create_params)
+            
+            # Extract the request ID for tracking
+            request_id = response.get("AccountAssignmentCreationStatus", {}).get("RequestId")
+            
+            # The assignment creation is asynchronous, so we get a request status
+            assignment_status = response.get("AccountAssignmentCreationStatus", {})
+            status = assignment_status.get("Status", "UNKNOWN")
+            
+            # Resolve names for confirmation display
+            try:
+                permission_set_info = resolve_permission_set_info(
+                    instance_arn,
+                    permission_set_arn,
+                    sso_admin_client
+                )
+                permission_set_name = permission_set_info.get("Name", "Unknown")
+            except typer.Exit:
+                permission_set_name = "Unknown"
+            
+            try:
+                principal_info = resolve_principal_info(
+                    identity_store_id,
+                    principal_id,
+                    principal_type,
+                    identity_store_client
+                )
+                principal_name = principal_info.get("DisplayName", "Unknown")
+            except typer.Exit:
+                principal_name = "Unknown"
+            
+            if status == "IN_PROGRESS":
+                console.print(f"[green]✓ Assignment creation initiated successfully.[/green]")
+                console.print()
+                console.print("[bold]Assignment Details:[/bold]")
+                console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                console.print()
+                if request_id:
+                    console.print(f"Request ID: [dim]{request_id}[/dim]")
+                console.print("[yellow]Note: Assignment creation is asynchronous and may take a few moments to complete.[/yellow]")
+                console.print("[yellow]You can verify the assignment using 'awsideman assignment get' command.[/yellow]")
+            elif status == "SUCCEEDED":
+                console.print(f"[green]✓ Assignment created successfully.[/green]")
+                console.print()
+                console.print("[bold]Assignment Details:[/bold]")
+                console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                console.print()
+                console.print("[green]The principal can now access the specified account with the assigned permission set.[/green]")
+            elif status == "FAILED":
+                failure_reason = assignment_status.get("FailureReason", "Unknown error")
+                console.print(f"[red]✗ Assignment creation failed: {failure_reason}[/red]")
+                console.print()
+                console.print("[bold]Attempted Assignment:[/bold]")
+                console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                raise typer.Exit(1)
+            else:
+                console.print(f"[yellow]Assignment creation status: {status}[/yellow]")
+                console.print()
+                console.print("[bold]Assignment Details:[/bold]")
+                console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                console.print()
+                if request_id:
+                    console.print(f"Request ID: [dim]{request_id}[/dim]")
+                console.print("[yellow]Please check the assignment status using 'awsideman assignment get' command.[/yellow]")
+            
+        except ClientError as e:
+            # Handle AWS API errors with enhanced error handling
+            handle_aws_error(e, "CreateAccountAssignment")
+        except Exception as e:
+            # Handle other unexpected errors
+            console.print(f"[red]Error: {str(e)}[/red]")
+            raise typer.Exit(1)
+
+
+@app.command("revoke")
+def revoke_assignment(
+    permission_set_arn: str = typer.Argument(..., help="Permission set ARN"),
+    principal_id: str = typer.Argument(..., help="Principal ID (user or group)"),
+    account_id: str = typer.Argument(..., help="AWS account ID"),
+    principal_type: str = typer.Option("USER", "--principal-type", help="Principal type (USER or GROUP)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force revocation without confirmation"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
+):
+    """Revoke a permission set assignment from a principal.
+    
+    Removes an assignment linking a permission set to a principal (user or group) for a specific AWS account.
+    This will remove the principal's access to the specified account through the permission set.
+    
+    Examples:
+        # Revoke a permission set assignment from a user
+        $ awsideman assignment revoke arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012
+        
+        # Revoke a permission set assignment from a group
+        $ awsideman assignment revoke arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef group-1234567890abcdef 123456789012 --principal-type GROUP
+        
+        # Force revocation without confirmation
+        $ awsideman assignment revoke arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012 --force
+    """
+    # Validate profile and get profile data
+    profile_name, profile_data = validate_profile(profile)
+    
+    # Validate SSO instance and get instance ARN and identity store ID
+    instance_arn, identity_store_id = validate_sso_instance(profile_data)
+    
+    # Validate principal type
+    if principal_type.upper() not in ["USER", "GROUP"]:
+        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
+        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Convert principal type to uppercase
+    principal_type = principal_type.upper()
+    
+    # Validate permission set ARN format (basic validation)
+    if not permission_set_arn.startswith("arn:aws:sso:::permissionSet/"):
+        console.print(f"[red]Error: Invalid permission set ARN format.[/red]")
+        console.print("[yellow]Permission set ARN should start with 'arn:aws:sso:::permissionSet/'.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Validate account ID format (basic validation - should be 12 digits)
+    if not account_id.isdigit() or len(account_id) != 12:
+        console.print(f"[red]Error: Invalid account ID format.[/red]")
+        console.print("[yellow]Account ID should be a 12-digit number.[/yellow]")
+        raise typer.Exit(1)
+    
+    # Validate principal ID format (basic validation - should not be empty)
+    if not principal_id.strip():
+        console.print(f"[red]Error: Principal ID cannot be empty.[/red]")
+        raise typer.Exit(1)
+    
+    # Create AWS client manager
+    aws_client = AWSClientManager(profile_name)
+    
+    # Get SSO admin client
+    try:
+        sso_admin_client = aws_client.get_sso_admin_client()
+    except Exception as e:
+        console.print(f"[red]Error: Failed to create SSO admin client: {str(e)}[/red]")
+        raise typer.Exit(1)
+    
+    # Get identity store client
+    try:
+        identity_store_client = aws_client.get_identity_store_client()
+    except Exception as e:
+        console.print(f"[red]Error: Failed to create identity store client: {str(e)}[/red]")
+        raise typer.Exit(1)
+    
+    # Display a message indicating that we're checking the assignment
+    with console.status("[blue]Checking assignment details...[/blue]"):
+        try:
+            # First, check if the assignment exists
+            list_params = {
+                "InstanceArn": instance_arn,
+                "AccountId": account_id,
+                "PermissionSetArn": permission_set_arn,
+                "PrincipalId": principal_id,
+                "PrincipalType": principal_type
+            }
+            
+            # Check for existing assignment
+            existing_response = sso_admin_client.list_account_assignments(**list_params)
+            existing_assignments = existing_response.get("AccountAssignments", [])
+            
+            if not existing_assignments:
+                console.print(f"[red]Error: Assignment not found.[/red]")
+                console.print(f"[yellow]No assignment found for:[/yellow]")
+                console.print(f"  Permission Set ARN: {permission_set_arn}")
+                console.print(f"  Principal ID: {principal_id}")
+                console.print(f"  Principal Type: {principal_type}")
+                console.print(f"  Account ID: {account_id}")
+                console.print("[yellow]Use 'awsideman assignment list' to see all available assignments.[/yellow]")
+                raise typer.Exit(1)
+            
+            # Get the assignment details
+            assignment = existing_assignments[0]
+            
+            # Resolve names for display
+            try:
+                permission_set_info = resolve_permission_set_info(
+                    instance_arn,
+                    permission_set_arn,
+                    sso_admin_client
+                )
+                permission_set_name = permission_set_info.get("Name", "Unknown")
+            except typer.Exit:
+                permission_set_name = "Unknown"
+            
+            try:
+                principal_info = resolve_principal_info(
+                    identity_store_id,
+                    principal_id,
+                    principal_type,
+                    identity_store_client
+                )
+                principal_name = principal_info.get("DisplayName", "Unknown")
+            except typer.Exit:
+                principal_name = "Unknown"
+            
+            # Show confirmation prompt unless force flag is used
+            if not force:
+                console.print()
+                console.print("[bold red]⚠️  WARNING: You are about to revoke a permission set assignment[/bold red]")
+                console.print()
+                console.print("[bold]Assignment to be revoked:[/bold]")
+                console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                console.print()
+                console.print("[red]This will remove the principal's access to the specified account through this permission set.[/red]")
+                console.print()
+                
+                # Get user confirmation
+                confirm = typer.confirm("Are you sure you want to revoke this assignment?")
+                if not confirm:
+                    console.print("[yellow]Assignment revocation cancelled.[/yellow]")
+                    raise typer.Exit(0)
+            
+            # Display a message indicating that we're revoking the assignment
+            with console.status("[blue]Revoking permission set assignment...[/blue]"):
+                # Create the revocation parameters
+                delete_params = {
+                    "InstanceArn": instance_arn,
+                    "TargetId": account_id,
+                    "TargetType": "AWS_ACCOUNT",
+                    "PermissionSetArn": permission_set_arn,
+                    "PrincipalType": principal_type,
+                    "PrincipalId": principal_id
+                }
+                
+                # Make the API call to delete the assignment
+                response = sso_admin_client.delete_account_assignment(**delete_params)
+                
+                # Extract the request ID for tracking
+                request_id = response.get("AccountAssignmentDeletionStatus", {}).get("RequestId")
+                
+                # The assignment deletion is asynchronous, so we get a request status
+                assignment_status = response.get("AccountAssignmentDeletionStatus", {})
+                status = assignment_status.get("Status", "UNKNOWN")
+                
+                # Handle the response and display appropriate output
+                if status == "IN_PROGRESS":
+                    console.print(f"[green]✓ Assignment revocation initiated successfully.[/green]")
+                    console.print()
+                    console.print("[bold]Revoked Assignment Details:[/bold]")
+                    console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                    console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                    console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                    console.print()
+                    if request_id:
+                        console.print(f"Request ID: [dim]{request_id}[/dim]")
+                    console.print("[yellow]Note: Assignment revocation is asynchronous and may take a few moments to complete.[/yellow]")
+                    console.print("[yellow]You can verify the revocation using 'awsideman assignment list' command.[/yellow]")
+                elif status == "SUCCEEDED":
+                    console.print(f"[green]✓ Assignment revoked successfully.[/green]")
+                    console.print()
+                    console.print("[bold]Revoked Assignment Details:[/bold]")
+                    console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                    console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                    console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                    console.print()
+                    console.print("[green]The principal no longer has access to the specified account through this permission set.[/green]")
+                elif status == "FAILED":
+                    failure_reason = assignment_status.get("FailureReason", "Unknown error")
+                    console.print(f"[red]✗ Assignment revocation failed: {failure_reason}[/red]")
+                    console.print()
+                    console.print("[bold]Attempted Revocation:[/bold]")
+                    console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                    console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                    console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                    raise typer.Exit(1)
+                else:
+                    console.print(f"[yellow]Assignment revocation status: {status}[/yellow]")
+                    console.print()
+                    console.print("[bold]Assignment Details:[/bold]")
+                    console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+                    console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+                    console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                    console.print()
+                    if request_id:
+                        console.print(f"Request ID: [dim]{request_id}[/dim]")
+                    console.print("[yellow]Please check the assignment status using 'awsideman assignment list' command.[/yellow]")
+                
+        except ClientError as e:
+            # Handle AWS API errors
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            error_message = e.response.get("Error", {}).get("Message", str(e))
+            
+            if error_code == "ResourceNotFoundException":
+                console.print(f"[red]✗ Assignment revocation failed: Assignment not found.[/red]")
+                console.print()
+                console.print("[bold]Attempted Revocation:[/bold]")
+                console.print(f"  Permission Set ARN: {permission_set_arn}")
+                console.print(f"  Principal ID: {principal_id}")
+                console.print(f"  Principal Type: {principal_type}")
+                console.print(f"  Account ID: {account_id}")
+                console.print()
+                console.print("[yellow]Troubleshooting:[/yellow]")
+                console.print("• The assignment may have already been revoked")
+                console.print("• The assignment may never have existed")
+                console.print("• Use 'awsideman assignment list' to see all available assignments")
+            else:
+                console.print(f"[red]✗ Assignment revocation failed ({error_code}): {error_message}[/red]")
+                console.print()
+                console.print("[bold]Attempted Revocation:[/bold]")
+                console.print(f"  Permission Set ARN: {permission_set_arn}")
+                console.print(f"  Principal ID: {principal_id}")
+                console.print(f"  Principal Type: {principal_type}")
+                console.print(f"  Account ID: {account_id}")
+                console.print()
+                
+                if error_code == "AccessDeniedException":
+                    console.print("[yellow]Troubleshooting:[/yellow]")
+                    console.print("• You do not have sufficient permissions to revoke assignments")
+                    console.print("• Ensure your AWS credentials have the necessary SSO Admin permissions")
+                    console.print("• Required permissions: sso:DeleteAccountAssignment, sso:ListAccountAssignments")
+                elif error_code == "ValidationException":
+                    console.print("[yellow]Troubleshooting:[/yellow]")
+                    console.print("• Check that the permission set ARN is valid and exists")
+                    console.print("• Verify that the principal ID exists in the identity store")
+                    console.print("• Ensure the account ID is a valid 12-digit AWS account number")
+                    console.print("• Confirm the principal type matches the actual principal (USER or GROUP)")
+                elif error_code == "ConflictException":
+                    console.print("[yellow]Troubleshooting:[/yellow]")
+                    console.print("• There may be a conflicting assignment operation in progress")
+                    console.print("• Wait a few moments and try again")
+                    console.print("• Check if the assignment is currently being created or modified")
+                else:
+                    console.print("[yellow]Troubleshooting:[/yellow]")
+                    console.print("• This could be due to an issue with the AWS Identity Center service")
+                    console.print("• Check AWS service health status")
+                    console.print("• Verify your AWS region configuration")
+            
+            raise typer.Exit(1)
+        except Exception as e:
+            # Handle other unexpected errors
+            console.print(f"[red]✗ Assignment revocation failed: {str(e)}[/red]")
+            console.print()
+            console.print("[bold]Attempted Revocation:[/bold]")
+            console.print(f"  Permission Set ARN: {permission_set_arn}")
+            console.print(f"  Principal ID: {principal_id}")
+            console.print(f"  Principal Type: {principal_type}")
+            console.print(f"  Account ID: {account_id}")
+            console.print()
+            console.print("[yellow]This could be due to an unexpected error. Please try again or contact support.[/yellow]")
+            raise typer.Exit(1)
+
+
+def resolve_permission_set_info(instance_arn: str, permission_set_arn: str, sso_admin_client) -> dict:
+    """
+    Resolve permission set information from ARN.
+    
+    This function retrieves detailed information about a permission set based on its ARN.
+    It provides error handling for invalid permission set ARNs.
+    
+    Args:
+        instance_arn: SSO instance ARN
+        permission_set_arn: Permission set ARN
+        sso_admin_client: SSO admin client
+        
+    Returns:
+        Dictionary containing permission set information including:
+        - PermissionSetArn: The ARN of the permission set
+        - Name: The name of the permission set
+        - Description: The description of the permission set (if available)
+        - SessionDuration: The session duration of the permission set
+        
+    Raises:
+        typer.Exit: If the permission set cannot be found or an error occurs
+    """
+    try:
+        # Make the API call to describe the permission set
+        response = sso_admin_client.describe_permission_set(
+            InstanceArn=instance_arn,
+            PermissionSetArn=permission_set_arn
+        )
+        
+        # Extract permission set information
+        permission_set = response.get("PermissionSet", {})
+        
+        # Create a dictionary with the permission set information
+        permission_set_info = {
+            "PermissionSetArn": permission_set_arn,
+            "Name": permission_set.get("Name", "Unknown"),
+            "Description": permission_set.get("Description", None),
+            "SessionDuration": permission_set.get("SessionDuration", "PT1H")
+        }
+        
+        return permission_set_info
+        
+    except sso_admin_client.exceptions.ResourceNotFoundException:
+        console.print(f"[red]Error: Permission set with ARN '{permission_set_arn}' not found.[/red]")
+        console.print("[yellow]Check the permission set ARN and try again.[/yellow]")
+        console.print("[yellow]Use 'awsideman permission-set list' to see all available permission sets.[/yellow]")
+        raise typer.Exit(1)
+    except ClientError as e:
+        # Handle AWS API errors with centralized error handling
+        handle_aws_error(e, "DescribePermissionSet")
+    except Exception as e:
+        # Handle other unexpected errors
+        console.print(f"[red]Error: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+def resolve_principal_info(identity_store_id: str, principal_id: str, principal_type: str, identity_store_client) -> dict:
+    """
+    Resolve principal information (name, type) from principal ID.
+    
+    This function retrieves detailed information about a principal (user or group)
+    based on its ID and type. It handles both USER and GROUP principal types and
+    provides error handling for invalid principal IDs.
+    
+    Args:
+        identity_store_id: Identity store ID
+        principal_id: Principal ID to resolve
+        principal_type: Type of principal (USER or GROUP)
+        identity_store_client: Identity store client
+        
+    Returns:
+        Dictionary containing principal information including:
+        - PrincipalId: The ID of the principal
+        - PrincipalType: The type of principal (USER or GROUP)
+        - PrincipalName: The name of the principal (username for users, display name for groups)
+        - DisplayName: The display name of the principal (if available)
+        
+    Raises:
+        typer.Exit: If the principal cannot be found or an error occurs
+    """
+    try:
+        principal_info = {
+            "PrincipalId": principal_id,
+            "PrincipalType": principal_type,
+            "PrincipalName": None,
+            "DisplayName": None
+        }
+        
+        # Handle USER principal type
+        if principal_type.upper() == "USER":
+            try:
+                # Get user details
+                user_response = identity_store_client.describe_user(
+                    IdentityStoreId=identity_store_id,
+                    UserId=principal_id
+                )
+                
+                # Extract user information
+                principal_info["PrincipalName"] = user_response.get("UserName", "Unknown")
+                principal_info["DisplayName"] = user_response.get("DisplayName", None)
+                
+                # If no display name is available, try to construct one from name components
+                if not principal_info["DisplayName"]:
+                    name_info = user_response.get("Name", {})
+                    given_name = name_info.get("GivenName", "")
+                    family_name = name_info.get("FamilyName", "")
+                    
+                    if given_name or family_name:
+                        principal_info["DisplayName"] = f"{given_name} {family_name}".strip()
+                
+                # If we still don't have a display name, use the username
+                if not principal_info["DisplayName"]:
+                    principal_info["DisplayName"] = principal_info["PrincipalName"]
+                
+                return principal_info
+                
+            except identity_store_client.exceptions.ResourceNotFoundException:
+                console.print(f"[red]Error: User with ID '{principal_id}' not found.[/red]")
+                console.print("[yellow]Check the user ID and try again.[/yellow]")
+                raise typer.Exit(1)
+                
+        # Handle GROUP principal type
+        elif principal_type.upper() == "GROUP":
+            try:
+                # Get group details
+                group_response = identity_store_client.describe_group(
+                    IdentityStoreId=identity_store_id,
+                    GroupId=principal_id
+                )
+                
+                # Extract group information
+                principal_info["PrincipalName"] = group_response.get("DisplayName", "Unknown")
+                principal_info["DisplayName"] = group_response.get("DisplayName", "Unknown")
+                
+                return principal_info
+                
+            except identity_store_client.exceptions.ResourceNotFoundException:
+                console.print(f"[red]Error: Group with ID '{principal_id}' not found.[/red]")
+                console.print("[yellow]Check the group ID and try again.[/yellow]")
+                raise typer.Exit(1)
+                
+        # Handle invalid principal type
+        else:
+            console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
+            console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
+            raise typer.Exit(1)
+            
+    except ClientError as e:
+        # Handle AWS API errors with centralized error handling
+        operation = "DescribeUser" if principal_type.upper() == "USER" else "DescribeGroup"
+        handle_aws_error(e, operation)
+    except Exception as e:
+        # Handle other unexpected errors
+        console.print(f"[red]Error: {str(e)}[/red]")
+        raise typer.Exit(1)
