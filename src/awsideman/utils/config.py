@@ -10,6 +10,24 @@ console = Console()
 CONFIG_DIR = Path.home() / ".awsideman"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
+# Default cache configuration
+DEFAULT_CACHE_CONFIG = {
+    "enabled": True,
+    "default_ttl": 3600,  # 1 hour
+    "operation_ttls": {
+        "list_users": 3600,  # 1 hour
+        "list_groups": 3600,  # 1 hour
+        "list_permission_sets": 7200,  # 2 hours
+        "describe_user": 1800,  # 30 minutes
+        "describe_group": 1800,  # 30 minutes
+        "describe_permission_set": 1800,  # 30 minutes
+        "list_accounts": 7200,  # 2 hours
+        "describe_account": 3600,  # 1 hour
+        "list_account_assignments": 1800,  # 30 minutes
+    },
+    "max_size_mb": 100
+}
+
 
 class Config:
     """Manages awsideman configuration."""
@@ -87,3 +105,81 @@ class Config:
             All configuration values
         """
         return self.config_data.copy()
+    
+    def get_cache_config(self) -> Dict[str, Any]:
+        """
+        Get cache configuration with defaults and environment variable overrides.
+        
+        Returns:
+            Cache configuration dictionary
+        """
+        # Start with default cache config
+        cache_config = DEFAULT_CACHE_CONFIG.copy()
+        
+        # Override with config file values if they exist
+        file_cache_config = self.config_data.get("cache", {})
+        if file_cache_config:
+            cache_config.update(file_cache_config)
+            # Merge operation_ttls instead of replacing
+            if "operation_ttls" in file_cache_config:
+                cache_config["operation_ttls"].update(file_cache_config["operation_ttls"])
+        
+        # Override with environment variables
+        cache_config["enabled"] = self._get_env_bool("AWSIDEMAN_CACHE_ENABLED", cache_config["enabled"])
+        cache_config["default_ttl"] = self._get_env_int("AWSIDEMAN_CACHE_TTL_DEFAULT", cache_config["default_ttl"])
+        cache_config["max_size_mb"] = self._get_env_int("AWSIDEMAN_CACHE_MAX_SIZE_MB", cache_config["max_size_mb"])
+        
+        # Override operation-specific TTLs from environment variables
+        for operation in cache_config["operation_ttls"]:
+            env_var = f"AWSIDEMAN_CACHE_TTL_{operation.upper()}"
+            cache_config["operation_ttls"][operation] = self._get_env_int(
+                env_var, cache_config["operation_ttls"][operation]
+            )
+        
+        return cache_config
+    
+    def set_cache_config(self, cache_config: Dict[str, Any]):
+        """
+        Set cache configuration.
+        
+        Args:
+            cache_config: Cache configuration dictionary
+        """
+        self.config_data["cache"] = cache_config
+        self.save_config()
+    
+    def _get_env_bool(self, env_var: str, default: bool) -> bool:
+        """
+        Get boolean value from environment variable.
+        
+        Args:
+            env_var: Environment variable name
+            default: Default value if env var is not set
+            
+        Returns:
+            Boolean value
+        """
+        value = os.environ.get(env_var)
+        if value is None:
+            return default
+        return value.lower() in ("true", "1", "yes", "on")
+    
+    def _get_env_int(self, env_var: str, default: int) -> int:
+        """
+        Get integer value from environment variable.
+        
+        Args:
+            env_var: Environment variable name
+            default: Default value if env var is not set
+            
+        Returns:
+            Integer value
+        """
+        value = os.environ.get(env_var)
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except ValueError:
+            console.print(f"Warning: Invalid integer value for {env_var}: {value}. Using default: {default}")
+            return default

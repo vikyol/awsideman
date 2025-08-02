@@ -12,17 +12,20 @@ console = Console()
 class AWSClientManager:
     """Manages AWS client connections for Identity Center operations."""
 
-    def __init__(self, profile: Optional[str] = None, region: Optional[str] = None):
+    def __init__(self, profile: Optional[str] = None, region: Optional[str] = None, enable_caching: bool = True):
         """
         Initialize the AWS client manager.
         
         Args:
             profile: AWS profile name to use
             region: AWS region to use
+            enable_caching: Whether to enable caching for read operations (default: True)
         """
         self.profile = profile
         self.region = region
+        self.enable_caching = enable_caching
         self.session = None
+        self._cached_client = None
         self._init_session()
         
     def _init_session(self):
@@ -86,6 +89,31 @@ class AWSClientManager:
             AWS Organizations client
         """
         return self.get_client("organizations")
+    
+    def get_cached_client(self):
+        """
+        Get a cached AWS client wrapper.
+        
+        Returns:
+            CachedAwsClient instance
+        """
+        if self._cached_client is None:
+            # Import here to avoid circular imports
+            from .cached_aws_client import CachedAwsClient
+            self._cached_client = CachedAwsClient(self)
+        return self._cached_client
+    
+    def get_organizations_client_with_caching(self):
+        """
+        Get an Organizations client with optional caching support.
+        
+        Returns:
+            OrganizationsClient or CachedOrganizationsClient based on enable_caching setting
+        """
+        if self.enable_caching:
+            return self.get_cached_client().get_organizations_client()
+        else:
+            return OrganizationsClient(self)
 
 class OrganizationsClient:
     """Wrapper for AWS Organizations client with error handling and retry logic."""

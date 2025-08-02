@@ -48,6 +48,31 @@ This document outlines the requirements for implementing a cache layer for the A
 2. The CLI SHALL support a `cache status` command that lists cache entries, expiration times, and total cache size.
 3. The system SHALL gracefully handle missing or corrupted cache files during clear/status operations.
 
+
+### Requirement 5
+
+**User Story:** As a CLI user, I want to warm the cache before running a command so that subsequent commands do not require API calls.
+
+
+#### Acceptance Criteria
+
+1. The system SHALL require a parameter which specifies the command to be warmed up.
+2. The system SHALL warm up the cache for the specified command before executing the command.
+3. The system SHALL use the same cache manager as the main cache layer.
+4. The system SHALL not invalidate the cache during the warm-up process.
+5. The system SHALL not affect the cache for other commands.
+
+### Requirement 6
+
+**User Story:** As a CLI user, I want to be able to invalidate cache autoamtically when I change profile.
+
+#### Acceptance Criteria
+
+1. The system SHALL invalidate the cache automatically when the profile is changed.
+2. The system SHALL use the same cache manager as the main cache layer.
+3. The system SHALL not affect the cache for other commands.
+
+
 ---
 
 ## Next Phase Requirements

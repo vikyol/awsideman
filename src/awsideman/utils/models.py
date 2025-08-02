@@ -1,7 +1,7 @@
 """Data models for AWS Organizations structure and metadata."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Literal, Optional, Union
+from typing import List, Dict, Literal, Optional, Union, Any
 from enum import Enum
 
 
@@ -157,6 +157,110 @@ class HierarchyPath:
     def get_id_path_string(self, separator: str = "/") -> str:
         """Get a string representation of the path using IDs."""
         return separator.join(self.ids)
+
+
+# Cache-related data models
+
+@dataclass
+class CacheEntry:
+    """
+    Represents a cached data entry with metadata.
+    
+    Stores the actual cached data along with metadata needed
+    for cache management including expiration and operation tracking.
+    """
+    data: Any  # The actual cached data
+    created_at: float  # Timestamp when entry was created (Unix timestamp)
+    ttl: int  # Time-to-live in seconds
+    key: str  # Cache key
+    operation: str  # AWS operation that generated this data
+    
+    def is_expired(self, current_time: Optional[float] = None) -> bool:
+        """Check if the cache entry has expired.
+        
+        Args:
+            current_time: Optional current timestamp. If not provided, uses current time.
+            
+        Returns:
+            True if the entry has expired, False otherwise
+        """
+        if current_time is None:
+            import time
+            current_time = time.time()
+        
+        return (current_time - self.created_at) > self.ttl
+    
+    def age_seconds(self, current_time: Optional[float] = None) -> float:
+        """Get the age of the cache entry in seconds.
+        
+        Args:
+            current_time: Optional current timestamp. If not provided, uses current time.
+            
+        Returns:
+            Age in seconds
+        """
+        if current_time is None:
+            import time
+            current_time = time.time()
+        
+        return current_time - self.created_at
+    
+    def remaining_ttl(self, current_time: Optional[float] = None) -> float:
+        """Get the remaining TTL in seconds.
+        
+        Args:
+            current_time: Optional current timestamp. If not provided, uses current time.
+            
+        Returns:
+            Remaining TTL in seconds (negative if expired)
+        """
+        if current_time is None:
+            import time
+            current_time = time.time()
+        
+        return self.ttl - (current_time - self.created_at)
+
+
+@dataclass
+class CacheConfig:
+    """
+    Configuration settings for the cache system.
+    
+    Defines cache behavior including TTL settings, size limits,
+    and operation-specific configurations.
+    """
+    enabled: bool = True  # Whether caching is enabled
+    default_ttl: int = 3600  # Default TTL in seconds (1 hour)
+    operation_ttls: Dict[str, int] = field(default_factory=dict)  # Operation-specific TTLs
+    max_size_mb: int = 100  # Maximum cache size in MB
+    
+    def get_ttl_for_operation(self, operation: str) -> int:
+        """Get TTL for a specific operation.
+        
+        Args:
+            operation: AWS operation name
+            
+        Returns:
+            TTL in seconds for the operation
+        """
+        return self.operation_ttls.get(operation, self.default_ttl)
+    
+    def set_operation_ttl(self, operation: str, ttl: int) -> None:
+        """Set TTL for a specific operation.
+        
+        Args:
+            operation: AWS operation name
+            ttl: TTL in seconds
+        """
+        self.operation_ttls[operation] = ttl
+    
+    def max_size_bytes(self) -> int:
+        """Get maximum cache size in bytes.
+        
+        Returns:
+            Maximum size in bytes
+        """
+        return self.max_size_mb * 1024 * 1024
 
 
 # Type aliases for common use cases

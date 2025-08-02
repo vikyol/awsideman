@@ -57,19 +57,21 @@ def tree(
     flat: bool = typer.Option(False, "--flat", help="Display in flat format instead of tree format"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Disable caching for this command"),
 ):
     """Display the full AWS Organization hierarchy including roots, OUs, and accounts.
     
     Shows organizational units, their relationships, and accounts under each OU.
     Supports both tree and flat output formats, as well as JSON output.
+    Caching is enabled by default for improved performance. Use --no-cache to disable.
     """
     try:
         # Validate profile and get profile data
         profile_name, profile_data = validate_profile(profile)
         
         # Initialize AWS client manager and organizations client
-        client_manager = AWSClientManager(profile=profile_name)
-        organizations_client = OrganizationsClient(client_manager)
+        client_manager = AWSClientManager(profile=profile_name, enable_caching=not no_cache)
+        organizations_client = client_manager.get_organizations_client_with_caching()
         
         # Build the organization hierarchy
         if not json_output:
@@ -94,11 +96,13 @@ def account(
     account_id: str = typer.Argument(..., help="AWS account ID to display details for"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Disable caching for this command"),
 ):
     """Display detailed information about a specific AWS account.
     
     Shows comprehensive metadata including account name, ID, email, status,
     joined timestamp, tags, and the full OU path from root to account.
+    Caching is enabled by default for improved performance. Use --no-cache to disable.
     """
     try:
         # Validate profile and get profile data
@@ -110,8 +114,8 @@ def account(
             raise typer.Exit(1)
         
         # Initialize AWS client manager and organizations client
-        client_manager = AWSClientManager(profile=profile_name)
-        organizations_client = OrganizationsClient(client_manager)
+        client_manager = AWSClientManager(profile=profile_name, enable_caching=not no_cache)
+        organizations_client = client_manager.get_organizations_client_with_caching()
         
         # Get account details
         if not json_output:
@@ -155,7 +159,7 @@ def search(
         
         # Initialize AWS client manager and organizations client
         client_manager = AWSClientManager(profile=profile_name)
-        organizations_client = OrganizationsClient(client_manager)
+        organizations_client = client_manager.get_organizations_client_with_caching()
         
         # Perform the search
         if not json_output:
@@ -210,7 +214,7 @@ def trace_policies(
         
         # Initialize AWS client manager and organizations client
         client_manager = AWSClientManager(profile=profile_name)
-        organizations_client = OrganizationsClient(client_manager)
+        organizations_client = client_manager.get_organizations_client_with_caching()
         
         # Initialize policy resolver
         from ..utils.aws_client import PolicyResolver

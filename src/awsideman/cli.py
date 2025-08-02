@@ -9,7 +9,7 @@ from typing import Optional
 from rich.console import Console
 
 from . import __version__
-from .commands import profile, sso, user, group, permission_set, assignment, org
+from .commands import profile, sso, user, group, permission_set, assignment, org, cache
 
 app = typer.Typer(
     help="AWS Identity Center Manager - A CLI tool for managing AWS Identity Center operations including users, groups, and permission sets."
@@ -24,6 +24,7 @@ app.add_typer(group.app, name="group")
 app.add_typer(permission_set.app, name="permission-set")
 app.add_typer(assignment.app, name="assignment")
 app.add_typer(org.app, name="org")
+app.add_typer(cache.app, name="cache")
 
 
 @app.callback()

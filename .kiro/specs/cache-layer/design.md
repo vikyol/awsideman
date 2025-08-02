@@ -89,6 +89,7 @@ New CLI commands for cache management:
 
 - `awsideman cache clear`: Clears all cache entries
 - `awsideman cache status`: Shows cache statistics and entry information
+- `awsideman cache warm`: Warms the cache for a given command. Useful for preloading data before actual use.
 
 ## Data Models
 
