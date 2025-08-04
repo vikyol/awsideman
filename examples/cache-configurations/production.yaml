@@ -1,0 +1,52 @@
+# Production Environment Configuration
+# DynamoDB backend with encryption for enterprise security and scalability
+
+default_profile: "production"
+
+profiles:
+  production:
+    region: "us-east-1"
+    sso_instance_arn: "arn:aws:sso:::instance/ssoins-prod789012"
+    sso_display_name: "Production Environment"
+  
+  staging:
+    region: "us-east-1"
+    sso_instance_arn: "arn:aws:sso:::instance/ssoins-stage345678"
+    sso_display_name: "Staging Environment"
+
+cache:
+  # Production settings with DynamoDB backend
+  enabled: true
+  backend_type: "dynamodb"
+  default_ttl: 3600  # 1 hour - balanced between performance and data freshness
+  max_size_mb: 500   # Larger cache for production workloads
+  
+  # DynamoDB backend configuration
+  dynamodb_table_name: "awsideman-cache-prod"
+  dynamodb_region: "us-east-1"
+  dynamodb_profile: "production"
+  
+  # Encryption enabled for production security
+  encryption_enabled: true
+  encryption_type: "aes256"
+  
+  # Production-optimized operation TTLs
+  operation_ttls:
+    # User operations - moderate frequency of change
+    list_users: 7200          # 2 hours
+    describe_user: 3600       # 1 hour
+    
+    # Group operations - moderate frequency of change
+    list_groups: 7200         # 2 hours
+    describe_group: 3600      # 1 hour
+    
+    # Permission set operations - less frequent changes
+    list_permission_sets: 14400 # 4 hours
+    describe_permission_set: 7200 # 2 hours
+    
+    # Account operations - infrequent changes
+    list_accounts: 28800      # 8 hours
+    describe_account: 14400   # 4 hours
+    
+    # Assignment operations - frequent changes in production
+    list_account_assignments: 1800 # 30 minutes

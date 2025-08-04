@@ -1,7 +1,7 @@
 """Core utility modules for awsideman."""
 
 # Configuration utilities
-from .config import Config, DEFAULT_CACHE_CONFIG, CONFIG_DIR, CONFIG_FILE
+from .config import Config, DEFAULT_CACHE_CONFIG, CONFIG_DIR, CONFIG_FILE_YAML, CONFIG_FILE_JSON
 
 # Error handling utilities
 from .error_handler import (
@@ -47,7 +47,8 @@ __all__ = [
     'Config',
     'DEFAULT_CACHE_CONFIG',
     'CONFIG_DIR',
-    'CONFIG_FILE',
+    'CONFIG_FILE_YAML',
+    'CONFIG_FILE_JSON',
     
     # Error handling
     'handle_aws_error',

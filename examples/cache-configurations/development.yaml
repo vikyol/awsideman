@@ -1,0 +1,36 @@
+# Development Environment Configuration
+# Simple file-based cache with shorter TTLs for faster development iteration
+
+default_profile: "dev"
+
+profiles:
+  dev:
+    region: "us-west-2"
+    sso_instance_arn: "arn:aws:sso:::instance/ssoins-dev123456"
+    sso_display_name: "Development Environment"
+
+cache:
+  # Basic settings optimized for development
+  enabled: true
+  backend_type: "file"
+  default_ttl: 1800  # 30 minutes - shorter for faster development
+  max_size_mb: 50    # Smaller cache size for development
+  
+  # File backend settings
+  file_cache_dir: "~/.awsideman/cache"
+  
+  # Encryption disabled for development (faster operations)
+  encryption_enabled: false
+  encryption_type: "none"
+  
+  # Operation-specific TTLs optimized for development
+  operation_ttls:
+    list_users: 900           # 15 minutes
+    list_groups: 900          # 15 minutes
+    list_permission_sets: 1800 # 30 minutes
+    describe_user: 600        # 10 minutes
+    describe_group: 600       # 10 minutes
+    describe_permission_set: 600 # 10 minutes
+    list_accounts: 3600       # 1 hour (accounts change less frequently)
+    describe_account: 1800    # 30 minutes
+    list_account_assignments: 600 # 10 minutes (assignments change frequently in dev)

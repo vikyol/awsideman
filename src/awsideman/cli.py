@@ -10,14 +10,14 @@ from rich.console import Console
 
 try:
     from awsideman import __version__
-    from .commands import profile, sso, user, group, permission_set, assignment, org, cache
+    from .commands import profile, sso, user, group, permission_set, assignment, org, cache, config
 except ImportError:
     # Handle direct script execution
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from awsideman import __version__
-    from awsideman.commands import profile, sso, user, group, permission_set, assignment, org, cache
+    from awsideman.commands import profile, sso, user, group, permission_set, assignment, org, cache, config
 
 app = typer.Typer(
     help="AWS Identity Center Manager - A CLI tool for managing AWS Identity Center operations including users, groups, and permission sets."
@@ -25,6 +25,7 @@ app = typer.Typer(
 console = Console()
 
 # Add subcommands
+app.add_typer(config.app, name="config")
 app.add_typer(profile.app, name="profile")
 app.add_typer(sso.app, name="sso")
 app.add_typer(user.app, name="user")

@@ -68,7 +68,7 @@ class AdvancedCacheConfig(CacheConfig):
     @classmethod
     def from_config_file(cls, config_path: Optional[str] = None) -> 'AdvancedCacheConfig':
         """
-        Load configuration from YAML file.
+        Load configuration from unified YAML config file.
         
         Args:
             config_path: Optional path to config file. If None, uses default location.
@@ -76,32 +76,34 @@ class AdvancedCacheConfig(CacheConfig):
         Returns:
             AdvancedCacheConfig instance loaded from file
         """
-        if not config_path:
-            config_path = Path.home() / ".awsideman" / "config.yaml"
-        else:
-            config_path = Path(config_path)
+        # Use the unified config system
+        from ..utils.config import Config
         
-        # Start with default configuration
-        config_data = {}
+        config = Config()
+        cache_config_data = config.get_cache_config()
         
-        if config_path.exists():
-            if not YAML_AVAILABLE:
-                logger.warning(f"YAML not available, cannot load config file {config_path}")
-            else:
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        file_data = yaml.safe_load(f) or {}
-                        config_data = file_data.get('cache', {})
-                    logger.debug(f"Loaded cache configuration from {config_path}")
-                except yaml.YAMLError as e:
-                    logger.error(f"Error parsing YAML config file {config_path}: {e}")
-                except Exception as e:
-                    logger.error(f"Error reading config file {config_path}: {e}")
-        else:
-            logger.debug(f"Config file {config_path} not found, using defaults")
+        # Convert basic cache config to advanced cache config format
+        advanced_config_data = {
+            'enabled': cache_config_data.get('enabled', True),
+            'default_ttl': cache_config_data.get('default_ttl', 3600),
+            'operation_ttls': cache_config_data.get('operation_ttls', {}),
+            'max_size_mb': cache_config_data.get('max_size_mb', 100),
+        }
         
-        # Create configuration with loaded data
-        return cls(**config_data)
+        # Add advanced configuration if present in the unified config
+        all_config_data = config.get_all()
+        if 'cache' in all_config_data and isinstance(all_config_data['cache'], dict):
+            cache_section = all_config_data['cache']
+            
+            # Add advanced settings if they exist
+            for key in ['backend_type', 'encryption_enabled', 'encryption_type', 
+                       'dynamodb_table_name', 'dynamodb_region', 'dynamodb_profile',
+                       'hybrid_local_ttl', 'file_cache_dir']:
+                if key in cache_section:
+                    advanced_config_data[key] = cache_section[key]
+        
+        logger.debug("Loaded cache configuration from unified config system")
+        return cls(**advanced_config_data)
     
     @classmethod
     def from_environment(cls) -> 'AdvancedCacheConfig':
@@ -254,43 +256,20 @@ class AdvancedCacheConfig(CacheConfig):
     
     def save_to_file(self, config_path: Optional[str] = None) -> None:
         """
-        Save configuration to YAML file.
+        Save configuration to unified YAML config file.
         
         Args:
             config_path: Optional path to config file. If None, uses default location.
         """
-        if not config_path:
-            config_path = Path.home() / ".awsideman" / "config.yaml"
-        else:
-            config_path = Path(config_path)
+        # Use the unified config system
+        from ..utils.config import Config
         
-        # Ensure directory exists
-        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config = Config()
         
-        # Load existing config if it exists
-        existing_config = {}
-        if config_path.exists():
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    existing_config = yaml.safe_load(f) or {}
-            except Exception as e:
-                logger.warning(f"Could not load existing config file {config_path}: {e}")
+        # Update the cache section in the unified config
+        config.set_cache_config(self.to_dict())
         
-        # Update cache section
-        existing_config['cache'] = self.to_dict()
-        
-        # Save updated config
-        if not YAML_AVAILABLE:
-            logger.error("YAML not available, cannot save config file")
-            raise ImportError("PyYAML is required to save configuration files")
-        
-        try:
-            with open(config_path, 'w', encoding='utf-8') as f:
-                yaml.dump(existing_config, f, default_flow_style=False, indent=2)
-            logger.info(f"Saved cache configuration to {config_path}")
-        except Exception as e:
-            logger.error(f"Error saving config file {config_path}: {e}")
-            raise
+        logger.info("Saved cache configuration to unified config file")
     
     @staticmethod
     def _get_env_bool(env_var: str, default: bool) -> bool:

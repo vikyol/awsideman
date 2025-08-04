@@ -1,0 +1,59 @@
+# Example awsideman configuration file
+# Save this as ~/.awsideman/config.yaml
+
+# Default profile to use when none is specified
+default_profile: "production"
+
+# AWS profiles configuration
+profiles:
+  production:
+    region: "us-east-1"
+    sso_instance_arn: "arn:aws:sso:::instance/ssoins-1234567890abcdef"
+    sso_display_name: "Production SSO"
+  
+  development:
+    region: "us-west-2"
+    sso_instance_arn: "arn:aws:sso:::instance/ssoins-abcdef1234567890"
+    sso_display_name: "Development SSO"
+  
+  staging:
+    region: "eu-west-1"
+    sso_instance_arn: "arn:aws:sso:::instance/ssoins-fedcba0987654321"
+    sso_display_name: "Staging SSO"
+
+# Cache configuration
+cache:
+  # Basic cache settings
+  enabled: true
+  default_ttl: 3600  # 1 hour in seconds
+  max_size_mb: 100
+  
+  # Backend configuration
+  backend_type: "dynamodb"  # Options: "file", "dynamodb", "hybrid"
+  
+  # DynamoDB backend settings (only used if backend_type is "dynamodb" or "hybrid")
+  dynamodb_table_name: "awsideman-cache"
+  dynamodb_region: "us-east-1"
+  dynamodb_profile: "production"  # Optional: AWS profile to use for DynamoDB
+  
+  # File backend settings (only used if backend_type is "file" or "hybrid")
+  file_cache_dir: "~/.awsideman/cache"  # Optional: custom cache directory
+  
+  # Encryption settings
+  encryption_enabled: true
+  encryption_type: "aes256"  # Options: "none", "aes256"
+  
+  # Hybrid backend settings (only used if backend_type is "hybrid")
+  hybrid_local_ttl: 300  # 5 minutes local cache for hybrid mode
+  
+  # Operation-specific TTL overrides (optional)
+  operation_ttls:
+    list_users: 3600      # 1 hour
+    list_groups: 3600     # 1 hour
+    list_permission_sets: 7200  # 2 hours
+    describe_user: 1800   # 30 minutes
+    describe_group: 1800  # 30 minutes
+    describe_permission_set: 1800  # 30 minutes
+    list_accounts: 7200   # 2 hours
+    describe_account: 3600  # 1 hour
+    list_account_assignments: 1800  # 30 minutes
