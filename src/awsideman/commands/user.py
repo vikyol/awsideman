@@ -8,7 +8,7 @@ from rich.table import Table
 from botocore.exceptions import ClientError
 
 from ..utils.config import Config
-from ..utils.aws_client import AWSClientManager
+from ..aws_clients.manager import AWSClientManager
 
 app = typer.Typer(help="Manage users in AWS Identity Center. Create, list, update, and delete users in the Identity Store.")
 console = Console()

@@ -7,7 +7,7 @@ from rich.tree import Tree
 from rich.table import Table
 
 from ..utils.config import Config
-from ..utils.aws_client import AWSClientManager, OrganizationsClient, build_organization_hierarchy, get_account_details
+from ..aws_clients.manager import AWSClientManager, OrganizationsClientWrapper, build_organization_hierarchy, get_account_details
 from ..utils.models import OrgNode, NodeType, AccountDetails, PolicyInfo
 
 app = typer.Typer(help="Manage AWS Organizations. Query organization structure, accounts, and policies.")
@@ -71,7 +71,7 @@ def tree(
         
         # Initialize AWS client manager and organizations client
         client_manager = AWSClientManager(profile=profile_name, enable_caching=not no_cache)
-        organizations_client = client_manager.get_organizations_client_with_caching()
+        organizations_client = client_manager.get_organizations_client()
         
         # Build the organization hierarchy
         if not json_output:
@@ -115,7 +115,7 @@ def account(
         
         # Initialize AWS client manager and organizations client
         client_manager = AWSClientManager(profile=profile_name, enable_caching=not no_cache)
-        organizations_client = client_manager.get_organizations_client_with_caching()
+        organizations_client = client_manager.get_organizations_client()
         
         # Get account details
         if not json_output:
@@ -159,13 +159,13 @@ def search(
         
         # Initialize AWS client manager and organizations client
         client_manager = AWSClientManager(profile=profile_name)
-        organizations_client = client_manager.get_organizations_client_with_caching()
+        organizations_client = client_manager.get_organizations_client()
         
         # Perform the search
         if not json_output:
             console.print(f"[blue]Searching for accounts matching '{query}'...[/blue]")
         
-        from ..utils.aws_client import search_accounts
+        from ..aws_clients.manager import search_accounts
         matching_accounts = search_accounts(
             organizations_client=organizations_client,
             query=query,
@@ -214,10 +214,10 @@ def trace_policies(
         
         # Initialize AWS client manager and organizations client
         client_manager = AWSClientManager(profile=profile_name)
-        organizations_client = client_manager.get_organizations_client_with_caching()
+        organizations_client = client_manager.get_organizations_client()
         
         # Initialize policy resolver
-        from ..utils.aws_client import PolicyResolver
+        from ..aws_clients.manager import PolicyResolver
         policy_resolver = PolicyResolver(organizations_client)
         
         # Trace policies for the account

@@ -6,9 +6,9 @@ import json
 import time
 import hashlib
 
-from src.awsideman.utils.cached_aws_client import CachedAwsClient, CachedOrganizationsClient, create_cached_client_manager
-from src.awsideman.utils.aws_client import AWSClientManager, OrganizationsClient
-from src.awsideman.utils.cache_manager import CacheManager
+from src.awsideman.aws_clients.cached_client import CachedAwsClient, CachedOrganizationsClient, create_cached_client_manager
+from src.awsideman.aws_clients.manager import AWSClientManager, OrganizationsClientWrapper
+from src.awsideman.cache.manager import CacheManager
 from src.awsideman.utils.models import CacheConfig
 
 
@@ -28,7 +28,7 @@ class TestCachedAwsClient:
     
     def test_init_with_default_cache_manager(self):
         """Test CachedAwsClient initialization with default cache manager."""
-        with patch('src.awsideman.utils.cached_aws_client.CacheManager') as mock_cache_class:
+        with patch('src.awsideman.aws_clients.cached_client.CacheManager') as mock_cache_class:
             mock_cache_instance = Mock()
             mock_cache_class.return_value = mock_cache_instance
             
@@ -267,24 +267,24 @@ class TestCachedAwsClient:
         assert result.cache_manager == self.mock_cache_manager
     
     def test_get_identity_center_client(self):
-        """Test get_identity_center_client method (passthrough)."""
-        mock_identity_center_client = Mock()
-        self.mock_client_manager.get_identity_center_client.return_value = mock_identity_center_client
+        """Test get_identity_center_client method returns cached client."""
+        from src.awsideman.aws_clients.cached_client import CachedIdentityCenterClient
         
         result = self.cached_client.get_identity_center_client()
         
-        assert result == mock_identity_center_client
-        self.mock_client_manager.get_identity_center_client.assert_called_once()
+        assert isinstance(result, CachedIdentityCenterClient)
+        assert result.client_manager == self.mock_client_manager
+        assert result.cache_manager == self.mock_cache_manager
     
     def test_get_identity_store_client(self):
-        """Test get_identity_store_client method (passthrough)."""
-        mock_identity_store_client = Mock()
-        self.mock_client_manager.get_identity_store_client.return_value = mock_identity_store_client
+        """Test get_identity_store_client method returns cached client."""
+        from src.awsideman.aws_clients.cached_client import CachedIdentityStoreClient
         
         result = self.cached_client.get_identity_store_client()
         
-        assert result == mock_identity_store_client
-        self.mock_client_manager.get_identity_store_client.assert_called_once()
+        assert isinstance(result, CachedIdentityStoreClient)
+        assert result.client_manager == self.mock_client_manager
+        assert result.cache_manager == self.mock_cache_manager
 
 
 class TestCachedOrganizationsClient:
@@ -295,8 +295,8 @@ class TestCachedOrganizationsClient:
         self.mock_client_manager = Mock(spec=AWSClientManager)
         self.mock_cache_manager = Mock(spec=CacheManager)
         
-        # Mock the underlying OrganizationsClient
-        with patch('src.awsideman.utils.cached_aws_client.OrganizationsClient') as mock_org_client_class:
+        # Mock the underlying OrganizationsClientWrapper
+        with patch('src.awsideman.aws_clients.cached_client.OrganizationsClientWrapper') as mock_org_client_class:
             self.mock_org_client = Mock()
             mock_org_client_class.return_value = self.mock_org_client
             
@@ -315,7 +315,7 @@ class TestCachedOrganizationsClient:
         self.mock_org_client.client = Mock()
         assert self.cached_org_client.client == self.mock_org_client.client
     
-    @patch('src.awsideman.utils.cached_aws_client.CachedAwsClient')
+    @patch('src.awsideman.aws_clients.cached_client.CachedAwsClient')
     def test_list_roots(self, mock_cached_aws_client_class):
         """Test list_roots method."""
         # Set up mocks
@@ -340,7 +340,7 @@ class TestCachedOrganizationsClient:
         assert call_args[0][1] == {}  # params
         assert result == expected_result
     
-    @patch('src.awsideman.utils.cached_aws_client.CachedAwsClient')
+    @patch('src.awsideman.aws_clients.cached_client.CachedAwsClient')
     def test_describe_account(self, mock_cached_aws_client_class):
         """Test describe_account method."""
         # Set up mocks
@@ -365,7 +365,7 @@ class TestCachedOrganizationsClient:
         assert call_args[0][1] == {'account_id': '123456789012'}  # params
         assert result == expected_result
     
-    @patch('src.awsideman.utils.cached_aws_client.CachedAwsClient')
+    @patch('src.awsideman.aws_clients.cached_client.CachedAwsClient')
     def test_list_organizational_units_for_parent(self, mock_cached_aws_client_class):
         """Test list_organizational_units_for_parent method."""
         mock_cached_aws_client = Mock()
@@ -387,7 +387,7 @@ class TestCachedOrganizationsClient:
         assert call_args[0][1] == {'parent_id': 'r-123'}
         assert result == expected_result
     
-    @patch('src.awsideman.utils.cached_aws_client.CachedAwsClient')
+    @patch('src.awsideman.aws_clients.cached_client.CachedAwsClient')
     def test_list_accounts_for_parent(self, mock_cached_aws_client_class):
         """Test list_accounts_for_parent method."""
         mock_cached_aws_client = Mock()
@@ -409,7 +409,7 @@ class TestCachedOrganizationsClient:
         assert call_args[0][1] == {'parent_id': 'ou-123'}
         assert result == expected_result
     
-    @patch('src.awsideman.utils.cached_aws_client.CachedAwsClient')
+    @patch('src.awsideman.aws_clients.cached_client.CachedAwsClient')
     def test_list_tags_for_resource(self, mock_cached_aws_client_class):
         """Test list_tags_for_resource method."""
         mock_cached_aws_client = Mock()
@@ -431,7 +431,7 @@ class TestCachedOrganizationsClient:
         assert call_args[0][1] == {'resource_id': '123456789012'}
         assert result == expected_result
     
-    @patch('src.awsideman.utils.cached_aws_client.CachedAwsClient')
+    @patch('src.awsideman.aws_clients.cached_client.CachedAwsClient')
     def test_list_policies_for_target(self, mock_cached_aws_client_class):
         """Test list_policies_for_target method."""
         mock_cached_aws_client = Mock()
@@ -453,7 +453,7 @@ class TestCachedOrganizationsClient:
         assert call_args[0][1] == {'target_id': 'ou-123', 'filter_type': 'SERVICE_CONTROL_POLICY'}
         assert result == expected_result
     
-    @patch('src.awsideman.utils.cached_aws_client.CachedAwsClient')
+    @patch('src.awsideman.aws_clients.cached_client.CachedAwsClient')
     def test_list_parents(self, mock_cached_aws_client_class):
         """Test list_parents method."""
         mock_cached_aws_client = Mock()
@@ -479,8 +479,8 @@ class TestCachedOrganizationsClient:
 class TestCreateCachedClientManager:
     """Test cases for create_cached_client_manager factory function."""
     
-    @patch('src.awsideman.utils.cached_aws_client.AWSClientManager')
-    @patch('src.awsideman.utils.cached_aws_client.CacheManager')
+    @patch('src.awsideman.aws_clients.cached_client.AWSClientManager')
+    @patch('src.awsideman.aws_clients.cached_client.CacheManager')
     def test_create_cached_client_manager(self, mock_cache_manager_class, mock_client_manager_class):
         """Test factory function creates client correctly."""
         # Set up mocks
@@ -505,8 +505,8 @@ class TestCreateCachedClientManager:
         assert result.client_manager == mock_client_manager
         assert result.cache_manager == mock_cache_manager
     
-    @patch('src.awsideman.utils.cached_aws_client.AWSClientManager')
-    @patch('src.awsideman.utils.cached_aws_client.CacheManager')
+    @patch('src.awsideman.aws_clients.cached_client.AWSClientManager')
+    @patch('src.awsideman.aws_clients.cached_client.CacheManager')
     def test_create_cached_client_manager_defaults(self, mock_cache_manager_class, mock_client_manager_class):
         """Test factory function with default parameters."""
         # Set up mocks
@@ -556,8 +556,8 @@ class TestAWSClientManagerIntegration:
         
         assert client_manager.enable_caching is False
     
-    @patch('src.awsideman.utils.cached_aws_client.CachedAwsClient')
-    @patch('src.awsideman.utils.aws_client.boto3.Session')
+    @patch('src.awsideman.aws_clients.cached_client.CachedAwsClient')
+    @patch('src.awsideman.aws_clients.manager.boto3.Session')
     def test_get_cached_client(self, mock_session, mock_cached_aws_client_class):
         """Test get_cached_client method."""
         mock_session.return_value = Mock()
@@ -578,9 +578,9 @@ class TestAWSClientManagerIntegration:
         # Should not create a new instance
         assert mock_cached_aws_client_class.call_count == 1
     
-    @patch('src.awsideman.utils.aws_client.OrganizationsClient')
+    @patch('src.awsideman.aws_clients.manager.OrganizationsClientWrapper')
     def test_get_organizations_client_with_caching_enabled(self, mock_org_client_class):
-        """Test get_organizations_client_with_caching with caching enabled."""
+        """Test get_organizations_client with caching enabled."""
         client_manager = AWSClientManager(enable_caching=True)
         
         # Mock the cached client
@@ -589,21 +589,21 @@ class TestAWSClientManagerIntegration:
         mock_cached_client.get_organizations_client.return_value = mock_cached_org_client
         client_manager._cached_client = mock_cached_client
         
-        result = client_manager.get_organizations_client_with_caching()
+        result = client_manager.get_organizations_client()
         
         assert result == mock_cached_org_client
         mock_cached_client.get_organizations_client.assert_called_once()
         mock_org_client_class.assert_not_called()
     
-    @patch('src.awsideman.utils.aws_client.OrganizationsClient')
+    @patch('src.awsideman.aws_clients.manager.OrganizationsClientWrapper')
     def test_get_organizations_client_with_caching_disabled(self, mock_org_client_class):
-        """Test get_organizations_client_with_caching with caching disabled."""
+        """Test get_organizations_client with caching disabled."""
         mock_org_client = Mock()
         mock_org_client_class.return_value = mock_org_client
         
         client_manager = AWSClientManager(enable_caching=False)
         
-        result = client_manager.get_organizations_client_with_caching()
+        result = client_manager.get_organizations_client()
         
         assert result == mock_org_client
         mock_org_client_class.assert_called_once_with(client_manager)
@@ -910,7 +910,7 @@ class TestCachedOrganizationsClientIntegration:
         self.mock_cache_manager = Mock(spec=CacheManager)
         
         # Create a real CachedOrganizationsClient (not mocked)
-        with patch('src.awsideman.utils.cached_aws_client.OrganizationsClient') as mock_org_client_class:
+        with patch('src.awsideman.aws_clients.cached_client.OrganizationsClientWrapper') as mock_org_client_class:
             self.mock_org_client = Mock()
             mock_org_client_class.return_value = self.mock_org_client
             

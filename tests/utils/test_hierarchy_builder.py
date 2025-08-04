@@ -9,7 +9,7 @@ from src.awsideman.utils.models import (
     OrgNode, AccountDetails, PolicyInfo, HierarchyPath,
     NodeType, PolicyType
 )
-from src.awsideman.utils.aws_client import (
+from src.awsideman.aws_clients.manager import (
     build_organization_hierarchy, get_account_details, search_accounts,
     _build_children_recursive, _create_org_node_from_data, _calculate_ou_path,
     _get_all_accounts_in_organization, _account_matches_ou_filter,

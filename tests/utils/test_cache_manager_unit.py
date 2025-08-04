@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch, mock_open, MagicMock
 
-from src.awsideman.utils.cache_manager import CacheManager
+from src.awsideman.cache.manager import CacheManager
 from src.awsideman.utils.models import CacheConfig, CacheEntry
-from src.awsideman.utils.cache_utils import CachePathManager
+from src.awsideman.cache.utils import CachePathManager
 
 
 class TestCacheManagerCore(unittest.TestCase):
@@ -239,7 +239,7 @@ class TestCacheManagerCore(unittest.TestCase):
             "max_size_mb": 200
         }
         
-        with patch('src.awsideman.utils.cache_manager.Config') as mock_config_class:
+        with patch('src.awsideman.cache.manager.Config') as mock_config_class:
             mock_config_instance = Mock()
             mock_config_instance.get_cache_config.return_value = mock_config_dict
             mock_config_class.return_value = mock_config_instance
@@ -254,7 +254,7 @@ class TestCacheManagerCore(unittest.TestCase):
     
     def test_load_cache_config_failure(self):
         """Test _load_cache_config method with config loading failure."""
-        with patch('src.awsideman.utils.cache_manager.Config', side_effect=Exception("Config error")):
+        with patch('src.awsideman.cache.manager.Config', side_effect=Exception("Config error")):
             result = self.cache_manager._load_cache_config()
             
             # Should return default config

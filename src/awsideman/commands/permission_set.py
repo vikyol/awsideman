@@ -35,7 +35,7 @@ from rich.table import Table
 from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
 
 from ..utils.config import Config
-from ..utils.aws_client import AWSClientManager
+from ..aws_clients.manager import AWSClientManager
 from ..utils.error_handler import handle_aws_error, handle_network_error, with_retry
 from ..utils.validators import validate_non_empty, validate_limit, validate_filter
 

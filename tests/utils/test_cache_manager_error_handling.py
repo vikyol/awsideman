@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
 
-from awsideman.utils.cache_manager import CacheManager
-from awsideman.utils.models import CacheConfig
+from src.awsideman.cache.manager import CacheManager
+from src.awsideman.utils.models import CacheConfig
 
 
 class TestCacheManagerErrorHandling(unittest.TestCase):

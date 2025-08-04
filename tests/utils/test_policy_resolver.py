@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from botocore.exceptions import ClientError
 
-from src.awsideman.utils.aws_client import PolicyResolver, OrganizationsClient
+from src.awsideman.aws_clients.manager import PolicyResolver, OrganizationsClient
 from src.awsideman.utils.models import (
     PolicyInfo, PolicyType, HierarchyPath, NodeType
 )

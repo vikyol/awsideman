@@ -33,7 +33,7 @@ from rich.table import Table
 from botocore.exceptions import ClientError
 
 from ..utils.config import Config
-from ..utils.aws_client import AWSClientManager
+from ..aws_clients.manager import AWSClientManager
 from ..utils.validators import validate_profile, validate_sso_instance
 from ..utils.error_handler import handle_aws_error, handle_network_error
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 from botocore.exceptions import ClientError
 
-from src.awsideman.utils.aws_client import get_account_details, _calculate_ou_path, OrganizationsClient
+from src.awsideman.aws_clients.manager import get_account_details, _calculate_ou_path, OrganizationsClient
 from src.awsideman.utils.models import AccountDetails
 
 
@@ -33,7 +33,7 @@ class TestAccountMetadataRetrieval:
         ]
         
         # Mock OU path calculation
-        with patch('src.awsideman.utils.aws_client._calculate_ou_path') as mock_path:
+        with patch('src.awsideman.aws_clients.manager._calculate_ou_path') as mock_path:
             mock_path.return_value = ['Root', 'Engineering', 'Development']
             
             # Call the function
@@ -76,7 +76,7 @@ class TestAccountMetadataRetrieval:
         )
         
         # Mock OU path calculation
-        with patch('src.awsideman.utils.aws_client._calculate_ou_path') as mock_path:
+        with patch('src.awsideman.aws_clients.manager._calculate_ou_path') as mock_path:
             mock_path.return_value = ['Root']
             
             # Call the function

@@ -3,8 +3,8 @@ import boto3
 from botocore.exceptions import ClientError
 from typing import Optional, Dict, Any, List
 from rich.console import Console
-from .error_handler import handle_aws_error, with_retry
-from .models import OrgNode, NodeType, OrganizationTree, AccountDetails, HierarchyPath, PolicyInfo, PolicyType, PolicyList
+from ..utils.error_handler import handle_aws_error, with_retry
+from ..utils.models import OrgNode, NodeType, OrganizationTree, AccountDetails, HierarchyPath, PolicyInfo, PolicyType, PolicyList
 
 console = Console()
 
@@ -63,27 +63,27 @@ class AWSClientManager:
         """
         return self.session.client(service_name)
     
-    def get_identity_center_client(self) -> Any:
+    def get_raw_identity_center_client(self) -> Any:
         """
-        Get the AWS Identity Center client.
+        Get the raw AWS Identity Center client.
         
         Returns:
             AWS Identity Center client
         """
         return self.get_client("sso-admin")
     
-    def get_identity_store_client(self) -> Any:
+    def get_raw_identity_store_client(self) -> Any:
         """
-        Get the AWS Identity Store client.
+        Get the raw AWS Identity Store client.
         
         Returns:
             AWS Identity Store client
         """
         return self.get_client("identitystore")
     
-    def get_organizations_client(self) -> Any:
+    def get_raw_organizations_client(self) -> Any:
         """
-        Get the AWS Organizations client.
+        Get the raw AWS Organizations client.
         
         Returns:
             AWS Organizations client
@@ -99,11 +99,11 @@ class AWSClientManager:
         """
         if self._cached_client is None:
             # Import here to avoid circular imports
-            from .cached_aws_client import CachedAwsClient
+            from .cached_client import CachedAwsClient
             self._cached_client = CachedAwsClient(self)
         return self._cached_client
     
-    def get_organizations_client_with_caching(self):
+    def get_organizations_client(self) -> Any:
         """
         Get an Organizations client with optional caching support.
         
@@ -113,9 +113,33 @@ class AWSClientManager:
         if self.enable_caching:
             return self.get_cached_client().get_organizations_client()
         else:
-            return OrganizationsClient(self)
+            return OrganizationsClientWrapper(self)
+    
+    def get_identity_center_client(self) -> Any:
+        """
+        Get an Identity Center client with optional caching support.
+        
+        Returns:
+            Identity Center client with or without caching based on enable_caching setting
+        """
+        if self.enable_caching:
+            return self.get_cached_client().get_identity_center_client()
+        else:
+            return IdentityCenterClientWrapper(self)
+    
+    def get_identity_store_client(self) -> Any:
+        """
+        Get an Identity Store client with optional caching support.
+        
+        Returns:
+            Identity Store client with or without caching based on enable_caching setting
+        """
+        if self.enable_caching:
+            return self.get_cached_client().get_identity_store_client()
+        else:
+            return IdentityStoreClientWrapper(self)
 
-class OrganizationsClient:
+class OrganizationsClientWrapper:
     """Wrapper for AWS Organizations client with error handling and retry logic."""
 
     def __init__(self, client_manager: AWSClientManager):
@@ -132,7 +156,7 @@ class OrganizationsClient:
     def client(self):
         """Get the Organizations client, creating it if needed."""
         if self._client is None:
-            self._client = self.client_manager.get_organizations_client()
+            self._client = self.client_manager.get_raw_organizations_client()
         return self._client
     
     @with_retry(max_retries=3)
@@ -277,7 +301,57 @@ class OrganizationsClient:
             handle_aws_error(e, "ListParents")
 
 
-def build_organization_hierarchy(organizations_client: OrganizationsClient) -> OrganizationTree:
+class IdentityCenterClientWrapper:
+    """Wrapper for AWS Identity Center (SSO Admin) client with error handling and retry logic."""
+
+    def __init__(self, client_manager: AWSClientManager):
+        """
+        Initialize the Identity Center client wrapper.
+        
+        Args:
+            client_manager: AWSClientManager instance for session management
+        """
+        self.client_manager = client_manager
+        self._client = None
+    
+    @property
+    def client(self):
+        """Get the Identity Center client, creating it if needed."""
+        if self._client is None:
+            self._client = self.client_manager.get_raw_identity_center_client()
+        return self._client
+    
+    def __getattr__(self, name):
+        """Delegate all other method calls to the underlying client."""
+        return getattr(self.client, name)
+
+
+class IdentityStoreClientWrapper:
+    """Wrapper for AWS Identity Store client with error handling and retry logic."""
+
+    def __init__(self, client_manager: AWSClientManager):
+        """
+        Initialize the Identity Store client wrapper.
+        
+        Args:
+            client_manager: AWSClientManager instance for session management
+        """
+        self.client_manager = client_manager
+        self._client = None
+    
+    @property
+    def client(self):
+        """Get the Identity Store client, creating it if needed."""
+        if self._client is None:
+            self._client = self.client_manager.get_raw_identity_store_client()
+        return self._client
+    
+    def __getattr__(self, name):
+        """Delegate all other method calls to the underlying client."""
+        return getattr(self.client, name)
+
+
+def build_organization_hierarchy(organizations_client: OrganizationsClientWrapper) -> OrganizationTree:
     """
     Build the complete organization hierarchy tree structure.
     
@@ -332,7 +406,7 @@ def build_organization_hierarchy(organizations_client: OrganizationsClient) -> O
         raise
 
 
-def _build_children_recursive(organizations_client: OrganizationsClient, parent_node: OrgNode) -> None:
+def _build_children_recursive(organizations_client: OrganizationsClientWrapper, parent_node: OrgNode) -> None:
     """
     Recursively build children (OUs and accounts) for a given parent node.
     
@@ -426,7 +500,7 @@ def _create_org_node_from_data(data: Dict[str, Any], node_type: NodeType) -> Org
     )
 
 
-def get_account_details(organizations_client: OrganizationsClient, account_id: str) -> AccountDetails:
+def get_account_details(organizations_client: OrganizationsClientWrapper, account_id: str) -> AccountDetails:
     """
     Get comprehensive account details including metadata and organizational context.
     
@@ -497,7 +571,7 @@ def get_account_details(organizations_client: OrganizationsClient, account_id: s
 
 
 def search_accounts(
-    organizations_client: OrganizationsClient, 
+    organizations_client: OrganizationsClientWrapper, 
     query: str, 
     ou_filter: Optional[str] = None, 
     tag_filter: Optional[Dict[str, str]] = None
@@ -570,7 +644,7 @@ def search_accounts(
         raise
 
 
-def _get_all_accounts_in_organization(organizations_client: OrganizationsClient) -> List[Dict[str, Any]]:
+def _get_all_accounts_in_organization(organizations_client: OrganizationsClientWrapper) -> List[Dict[str, Any]]:
     """
     Get all accounts in the organization by traversing the complete hierarchy.
     
@@ -643,7 +717,7 @@ def _account_matches_tag_filter(account_details: AccountDetails, tag_filter: Dic
     return True
 
 
-def _calculate_ou_path(organizations_client: OrganizationsClient, account_id: str) -> List[str]:
+def _calculate_ou_path(organizations_client: OrganizationsClientWrapper, account_id: str) -> List[str]:
     """
     Calculate the full organizational unit path from root to account.
     
@@ -726,6 +800,10 @@ def _calculate_ou_path(organizations_client: OrganizationsClient, account_id: st
         return []
 
 
+# Backward compatibility alias
+OrganizationsClient = OrganizationsClientWrapper
+
+
 class PolicyResolver:
     """
     Resolves and aggregates Service Control Policies (SCPs) and Resource Control Policies (RCPs)
@@ -736,7 +814,7 @@ class PolicyResolver:
     at each level and determining their effective status.
     """
     
-    def __init__(self, organizations_client: OrganizationsClient):
+    def __init__(self, organizations_client: OrganizationsClientWrapper):
         """
         Initialize the PolicyResolver.
         

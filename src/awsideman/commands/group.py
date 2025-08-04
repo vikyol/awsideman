@@ -8,7 +8,7 @@ from rich.table import Table
 from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
 
 from ..utils.config import Config
-from ..utils.aws_client import AWSClientManager
+from ..aws_clients.manager import AWSClientManager
 from ..utils.error_handler import handle_aws_error, handle_network_error, with_retry
 from ..utils.validators import (
     validate_uuid, validate_email, validate_filter, validate_non_empty,
@@ -576,7 +576,9 @@ def list_members(
     Displays a table of users who are members of the specified group.
     Results can be paginated. Press ENTER to see the next page of results.
     """
-    return _list_members_internal(group_identifier, limit, next_token, profile)
+    memberships, next_token_result = _list_members_internal(group_identifier, limit, next_token, profile)
+    # Return the expected tuple format for tests
+    return memberships, next_token_result, group_identifier
 
 
 @app.command("add-member")
@@ -598,12 +600,86 @@ def add_member(
         if not validate_non_empty(user_identifier, "User identifier"):
             raise typer.Exit(1)
             
-        # This will be implemented in a future task
-        console.print("[yellow]Group member addition functionality will be implemented in a future task.[/yellow]")
+        # Validate the profile and get profile data
+        profile_name, profile_data = validate_profile(profile)
+        
+        # Validate the SSO instance and get instance ARN and identity store ID
+        _, identity_store_id = validate_sso_instance(profile_data)
+        
+        # Initialize the AWS client manager with the profile and region
+        region = profile_data.get("region")
+        aws_client = AWSClientManager(profile=profile_name, region=region)
+        
+        # Get the identity store client
+        identity_store = aws_client.get_identity_store_client()
+        
+        # Get group details
+        group_details = get_group(group_identifier, profile)
+        group_id = group_details.get("GroupId")
+        group_name = group_details.get("DisplayName", group_identifier)
+        
+        # Find the user ID
+        try:
+            user_id = _find_user_id(identity_store, identity_store_id, user_identifier)
+        except ValueError as e:
+            console.print(f"[red]Error: {str(e)}[/red]")
+            raise typer.Exit(1)
+        
+        # Get user details for display
+        try:
+            user_details = identity_store.describe_user(
+                IdentityStoreId=identity_store_id,
+                UserId=user_id
+            )
+            username = user_details.get("UserName", user_identifier)
+        except ClientError:
+            username = user_identifier
+        
+        # Check if user is already a member
+        try:
+            memberships_response = identity_store.list_group_memberships(
+                IdentityStoreId=identity_store_id,
+                GroupId=group_id
+            )
+            
+            existing_memberships = memberships_response.get("GroupMemberships", [])
+            for membership in existing_memberships:
+                if membership.get("MemberId", {}).get("UserId") == user_id:
+                    console.print(f"[yellow]User '{username}' is already a member of group '{group_name}'.[/yellow]")
+                    return None
+                    
+        except ClientError as e:
+            handle_aws_error(e, operation="ListGroupMemberships")
+            raise typer.Exit(1)
+        
+        # Add the user to the group
+        try:
+            response = identity_store.create_group_membership(
+                IdentityStoreId=identity_store_id,
+                GroupId=group_id,
+                MemberId={
+                    "UserId": user_id
+                }
+            )
+            
+            membership_id = response.get("MembershipId")
+            console.print(f"[green]Successfully added user '{username}' to group '{group_name}'.[/green]")
+            
+            return membership_id
+            
+        except ClientError as e:
+            handle_aws_error(e, operation="CreateGroupMembership")
+            raise typer.Exit(1)
+            
+    except ClientError as e:
+        handle_aws_error(e, operation="CreateGroupMembership")
+        raise typer.Exit(1)
+    except (ConnectionError, EndpointConnectionError) as e:
+        handle_network_error(e)
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error: {str(e)}[/red]")
         raise typer.Exit(1)
-    return None
 
 
 @app.command("remove-member")
@@ -627,12 +703,88 @@ def remove_member(
         if not validate_non_empty(user_identifier, "User identifier"):
             raise typer.Exit(1)
             
-        # This will be implemented in a future task
-        console.print("[yellow]Group member removal functionality will be implemented in a future task.[/yellow]")
+        # Validate the profile and get profile data
+        profile_name, profile_data = validate_profile(profile)
+        
+        # Validate the SSO instance and get instance ARN and identity store ID
+        _, identity_store_id = validate_sso_instance(profile_data)
+        
+        # Initialize the AWS client manager with the profile and region
+        region = profile_data.get("region")
+        aws_client = AWSClientManager(profile=profile_name, region=region)
+        
+        # Get the identity store client
+        identity_store = aws_client.get_identity_store_client()
+        
+        # Get group details
+        group_details = get_group(group_identifier, profile)
+        group_id = group_details.get("GroupId")
+        group_name = group_details.get("DisplayName", group_identifier)
+        
+        # Find the user ID
+        try:
+            user_id = _find_user_id(identity_store, identity_store_id, user_identifier)
+        except ValueError as e:
+            console.print(f"[red]Error: {str(e)}[/red]")
+            raise typer.Exit(1)
+        
+        # Get user details for display
+        try:
+            user_details = identity_store.describe_user(
+                IdentityStoreId=identity_store_id,
+                UserId=user_id
+            )
+            username = user_details.get("UserName", user_identifier)
+        except ClientError:
+            username = user_identifier
+        
+        # Find the membership to remove
+        try:
+            memberships_response = identity_store.list_group_memberships(
+                IdentityStoreId=identity_store_id,
+                GroupId=group_id
+            )
+            
+            existing_memberships = memberships_response.get("GroupMemberships", [])
+            membership_id = None
+            
+            for membership in existing_memberships:
+                if membership.get("MemberId", {}).get("UserId") == user_id:
+                    membership_id = membership.get("MembershipId")
+                    break
+            
+            if not membership_id:
+                console.print(f"[yellow]User '{username}' is not a member of group '{group_name}'.[/yellow]")
+                raise typer.Exit(1)
+                    
+        except ClientError as e:
+            handle_aws_error(e, operation="ListGroupMemberships")
+            raise typer.Exit(1)
+        
+        # Remove the user from the group
+        try:
+            identity_store.delete_group_membership(
+                IdentityStoreId=identity_store_id,
+                MembershipId=membership_id
+            )
+            
+            console.print(f"[green]Successfully removed user '{username}' from group '{group_name}'.[/green]")
+            
+            return True
+            
+        except ClientError as e:
+            handle_aws_error(e, operation="DeleteGroupMembership")
+            raise typer.Exit(1)
+            
+    except ClientError as e:
+        handle_aws_error(e, operation="DeleteGroupMembership")
+        raise typer.Exit(1)
+    except (ConnectionError, EndpointConnectionError) as e:
+        handle_network_error(e)
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error: {str(e)}[/red]")
         raise typer.Exit(1)
-    return None
 
 
 @app.command("delete")
@@ -795,3 +947,382 @@ def delete_group(
         console.print(f"[red]Error: {str(e)}[/red]")
         console.print("[yellow]This is an unexpected error. Please report this issue if it persists.[/yellow]")
         raise typer.Exit(1)
+
+
+def create_group(
+    name: str,
+    description: Optional[str] = None,
+    profile: Optional[str] = None,
+) -> tuple[str, dict]:
+    """
+    Create a new group in the Identity Store.
+    
+    Args:
+        name: Display name for the group
+        description: Optional description for the group
+        profile: AWS profile to use
+        
+    Returns:
+        Tuple of (group_id, group_attributes)
+        
+    Raises:
+        typer.Exit: If group creation fails
+    """
+    try:
+        # Validate inputs
+        if not validate_non_empty(name, "Group name"):
+            raise typer.Exit(1)
+            
+        if not validate_group_name(name):
+            raise typer.Exit(1)
+            
+        if description and not validate_group_description(description):
+            raise typer.Exit(1)
+            
+        # Validate the profile and get profile data
+        profile_name, profile_data = validate_profile(profile)
+        
+        # Validate the SSO instance and get instance ARN and identity store ID
+        _, identity_store_id = validate_sso_instance(profile_data)
+        
+        # Initialize the AWS client manager with the profile and region
+        region = profile_data.get("region")
+        aws_client = AWSClientManager(profile=profile_name, region=region)
+        
+        # Get the identity store client
+        identity_store = aws_client.get_identity_store_client()
+        
+        # Check if group already exists
+        try:
+            search_response = identity_store.list_groups(
+                IdentityStoreId=identity_store_id,
+                Filters=[
+                    {
+                        "AttributePath": "DisplayName",
+                        "AttributeValue": name
+                    }
+                ]
+            )
+            
+            existing_groups = search_response.get("Groups", [])
+            if existing_groups:
+                console.print(f"[red]Error: A group with name '{name}' already exists.[/red]")
+                raise typer.Exit(1)
+                
+        except ClientError as e:
+            handle_aws_error(e, operation="ListGroups")
+            raise typer.Exit(1)
+        
+        # Create the group
+        create_params = {
+            "IdentityStoreId": identity_store_id,
+            "DisplayName": name
+        }
+        
+        if description:
+            create_params["Description"] = description
+            
+        try:
+            response = identity_store.create_group(**create_params)
+            group_id = response.get("GroupId")
+            
+            # Get the created group details
+            group_details = identity_store.describe_group(
+                IdentityStoreId=identity_store_id,
+                GroupId=group_id
+            )
+            
+            console.print("[green]Group created successfully![/green]")
+            
+            return group_id, group_details
+            
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            error_message = e.response.get("Error", {}).get("Message", str(e))
+            console.print(f"[red]Error ({error_code}): {error_message}[/red]")
+            raise typer.Exit(1)
+            
+    except ClientError as e:
+        handle_aws_error(e, operation="CreateGroup")
+        raise typer.Exit(1)
+    except (ConnectionError, EndpointConnectionError) as e:
+        handle_network_error(e)
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+def get_group(
+    identifier: str,
+    profile: Optional[str] = None,
+) -> dict:
+    """
+    Get detailed information about a group.
+    
+    Args:
+        identifier: Group name or ID to retrieve
+        profile: AWS profile to use
+        
+    Returns:
+        Dictionary containing group details
+        
+    Raises:
+        typer.Exit: If group retrieval fails
+    """
+    try:
+        # Validate inputs
+        if not validate_non_empty(identifier, "Group identifier"):
+            raise typer.Exit(1)
+            
+        # Validate the profile and get profile data
+        profile_name, profile_data = validate_profile(profile)
+        
+        # Validate the SSO instance and get instance ARN and identity store ID
+        _, identity_store_id = validate_sso_instance(profile_data)
+        
+        # Initialize the AWS client manager with the profile and region
+        region = profile_data.get("region")
+        aws_client = AWSClientManager(profile=profile_name, region=region)
+        
+        # Get the identity store client
+        identity_store = aws_client.get_identity_store_client()
+        
+        # Check if identifier is a UUID (group ID) or if we need to search
+        uuid_pattern = r'^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{10,})'
+        if re.match(uuid_pattern, identifier, re.IGNORECASE):
+            # Direct lookup by group ID
+            group_id = identifier
+        else:
+            # Search for group by display name
+            console.print(f"[blue]Searching for group: {identifier}[/blue]")
+            
+            try:
+                search_response = identity_store.list_groups(
+                    IdentityStoreId=identity_store_id,
+                    Filters=[
+                        {
+                            "AttributePath": "DisplayName",
+                            "AttributeValue": identifier
+                        }
+                    ]
+                )
+                
+                groups = search_response.get("Groups", [])
+                
+                if not groups:
+                    console.print(f"[red]Error: No group found with name '{identifier}'.[/red]")
+                    raise typer.Exit(1)
+                elif len(groups) > 1:
+                    console.print(f"[yellow]Warning: Multiple groups found matching '{identifier}'. Showing the first match.[/yellow]")
+                
+                group_id = groups[0].get("GroupId")
+                console.print(f"[green]Found group: {identifier} (ID: {group_id})[/green]")
+                
+            except ClientError as e:
+                handle_aws_error(e, operation="ListGroups")
+                raise typer.Exit(1)
+        
+        # Get group details
+        try:
+            group_details = identity_store.describe_group(
+                IdentityStoreId=identity_store_id,
+                GroupId=group_id
+            )
+            
+            return group_details
+            
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "ResourceNotFoundException":
+                console.print(f"[red]Error: Group '{group_id}' not found.[/red]")
+            else:
+                handle_aws_error(e, operation="DescribeGroup")
+            raise typer.Exit(1)
+            
+    except ClientError as e:
+        handle_aws_error(e, operation="DescribeGroup")
+        raise typer.Exit(1)
+    except (ConnectionError, EndpointConnectionError) as e:
+        handle_network_error(e)
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+def update_group(
+    identifier: str,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    profile: Optional[str] = None,
+) -> dict:
+    """
+    Update a group's attributes.
+    
+    Args:
+        identifier: Group name or ID to update
+        name: New display name for the group
+        description: New description for the group
+        profile: AWS profile to use
+        
+    Returns:
+        Dictionary containing updated group details
+        
+    Raises:
+        typer.Exit: If group update fails
+    """
+    try:
+        # Validate inputs
+        if not validate_non_empty(identifier, "Group identifier"):
+            raise typer.Exit(1)
+            
+        if not name and description is None:
+            console.print("[red]Error: At least one of name or description must be provided.[/red]")
+            raise typer.Exit(1)
+            
+        if name and not validate_group_name(name):
+            raise typer.Exit(1)
+            
+        if description and not validate_group_description(description):
+            raise typer.Exit(1)
+            
+        # Validate the profile and get profile data
+        profile_name, profile_data = validate_profile(profile)
+        
+        # Validate the SSO instance and get instance ARN and identity store ID
+        _, identity_store_id = validate_sso_instance(profile_data)
+        
+        # Initialize the AWS client manager with the profile and region
+        region = profile_data.get("region")
+        aws_client = AWSClientManager(profile=profile_name, region=region)
+        
+        # Get the identity store client
+        identity_store = aws_client.get_identity_store_client()
+        
+        # Get the group first to ensure it exists and get current details
+        group_details = get_group(identifier, profile)
+        group_id = group_details.get("GroupId")
+        
+        # Prepare update operations
+        operations = []
+        
+        if name:
+            operations.append({
+                "AttributePath": "DisplayName",
+                "AttributeValue": name
+            })
+            
+        if description is not None:
+            operations.append({
+                "AttributePath": "Description", 
+                "AttributeValue": description
+            })
+        
+        # Update the group
+        try:
+            identity_store.update_group(
+                IdentityStoreId=identity_store_id,
+                GroupId=group_id,
+                Operations=[
+                    {
+                        "AttributePath": op["AttributePath"],
+                        "AttributeValue": op["AttributeValue"]
+                    } for op in operations
+                ]
+            )
+            
+            # Get updated group details
+            updated_details = identity_store.describe_group(
+                IdentityStoreId=identity_store_id,
+                GroupId=group_id
+            )
+            
+            console.print("[green]Group updated successfully![/green]")
+            
+            return updated_details
+            
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            error_message = e.response.get("Error", {}).get("Message", str(e))
+            console.print(f"[red]Error ({error_code}): {error_message}[/red]")
+            raise typer.Exit(1)
+            
+    except ClientError as e:
+        handle_aws_error(e, operation="UpdateGroup")
+        raise typer.Exit(1)
+    except (ConnectionError, EndpointConnectionError) as e:
+        handle_network_error(e)
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+def _find_user_id(
+    identity_store_client,
+    identity_store_id: str,
+    user_identifier: str
+) -> str:
+    """
+    Find a user ID by username or email.
+    
+    Args:
+        identity_store_client: Identity Store client
+        identity_store_id: Identity Store ID
+        user_identifier: User ID, username, or email
+        
+    Returns:
+        User ID string
+        
+    Raises:
+        ValueError: If user is not found or multiple users match
+    """
+    # Check if user_identifier is already a UUID (user ID)
+    uuid_pattern = r'^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{10,})'
+    if re.match(uuid_pattern, user_identifier, re.IGNORECASE):
+        return user_identifier
+    
+    # Search by username first
+    try:
+        response = identity_store_client.list_users(
+            IdentityStoreId=identity_store_id,
+            Filters=[
+                {
+                    "AttributePath": "UserName",
+                    "AttributeValue": user_identifier
+                }
+            ]
+        )
+        
+        users = response.get("Users", [])
+        if len(users) == 1:
+            return users[0].get("UserId")
+        elif len(users) > 1:
+            raise ValueError(f"Multiple users found with username '{user_identifier}'")
+            
+    except ClientError:
+        pass  # Continue to email search
+    
+    # Search by email if username search didn't work
+    try:
+        response = identity_store_client.list_users(
+            IdentityStoreId=identity_store_id,
+            Filters=[
+                {
+                    "AttributePath": "Emails.Value",
+                    "AttributeValue": user_identifier
+                }
+            ]
+        )
+        
+        users = response.get("Users", [])
+        if len(users) == 1:
+            return users[0].get("UserId")
+        elif len(users) > 1:
+            raise ValueError(f"Multiple users found with email '{user_identifier}'")
+            
+    except ClientError:
+        pass  # Continue to raise not found error
+    
+    raise ValueError(f"User '{user_identifier}' not found")

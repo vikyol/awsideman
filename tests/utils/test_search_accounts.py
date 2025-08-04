@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import Mock, patch
 from datetime import datetime
 
-from src.awsideman.utils.aws_client import search_accounts, _account_matches_ou_filter, _account_matches_tag_filter
+from src.awsideman.aws_clients.manager import search_accounts, _account_matches_ou_filter, _account_matches_tag_filter
 from src.awsideman.utils.models import AccountDetails
 
 
@@ -45,8 +45,8 @@ def test_search_accounts_case_insensitive(sample_accounts):
     """Test that search is case-insensitive."""
     mock_org_client = Mock()
     
-    with patch('src.awsideman.utils.aws_client._get_all_accounts_in_organization') as mock_get_all, \
-         patch('src.awsideman.utils.aws_client.get_account_details') as mock_get_details:
+    with patch('src.awsideman.aws_clients.manager._get_all_accounts_in_organization') as mock_get_all, \
+         patch('src.awsideman.aws_clients.manager.get_account_details') as mock_get_details:
         
         # Mock the account data returned by _get_all_accounts_in_organization
         mock_get_all.return_value = [
@@ -72,8 +72,8 @@ def test_search_accounts_partial_match(sample_accounts):
     """Test that search supports partial string matching."""
     mock_org_client = Mock()
     
-    with patch('src.awsideman.utils.aws_client._get_all_accounts_in_organization') as mock_get_all, \
-         patch('src.awsideman.utils.aws_client.get_account_details') as mock_get_details:
+    with patch('src.awsideman.aws_clients.manager._get_all_accounts_in_organization') as mock_get_all, \
+         patch('src.awsideman.aws_clients.manager.get_account_details') as mock_get_details:
         
         mock_get_all.return_value = [
             {"Id": "111111111111", "Name": "dev-account"},
@@ -99,8 +99,8 @@ def test_search_accounts_with_ou_filter(sample_accounts):
     """Test search with OU filter."""
     mock_org_client = Mock()
     
-    with patch('src.awsideman.utils.aws_client._get_all_accounts_in_organization') as mock_get_all, \
-         patch('src.awsideman.utils.aws_client.get_account_details') as mock_get_details:
+    with patch('src.awsideman.aws_clients.manager._get_all_accounts_in_organization') as mock_get_all, \
+         patch('src.awsideman.aws_clients.manager.get_account_details') as mock_get_details:
         
         mock_get_all.return_value = [
             {"Id": "111111111111", "Name": "dev-account"},
@@ -126,8 +126,8 @@ def test_search_accounts_with_tag_filter(sample_accounts):
     """Test search with tag filter."""
     mock_org_client = Mock()
     
-    with patch('src.awsideman.utils.aws_client._get_all_accounts_in_organization') as mock_get_all, \
-         patch('src.awsideman.utils.aws_client.get_account_details') as mock_get_details:
+    with patch('src.awsideman.aws_clients.manager._get_all_accounts_in_organization') as mock_get_all, \
+         patch('src.awsideman.aws_clients.manager.get_account_details') as mock_get_details:
         
         mock_get_all.return_value = [
             {"Id": "111111111111", "Name": "dev-account"},

@@ -5,7 +5,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..utils.config import Config
-from ..utils.aws_client import AWSClientManager
+from ..aws_clients.manager import AWSClientManager
 
 app = typer.Typer(help="Manage AWS SSO instances.")
 console = Console()

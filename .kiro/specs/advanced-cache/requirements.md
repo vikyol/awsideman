@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document outlines the requirements for implementing advanced cache features for the AWS Identity Center CLI. Building on the existing file-based cache layer, this phase adds encryption capabilities and DynamoDB backend support for enhanced security and scalability. The implementation will maintain backward compatibility while providing enterprise-grade caching options.
+This document outlines the requirements for implementing advanced cache features for the AWS Identity Center CLI. This implementation adds encryption capabilities and DynamoDB backend support for enhanced security and scalability, providing enterprise-grade caching options.
 
 ## Requirements
 
@@ -46,29 +46,6 @@ This document outlines the requirements for implementing advanced cache features
 
 ### Requirement 4
 
-**User Story:** As a user, I want to migrate between different cache backends without losing my cached data.
-
-#### Acceptance Criteria
-
-1. The system SHALL provide a migration command to transfer data between backends.
-2. WHEN migrating from file to DynamoDB THEN the system SHALL preserve all cache entries and metadata.
-3. WHEN migrating from DynamoDB to file THEN the system SHALL download all valid cache entries.
-4. WHEN migrating between encrypted and unencrypted THEN the system SHALL handle encryption/decryption appropriately.
-5. The migration process SHALL be resumable in case of interruption.
-
-### Requirement 5
-
-**User Story:** As a developer, I want the advanced cache features to be backward compatible with the existing cache implementation.
-
-#### Acceptance Criteria
-
-1. WHEN advanced features are disabled THEN the system SHALL behave exactly like the current implementation.
-2. WHEN upgrading from basic to advanced cache THEN existing cache data SHALL remain accessible.
-3. The system SHALL maintain the same public API for cache operations.
-4. WHEN advanced features fail THEN the system SHALL gracefully fallback to basic file caching.
-
-### Requirement 6
-
 **User Story:** As a user, I want to monitor and manage my cache across different backends through CLI commands.
 
 #### Acceptance Criteria
@@ -78,7 +55,7 @@ This document outlines the requirements for implementing advanced cache features
 3. The system SHALL provide commands to test backend connectivity and performance.
 4. The system SHALL provide commands to repair or reinitialize cache backends.
 
-### Requirement 7
+### Requirement 5
 
 **User Story:** As a security-conscious user, I want to rotate encryption keys and manage cache security settings.
 

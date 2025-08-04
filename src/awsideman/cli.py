@@ -8,8 +8,16 @@ import typer
 from typing import Optional
 from rich.console import Console
 
-from . import __version__
-from .commands import profile, sso, user, group, permission_set, assignment, org, cache
+try:
+    from awsideman import __version__
+    from .commands import profile, sso, user, group, permission_set, assignment, org, cache
+except ImportError:
+    # Handle direct script execution
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from awsideman import __version__
+    from awsideman.commands import profile, sso, user, group, permission_set, assignment, org, cache
 
 app = typer.Typer(
     help="AWS Identity Center Manager - A CLI tool for managing AWS Identity Center operations including users, groups, and permission sets."

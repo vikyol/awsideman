@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design document outlines the architecture for implementing advanced cache features including encryption and DynamoDB backend support. The design maintains backward compatibility with the existing file-based cache while providing enterprise-grade security and scalability options.
+This design document outlines the architecture for implementing advanced cache features including encryption and DynamoDB backend support. The design provides enterprise-grade security and scalability options with a clean, modern architecture.
 
 ## Architecture
 
@@ -31,9 +31,9 @@ This design document outlines the architecture for implementing advanced cache f
 
 ### Component Design
 
-#### 1. Enhanced CacheManager
+#### 1. CacheManager
 
-The existing CacheManager will be extended to support pluggable backends and encryption:
+The CacheManager provides a unified interface with pluggable backends and encryption:
 
 ```python
 class CacheManager:
@@ -88,7 +88,7 @@ class CacheBackend(ABC):
         pass
 ```
 
-#### 3. File Backend (Enhanced)
+#### 3. File Backend
 
 ```python
 class FileBackend(CacheBackend):
@@ -213,7 +213,7 @@ class EncryptionProvider(ABC):
         pass
 
 class NoEncryption(EncryptionProvider):
-    """Default no-encryption provider"""
+    """No-encryption provider for development/testing"""
     def encrypt(self, data: Any) -> bytes:
         return json.dumps(data).encode('utf-8')
     
@@ -399,9 +399,9 @@ TTL: Enabled on 'ttl' attribute for automatic expiration
 ## Error Handling
 
 ### Backend Failures
-- DynamoDB unavailable → Fallback to file backend
-- File system errors → Log error, continue without caching
-- Encryption key unavailable → Disable encryption, warn user
+- DynamoDB unavailable → Return cache miss, log error
+- File system errors → Return cache miss, log error  
+- Encryption key unavailable → Fail fast with clear error message
 
 ### Migration Errors
 - Partial migration → Resume from last successful entry
@@ -451,8 +451,8 @@ TTL: Enabled on 'ttl' attribute for automatic expiration
 ## Migration Strategy
 
 ### Phase 1: Core Infrastructure
-- Implement backend interface and file backend refactoring
-- Add basic encryption support
+- Implement backend interface and file backend
+- Add encryption support
 - Create configuration system
 
 ### Phase 2: DynamoDB Backend
@@ -464,8 +464,3 @@ TTL: Enabled on 'ttl' attribute for automatic expiration
 - Implement hybrid backend
 - Add key rotation functionality
 - Create comprehensive CLI commands
-
-### Phase 4: Enterprise Features
-- Add audit logging
-- Implement advanced security features
-- Add monitoring and alerting capabilities

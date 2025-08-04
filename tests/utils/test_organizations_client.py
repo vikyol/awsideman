@@ -7,7 +7,7 @@ import boto3
 from datetime import datetime
 import click
 
-from src.awsideman.utils.aws_client import OrganizationsClient, AWSClientManager
+from src.awsideman.aws_clients.manager import OrganizationsClient, AWSClientManager
 from src.awsideman.utils.models import NodeType, PolicyType
 
 

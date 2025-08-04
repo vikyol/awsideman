@@ -6,9 +6,9 @@ import logging
 from typing import Dict, Any, Optional, List, Callable
 from functools import wraps
 
-from .aws_client import AWSClientManager, OrganizationsClient
-from .cache_manager import CacheManager
-from .models import CacheConfig
+from .manager import AWSClientManager, OrganizationsClientWrapper, IdentityCenterClientWrapper, IdentityStoreClientWrapper
+from ..cache.manager import CacheManager
+from ..utils.models import CacheConfig
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +43,15 @@ class CachedAwsClient:
             'list_policies_for_target',
             'list_parents',
             
-            # Identity Center operations (for future use)
+            # Identity Center operations
             'list_instances',
             'list_permission_sets',
             'describe_permission_set',
             'list_accounts_for_provisioned_permission_set',
             'list_permission_sets_provisioned_to_account',
+            'describe_instance',
             
-            # Identity Store operations (for future use)
+            # Identity Store operations
             'list_users',
             'list_groups',
             'describe_user',
@@ -67,23 +68,23 @@ class CachedAwsClient:
         """
         return CachedOrganizationsClient(self.client_manager, self.cache_manager)
     
-    def get_identity_center_client(self):
+    def get_identity_center_client(self) -> 'CachedIdentityCenterClient':
         """
-        Get the AWS Identity Center client (not cached yet).
+        Get a cached Identity Center client.
         
         Returns:
-            AWS Identity Center client
+            CachedIdentityCenterClient instance
         """
-        return self.client_manager.get_identity_center_client()
+        return CachedIdentityCenterClient(self.client_manager, self.cache_manager)
     
-    def get_identity_store_client(self):
+    def get_identity_store_client(self) -> 'CachedIdentityStoreClient':
         """
-        Get the AWS Identity Store client (not cached yet).
+        Get a cached Identity Store client.
         
         Returns:
-            AWS Identity Store client
+            CachedIdentityStoreClient instance
         """
-        return self.client_manager.get_identity_store_client()
+        return CachedIdentityStoreClient(self.client_manager, self.cache_manager)
     
     def _generate_cache_key(self, operation: str, params: Dict[str, Any]) -> str:
         """
@@ -202,7 +203,7 @@ class CachedOrganizationsClient:
         self.client_manager = client_manager
         self.cache_manager = cache_manager
         self._cached_aws_client = CachedAwsClient(client_manager, cache_manager)
-        self._organizations_client = OrganizationsClient(client_manager)
+        self._organizations_client = OrganizationsClientWrapper(client_manager)
     
     @property
     def client(self):
@@ -342,3 +343,155 @@ def create_cached_client_manager(profile: Optional[str] = None,
     
     # Create and return the cached client
     return CachedAwsClient(client_manager, cache_manager)
+
+
+class CachedIdentityCenterClient:
+    """
+    Cached wrapper for IdentityCenterClientWrapper that provides transparent caching.
+    
+    This class maintains the same interface as IdentityCenterClientWrapper but adds
+    caching capabilities for all read operations.
+    """
+    
+    def __init__(self, client_manager: AWSClientManager, cache_manager: CacheManager):
+        """
+        Initialize the cached Identity Center client.
+        
+        Args:
+            client_manager: AWSClientManager instance
+            cache_manager: CacheManager instance for caching
+        """
+        self.client_manager = client_manager
+        self.cache_manager = cache_manager
+        self._cached_aws_client = CachedAwsClient(client_manager, cache_manager)
+        self._identity_center_client = IdentityCenterClientWrapper(client_manager)
+    
+    @property
+    def client(self):
+        """Get the underlying Identity Center client for compatibility."""
+        return self._identity_center_client.client
+    
+    def __getattr__(self, name):
+        """
+        Intercept method calls and provide caching for cacheable operations.
+        
+        Args:
+            name: Method name being called
+            
+        Returns:
+            Cached or fresh result from the API call
+        """
+        # Get the original method from the underlying client
+        original_method = getattr(self._identity_center_client, name)
+        
+        # If this is not a cacheable operation, just call it directly
+        if not self._cached_aws_client._is_cacheable_operation(name):
+            return original_method
+        
+        # Return a wrapper function that provides caching
+        def cached_method(*args, **kwargs):
+            # Convert args and kwargs to a parameters dict for cache key generation
+            params = {}
+            if args:
+                # For positional args, we need to map them to parameter names
+                # This is a simplified approach - in practice, you might want to inspect
+                # the method signature to get proper parameter names
+                if name == 'describe_instance' and len(args) >= 1:
+                    params['instance_arn'] = args[0]
+                elif name == 'list_permission_sets' and len(args) >= 1:
+                    params['instance_arn'] = args[0]
+                elif name == 'describe_permission_set' and len(args) >= 2:
+                    params['instance_arn'] = args[0]
+                    params['permission_set_arn'] = args[1]
+                elif name == 'list_accounts_for_provisioned_permission_set' and len(args) >= 2:
+                    params['instance_arn'] = args[0]
+                    params['permission_set_arn'] = args[1]
+                elif name == 'list_permission_sets_provisioned_to_account' and len(args) >= 2:
+                    params['instance_arn'] = args[0]
+                    params['account_id'] = args[1]
+            
+            # Add kwargs to params
+            params.update(kwargs)
+            
+            return self._cached_aws_client._execute_with_cache(
+                name,
+                params,
+                lambda: original_method(*args, **kwargs)
+            )
+        
+        return cached_method
+
+
+class CachedIdentityStoreClient:
+    """
+    Cached wrapper for IdentityStoreClientWrapper that provides transparent caching.
+    
+    This class maintains the same interface as IdentityStoreClientWrapper but adds
+    caching capabilities for all read operations.
+    """
+    
+    def __init__(self, client_manager: AWSClientManager, cache_manager: CacheManager):
+        """
+        Initialize the cached Identity Store client.
+        
+        Args:
+            client_manager: AWSClientManager instance
+            cache_manager: CacheManager instance for caching
+        """
+        self.client_manager = client_manager
+        self.cache_manager = cache_manager
+        self._cached_aws_client = CachedAwsClient(client_manager, cache_manager)
+        self._identity_store_client = IdentityStoreClientWrapper(client_manager)
+    
+    @property
+    def client(self):
+        """Get the underlying Identity Store client for compatibility."""
+        return self._identity_store_client.client
+    
+    def __getattr__(self, name):
+        """
+        Intercept method calls and provide caching for cacheable operations.
+        
+        Args:
+            name: Method name being called
+            
+        Returns:
+            Cached or fresh result from the API call
+        """
+        # Get the original method from the underlying client
+        original_method = getattr(self._identity_store_client, name)
+        
+        # If this is not a cacheable operation, just call it directly
+        if not self._cached_aws_client._is_cacheable_operation(name):
+            return original_method
+        
+        # Return a wrapper function that provides caching
+        def cached_method(*args, **kwargs):
+            # Convert args and kwargs to a parameters dict for cache key generation
+            params = {}
+            if args:
+                # For positional args, we need to map them to parameter names
+                # This is a simplified approach - in practice, you might want to inspect
+                # the method signature to get proper parameter names
+                if name == 'describe_user' and len(args) >= 2:
+                    params['identity_store_id'] = args[0]
+                    params['user_id'] = args[1]
+                elif name == 'describe_group' and len(args) >= 2:
+                    params['identity_store_id'] = args[0]
+                    params['group_id'] = args[1]
+                elif name == 'list_group_memberships' and len(args) >= 2:
+                    params['identity_store_id'] = args[0]
+                    params['group_id'] = args[1]
+                elif name in ['list_users', 'list_groups'] and len(args) >= 1:
+                    params['identity_store_id'] = args[0]
+            
+            # Add kwargs to params
+            params.update(kwargs)
+            
+            return self._cached_aws_client._execute_with_cache(
+                name,
+                params,
+                lambda: original_method(*args, **kwargs)
+            )
+        
+        return cached_method

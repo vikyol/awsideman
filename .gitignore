@@ -63,3 +63,7 @@ venv.bak/
 
 # Project specific
 .awsideman/
+
+# Temporary script files
+scripts/test_*.py
+scripts/temp_*.py

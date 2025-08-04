@@ -440,8 +440,7 @@ def test_list_permission_sets_api_error(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef"
     )
 
-@pat
-ch("src.awsideman.commands.permission_set.validate_profile")
+@patch("src.awsideman.commands.permission_set.validate_profile")
 @patch("src.awsideman.commands.permission_set.validate_sso_instance")
 @patch("src.awsideman.commands.permission_set.AWSClientManager")
 @patch("src.awsideman.commands.permission_set.console")

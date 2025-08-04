@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 from datetime import datetime, timedelta
 
-from ..utils.cache_manager import CacheManager
+from ..cache.manager import CacheManager
 from ..utils.models import CacheEntry
 
 app = typer.Typer(help="Manage cache for AWS Identity Center operations. Clear cache, view status, and warm cache for better performance.")
@@ -136,6 +136,8 @@ def cache_status():
 @app.command("warm")
 def warm_cache(
     command: str = typer.Argument(..., help="Command to warm up (e.g., 'user list', 'group list')"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use for cache warming"),
+    region: Optional[str] = typer.Option(None, "--region", help="AWS region to use for cache warming"),
 ):
     """Warm up the cache by pre-executing a command.
     
@@ -145,6 +147,8 @@ def warm_cache(
     Examples:
         awsideman cache warm "user list"
         awsideman cache warm "group list --limit 50"
+        awsideman cache warm "org tree" --profile production
+        awsideman cache warm "user list" --profile dev --region us-west-2
     """
     try:
         cache_manager = CacheManager()
@@ -157,7 +161,17 @@ def warm_cache(
         stats_before = cache_manager.get_cache_stats()
         entries_before = stats_before.get('total_entries', 0)
         
-        console.print(f"[blue]Warming cache for command: {command}[/blue]")
+        # Show which profile/region is being used
+        profile_info = ""
+        if profile:
+            profile_info += f" (profile: {profile}"
+            if region:
+                profile_info += f", region: {region}"
+            profile_info += ")"
+        elif region:
+            profile_info = f" (region: {region})"
+        
+        console.print(f"[blue]Warming cache for command: {command}{profile_info}[/blue]")
         
         # Parse and validate the command
         command_parts = shlex.split(command)
@@ -177,10 +191,26 @@ def warm_cache(
             raise typer.Exit(1)
         
         # Build the full awsideman command (caching is now enabled by default)
-        full_command = ["awsideman"] + command_parts
+        full_command = ["awsideman"]
+        
+        # Add the command group first
+        full_command.append(command_parts[0])
+        
+        # Add profile option if specified (after the command group)
+        if profile:
+            full_command.extend(["--profile", profile])
+        
+        # Add region option if specified (after the command group)
+        if region:
+            full_command.extend(["--region", region])
+        
+        # Add the rest of the command arguments
+        if len(command_parts) > 1:
+            full_command.extend(command_parts[1:])
         
         # Execute the command to warm the cache
         console.print("[dim]Executing command to populate cache...[/dim]")
+        console.print(f"[dim]Full command: {' '.join(full_command)}[/dim]")
         
         try:
             # Run the command with output suppressed
