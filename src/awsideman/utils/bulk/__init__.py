@@ -12,6 +12,8 @@ Modules:
 from .processors import CSVProcessor, JSONProcessor, FileFormatDetector, ValidationError
 from .resolver import ResourceResolver, AssignmentValidator, ResolutionResult
 from .batch import BatchProcessor, ProgressTracker, RetryHandler, AssignmentResult, BulkOperationResults
+from .multi_account_progress import MultiAccountProgressTracker
+from .multi_account_batch import MultiAccountBatchProcessor
 from .preview import PreviewGenerator
 from .reporting import ReportGenerator
 
@@ -25,6 +27,8 @@ __all__ = [
     'ResolutionResult',
     'BatchProcessor',
     'ProgressTracker',
+    'MultiAccountProgressTracker',
+    'MultiAccountBatchProcessor',
     'RetryHandler',
     'AssignmentResult',
     'BulkOperationResults',

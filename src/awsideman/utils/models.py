@@ -263,7 +263,301 @@ class CacheConfig:
         return self.max_size_mb * 1024 * 1024
 
 
+# Multi-account operation data models
+
+@dataclass
+class AccountInfo:
+    """
+    Account metadata and tag matching for multi-account operations.
+    
+    Contains essential account information needed for filtering and
+    multi-account operations including tag-based filtering support.
+    """
+    account_id: str
+    account_name: str
+    email: str
+    status: str
+    tags: Dict[str, str] = field(default_factory=dict)
+    ou_path: List[str] = field(default_factory=list)
+    
+    def matches_tag_filter(self, tag_key: str, tag_value: str) -> bool:
+        """Check if account matches a specific tag filter.
+        
+        Args:
+            tag_key: The tag key to match
+            tag_value: The tag value to match
+            
+        Returns:
+            True if account has the specified tag key-value pair
+        """
+        return self.tags.get(tag_key) == tag_value
+    
+    def get_display_name(self) -> str:
+        """Get a human-readable display name for the account.
+        
+        Returns:
+            Account name with ID in parentheses
+        """
+        return f"{self.account_name} ({self.account_id})"
+    
+    def has_tag(self, key: str, value: Optional[str] = None) -> bool:
+        """Check if account has a specific tag, optionally with a specific value.
+        
+        Args:
+            key: Tag key to check
+            value: Optional tag value to match
+            
+        Returns:
+            True if account has the tag (and value if specified)
+        """
+        if key not in self.tags:
+            return False
+        if value is None:
+            return True
+        return self.tags[key] == value
+
+
+@dataclass
+class AccountResult:
+    """
+    Individual account operation result for multi-account operations.
+    
+    Tracks the outcome of a single account operation including
+    success/failure status, error details, and performance metrics.
+    """
+    account_id: str
+    account_name: str
+    status: Literal['success', 'failed', 'skipped']
+    error_message: Optional[str] = None
+    processing_time: float = 0.0
+    retry_count: int = 0
+    timestamp: Optional[float] = None
+    
+    def __post_init__(self):
+        """Set timestamp if not provided."""
+        if self.timestamp is None:
+            import time
+            self.timestamp = time.time()
+    
+    def is_successful(self) -> bool:
+        """Check if the operation was successful.
+        
+        Returns:
+            True if status is 'success'
+        """
+        return self.status == 'success'
+    
+    def get_error_summary(self) -> str:
+        """Get a concise error summary for display.
+        
+        Returns:
+            Error message or status if no error message
+        """
+        if self.error_message:
+            return self.error_message
+        return f"Status: {self.status}"
+    
+    def get_display_name(self) -> str:
+        """Get a human-readable display name for the account.
+        
+        Returns:
+            Account name with ID in parentheses
+        """
+        return f"{self.account_name} ({self.account_id})"
+
+
+@dataclass
+class MultiAccountAssignment:
+    """
+    Multi-account assignment model with name resolution capabilities.
+    
+    Represents a permission set assignment or revocation operation
+    across multiple accounts with support for name resolution.
+    """
+    permission_set_name: str
+    principal_name: str
+    principal_type: str
+    accounts: List[AccountInfo]
+    operation: Literal['assign', 'revoke']
+    
+    # Resolved values (populated after name resolution)
+    permission_set_arn: Optional[str] = None
+    principal_id: Optional[str] = None
+    
+    def get_total_operations(self) -> int:
+        """Get the total number of operations to be performed.
+        
+        Returns:
+            Number of accounts multiplied by operations per account
+        """
+        return len(self.accounts)
+    
+    def validate(self) -> List[str]:
+        """Validate the assignment configuration.
+        
+        Returns:
+            List of validation error messages
+        """
+        errors = []
+        
+        if not self.permission_set_name.strip():
+            errors.append("Permission set name cannot be empty")
+        
+        if not self.principal_name.strip():
+            errors.append("Principal name cannot be empty")
+        
+        if self.principal_type not in ['USER', 'GROUP']:
+            errors.append(f"Invalid principal type: {self.principal_type}")
+        
+        if not self.accounts:
+            errors.append("At least one account must be specified")
+        
+        if self.operation not in ['assign', 'revoke']:
+            errors.append(f"Invalid operation: {self.operation}")
+        
+        return errors
+    
+    def is_resolved(self) -> bool:
+        """Check if names have been resolved to ARNs/IDs.
+        
+        Returns:
+            True if both permission set ARN and principal ID are resolved
+        """
+        return self.permission_set_arn is not None and self.principal_id is not None
+    
+    def get_account_ids(self) -> List[str]:
+        """Get list of account IDs for this assignment.
+        
+        Returns:
+            List of account IDs
+        """
+        return [account.account_id for account in self.accounts]
+
+
+@dataclass
+class MultiAccountResults:
+    """
+    Aggregation class for multi-account operation results with success rate calculations.
+    
+    Collects and analyzes results from multi-account operations providing
+    summary statistics and success rate calculations.
+    """
+    total_accounts: int
+    successful_accounts: List[AccountResult]
+    failed_accounts: List[AccountResult]
+    skipped_accounts: List[AccountResult]
+    operation_type: str
+    duration: float
+    batch_size: int
+    
+    def __post_init__(self):
+        """Validate that account counts match."""
+        calculated_total = len(self.successful_accounts) + len(self.failed_accounts) + len(self.skipped_accounts)
+        if calculated_total != self.total_accounts:
+            # Auto-correct total_accounts to match actual results
+            self.total_accounts = calculated_total
+    
+    @property
+    def success_rate(self) -> float:
+        """Calculate the success rate as a percentage.
+        
+        Returns:
+            Success rate as a float between 0.0 and 100.0
+        """
+        if self.total_accounts == 0:
+            return 0.0
+        return (len(self.successful_accounts) / self.total_accounts) * 100.0
+    
+    @property
+    def failure_rate(self) -> float:
+        """Calculate the failure rate as a percentage.
+        
+        Returns:
+            Failure rate as a float between 0.0 and 100.0
+        """
+        if self.total_accounts == 0:
+            return 0.0
+        return (len(self.failed_accounts) / self.total_accounts) * 100.0
+    
+    @property
+    def skip_rate(self) -> float:
+        """Calculate the skip rate as a percentage.
+        
+        Returns:
+            Skip rate as a float between 0.0 and 100.0
+        """
+        if self.total_accounts == 0:
+            return 0.0
+        return (len(self.skipped_accounts) / self.total_accounts) * 100.0
+    
+    def get_summary_stats(self) -> Dict[str, Any]:
+        """Get comprehensive summary statistics.
+        
+        Returns:
+            Dictionary containing all relevant statistics
+        """
+        return {
+            'total_accounts': self.total_accounts,
+            'successful_count': len(self.successful_accounts),
+            'failed_count': len(self.failed_accounts),
+            'skipped_count': len(self.skipped_accounts),
+            'success_rate': round(self.success_rate, 2),
+            'failure_rate': round(self.failure_rate, 2),
+            'skip_rate': round(self.skip_rate, 2),
+            'operation_type': self.operation_type,
+            'duration_seconds': round(self.duration, 2),
+            'batch_size': self.batch_size,
+            'average_processing_time': self._calculate_average_processing_time()
+        }
+    
+    def _calculate_average_processing_time(self) -> float:
+        """Calculate average processing time per account.
+        
+        Returns:
+            Average processing time in seconds
+        """
+        all_results = self.successful_accounts + self.failed_accounts + self.skipped_accounts
+        if not all_results:
+            return 0.0
+        
+        total_time = sum(result.processing_time for result in all_results)
+        return round(total_time / len(all_results), 3)
+    
+    def has_failures(self) -> bool:
+        """Check if there were any failures.
+        
+        Returns:
+            True if any accounts failed
+        """
+        return len(self.failed_accounts) > 0
+    
+    def is_complete_success(self) -> bool:
+        """Check if all operations were successful.
+        
+        Returns:
+            True if all accounts succeeded (no failures or skips)
+        """
+        return len(self.failed_accounts) == 0 and len(self.skipped_accounts) == 0
+    
+    def get_failed_account_ids(self) -> List[str]:
+        """Get list of account IDs that failed.
+        
+        Returns:
+            List of account IDs for failed operations
+        """
+        return [result.account_id for result in self.failed_accounts]
+    
+    def get_successful_account_ids(self) -> List[str]:
+        """Get list of account IDs that succeeded.
+        
+        Returns:
+            List of account IDs for successful operations
+        """
+        return [result.account_id for result in self.successful_accounts]
+
+
 # Type aliases for common use cases
 OrganizationTree = List[OrgNode]
 PolicyList = List[PolicyInfo]
 TagDict = Dict[str, str]
+MultiAccountResultsList = List[AccountResult]
