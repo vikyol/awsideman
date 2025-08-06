@@ -9,8 +9,10 @@ from typing import Optional, Dict, Any
 from .base import CacheBackend, CacheBackendError, BackendHealthStatus
 from ..utils import CachePathManager
 from ...utils.models import CacheEntry
+from ...utils.security import input_validator, get_secure_logger
 
-logger = logging.getLogger(__name__)
+# Use secure logger instead of standard logger
+logger = get_secure_logger(__name__)
 
 
 class FileBackend(CacheBackend):
@@ -45,7 +47,7 @@ class FileBackend(CacheBackend):
     
     def get(self, key: str) -> Optional[bytes]:
         """
-        Retrieve raw data from file backend.
+        Retrieve raw data from file backend with input validation.
         
         Args:
             key: Cache key to retrieve
@@ -57,6 +59,19 @@ class FileBackend(CacheBackend):
             CacheBackendError: If backend operation fails
         """
         try:
+            # Validate cache key
+            if not input_validator.validate_cache_key(key):
+                logger.security_event(
+                    "invalid_cache_key",
+                    {
+                        "operation": "get",
+                        "key": input_validator.sanitize_log_data(key),
+                        "backend": "file"
+                    },
+                    "WARNING"
+                )
+                raise CacheBackendError(f"Invalid cache key format: {key}")
+            
             cache_file = self.path_manager.get_cache_file_path(key)
             
             if not cache_file.exists():
@@ -160,7 +175,7 @@ class FileBackend(CacheBackend):
     
     def set(self, key: str, data: bytes, ttl: Optional[int] = None, operation: str = "unknown") -> None:
         """
-        Store raw data to file backend.
+        Store raw data to file backend with input validation.
         
         Args:
             key: Cache key to store data under
@@ -172,6 +187,27 @@ class FileBackend(CacheBackend):
             CacheBackendError: If backend operation fails
         """
         try:
+            # Validate cache key
+            if not input_validator.validate_cache_key(key):
+                logger.security_event(
+                    "invalid_cache_key",
+                    {
+                        "operation": "set",
+                        "key": input_validator.sanitize_log_data(key),
+                        "backend": "file"
+                    },
+                    "WARNING"
+                )
+                raise CacheBackendError(f"Invalid cache key format: {key}")
+            
+            # Validate data
+            if not isinstance(data, bytes):
+                raise CacheBackendError("Data must be bytes")
+            
+            # Validate TTL
+            if ttl is not None and (not isinstance(ttl, int) or ttl <= 0):
+                raise CacheBackendError("TTL must be a positive integer")
+            
             # Use provided TTL or default
             effective_ttl = ttl or 3600  # Default 1 hour
             
@@ -284,7 +320,12 @@ class FileBackend(CacheBackend):
                 )
         except Exception as e:
             logger.error(f"Unexpected error writing cache for key {key}: {e}")
-            self._cleanup_temp_file(cache_file)
+            # Only cleanup temp file if cache_file was defined
+            try:
+                if 'cache_file' in locals():
+                    self._cleanup_temp_file(cache_file)
+            except Exception:
+                pass  # Ignore cleanup errors
             raise CacheBackendError(
                 f"Unexpected error writing cache: {e}",
                 backend_type=self.backend_type,

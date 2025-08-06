@@ -12,8 +12,10 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from .base import CacheBackend, CacheBackendError, BackendHealthStatus
+from ...utils.security import input_validator, get_secure_logger
 
-logger = logging.getLogger(__name__)
+# Use secure logger instead of standard logger
+logger = get_secure_logger(__name__)
 
 # DynamoDB item size limit is 400KB, we use a smaller chunk size for safety
 MAX_ITEM_SIZE = 350 * 1024  # 350KB to leave room for metadata
@@ -97,7 +99,7 @@ class DynamoDBBackend(CacheBackend):
     
     def get(self, key: str) -> Optional[bytes]:
         """
-        Retrieve raw data from DynamoDB.
+        Retrieve raw data from DynamoDB with input validation.
         
         Args:
             key: Cache key to retrieve
@@ -109,6 +111,19 @@ class DynamoDBBackend(CacheBackend):
             CacheBackendError: If DynamoDB operation fails
         """
         try:
+            # Validate cache key
+            if not input_validator.validate_cache_key(key):
+                logger.security_event(
+                    "invalid_cache_key",
+                    {
+                        "operation": "get",
+                        "key": input_validator.sanitize_log_data(key),
+                        "backend": "dynamodb"
+                    },
+                    "WARNING"
+                )
+                raise CacheBackendError(f"Invalid cache key format: {key}")
+            
             # Ensure table exists before attempting operations
             self._ensure_table_exists()
             
@@ -158,7 +173,7 @@ class DynamoDBBackend(CacheBackend):
     
     def set(self, key: str, data: bytes, ttl: Optional[int] = None, operation: str = "unknown") -> None:
         """
-        Store raw data to DynamoDB.
+        Store raw data to DynamoDB with input validation.
         
         Args:
             key: Cache key to store data under
@@ -170,6 +185,27 @@ class DynamoDBBackend(CacheBackend):
             CacheBackendError: If DynamoDB operation fails
         """
         try:
+            # Validate cache key
+            if not input_validator.validate_cache_key(key):
+                logger.security_event(
+                    "invalid_cache_key",
+                    {
+                        "operation": "set",
+                        "key": input_validator.sanitize_log_data(key),
+                        "backend": "dynamodb"
+                    },
+                    "WARNING"
+                )
+                raise CacheBackendError(f"Invalid cache key format: {key}")
+            
+            # Validate data
+            if not isinstance(data, bytes):
+                raise CacheBackendError("Data must be bytes")
+            
+            # Validate TTL
+            if ttl is not None and (not isinstance(ttl, int) or ttl <= 0):
+                raise CacheBackendError("TTL must be a positive integer")
+            
             # Ensure table exists before attempting operations
             self._ensure_table_exists()
             

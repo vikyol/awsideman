@@ -1,0 +1,34 @@
+{
+  "assignments": [
+    {
+      "principal_name": "Developers",
+      "permission_set_name": "PowerUserAccess",
+      "account_name": "Development",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "DevOps-Team",
+      "permission_set_name": "AdministratorAccess",
+      "account_name": "Staging",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "QA-Engineers",
+      "permission_set_name": "ReadOnlyAccess",
+      "account_name": "Production",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "Security-Team",
+      "permission_set_name": "SecurityAudit",
+      "account_name": "Production",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "Data-Scientists",
+      "permission_set_name": "DataAnalyst",
+      "account_name": "Analytics",
+      "principal_type": "GROUP"
+    }
+  ]
+}

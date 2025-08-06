@@ -100,8 +100,8 @@ class CSVProcessor:
     
     def __init__(self, file_path: Path):
         self.file_path = file_path
-        self.required_columns = ['principal_id', 'permission_set_arn', 'account_id']
-        self.optional_columns = ['principal_type', 'principal_name', 'permission_set_name']
+        self.required_columns = ['principal_name', 'permission_set_name', 'account_name']
+        self.optional_columns = ['principal_type', 'account_id', 'permission_set_arn', 'principal_id']
     
     def validate_format(self) -> List[str]:
         """Validate CSV format and return list of validation errors."""
@@ -125,14 +125,15 @@ class JSONProcessor:
                     "type": "array",
                     "items": {
                         "type": "object",
-                        "required": ["principal_id", "permission_set_arn", "account_id"],
+                        "required": ["principal_name", "permission_set_name", "account_name"],
                         "properties": {
-                            "principal_id": {"type": "string"},
-                            "permission_set_arn": {"type": "string"},
-                            "account_id": {"type": "string"},
-                            "principal_type": {"type": "string", "enum": ["USER", "GROUP"]},
                             "principal_name": {"type": "string"},
-                            "permission_set_name": {"type": "string"}
+                            "permission_set_name": {"type": "string"},
+                            "account_name": {"type": "string"},
+                            "principal_type": {"type": "string", "enum": ["USER", "GROUP"]},
+                            "account_id": {"type": "string"},
+                            "permission_set_arn": {"type": "string"},
+                            "principal_id": {"type": "string"}
                         }
                     }
                 }
@@ -174,7 +175,34 @@ class BatchProcessor:
         """Process assignments in batches with progress tracking."""
 ```
 
-#### 4.2 Assignment Validator
+#### 4.2 Resource Resolver
+
+```python
+class ResourceResolver:
+    """Resolves human-readable names to AWS resource identifiers."""
+    
+    def __init__(self, identity_store_client, sso_admin_client, instance_arn: str, identity_store_id: str):
+        self.identity_store_client = identity_store_client
+        self.sso_admin_client = sso_admin_client
+        self.instance_arn = instance_arn
+        self.identity_store_id = identity_store_id
+        self._principal_cache = {}
+        self._permission_set_cache = {}
+        self._account_cache = {}
+    
+    def resolve_principal_name(self, principal_name: str, principal_type: str) -> Optional[str]:
+        """Resolve principal name to principal ID."""
+    
+    def resolve_permission_set_name(self, permission_set_name: str) -> Optional[str]:
+        """Resolve permission set name to permission set ARN."""
+    
+    def resolve_account_name(self, account_name: str) -> Optional[str]:
+        """Resolve account name to account ID."""
+    
+    def resolve_assignment(self, assignment: Dict[str, Any]) -> Dict[str, Any]:
+        """Resolve all names in assignment to IDs/ARNs."""
+
+#### 4.3 Assignment Validator
 
 ```python
 class AssignmentValidator:
@@ -264,20 +292,21 @@ app.add_typer(bulk.app, name="bulk")
 The CSV format will support the following columns:
 
 **Required Columns:**
-- `principal_id`: ID of the user or group
-- `permission_set_arn`: ARN of the permission set
-- `account_id`: AWS account ID
+- `principal_name`: Name of the user or group (human-readable identifier)
+- `permission_set_name`: Name of the permission set (human-readable identifier)
+- `account_name`: Name of the AWS account (human-readable identifier)
 
 **Optional Columns:**
 - `principal_type`: Type of principal (USER or GROUP, defaults to USER)
-- `principal_name`: Human-readable name (for reference only)
-- `permission_set_name`: Human-readable name (for reference only)
+- `account_id`: AWS account ID (for advanced use cases, will be resolved from name if not provided)
+- `permission_set_arn`: ARN of the permission set (for advanced use cases)
+- `principal_id`: ID of the user or group (for reference only, will be resolved from name)
 
 **Example CSV:**
 ```csv
-principal_id,permission_set_arn,account_id,principal_type,principal_name,permission_set_name
-user-123,arn:aws:sso:::permissionSet/ins-123/ps-456,123456789012,USER,john.doe,ReadOnlyAccess
-group-789,arn:aws:sso:::permissionSet/ins-123/ps-789,123456789012,GROUP,Developers,PowerUserAccess
+principal_name,permission_set_name,account_name,principal_type
+john.doe,ReadOnlyAccess,Production,USER
+Developers,PowerUserAccess,Development,GROUP
 ```
 
 #### JSON Format
@@ -288,20 +317,16 @@ The JSON format will support a structured format with an assignments array:
 {
   "assignments": [
     {
-      "principal_id": "user-123",
-      "permission_set_arn": "arn:aws:sso:::permissionSet/ins-123/ps-456",
-      "account_id": "123456789012",
-      "principal_type": "USER",
       "principal_name": "john.doe",
-      "permission_set_name": "ReadOnlyAccess"
+      "permission_set_name": "ReadOnlyAccess",
+      "account_name": "Production",
+      "principal_type": "USER"
     },
     {
-      "principal_id": "group-789",
-      "permission_set_arn": "arn:aws:sso:::permissionSet/ins-123/ps-789",
-      "account_id": "123456789012",
-      "principal_type": "GROUP",
       "principal_name": "Developers",
-      "permission_set_name": "PowerUserAccess"
+      "permission_set_name": "PowerUserAccess",
+      "account_name": "Development",
+      "principal_type": "GROUP"
     }
   ]
 }
@@ -313,14 +338,15 @@ The JSON format will support a structured format with an assignments array:
 @dataclass
 class AssignmentResult:
     """Result of a single assignment operation."""
-    principal_id: str
-    permission_set_arn: str
-    account_id: str
+    principal_name: str
+    permission_set_name: str
+    account_name: str
     principal_type: str
     status: str  # 'success', 'failed', 'skipped'
     error_message: Optional[str] = None
-    principal_name: Optional[str] = None
-    permission_set_name: Optional[str] = None
+    principal_id: Optional[str] = None
+    permission_set_arn: Optional[str] = None
+    account_id: Optional[str] = None
 
 @dataclass
 class BulkOperationResults:
@@ -348,9 +374,9 @@ The Bulk Operations feature will handle the following error scenarios:
 ### Assignment-Level Errors
 
 1. **Missing Required Fields**: If required fields are missing, log error and continue with next assignment.
-2. **Invalid Principal**: If principal ID doesn't exist, log error with principal details.
-3. **Invalid Permission Set**: If permission set ARN is invalid, log error with ARN details.
-4. **Invalid Account**: If account ID is invalid, log error with account details.
+2. **Invalid Principal**: If principal name cannot be resolved to a principal ID, log error with principal details.
+3. **Invalid Permission Set**: If permission set name cannot be resolved to an ARN, log error with permission set details.
+4. **Invalid Account**: If account name cannot be resolved to an account ID, log error with account details.
 5. **Assignment Already Exists**: For assign operations, log warning and continue.
 6. **Assignment Doesn't Exist**: For revoke operations, log warning and continue.
 7. **API Rate Limiting**: Implement exponential backoff and retry logic.
@@ -406,7 +432,7 @@ Manual testing will be performed to verify that:
 
 1. **Parallel Processing**: Process assignments in parallel batches to improve throughput while respecting API rate limits.
 2. **Connection Pooling**: Reuse AWS client connections across batch operations.
-3. **Validation Caching**: Cache validation results for repeated principals and permission sets within a single operation.
+3. **Resolution Caching**: Cache resolution results for repeated principal names, permission set names, and account names within a single operation.
 4. **Memory Management**: Process large files in chunks to avoid memory issues.
 
 ### AWS API Rate Limiting

@@ -10,8 +10,10 @@ import keyring
 from keyring.errors import KeyringError
 
 from .provider import EncryptionError
+from ..utils.security import secure_memory, input_validator, get_secure_logger
 
-logger = logging.getLogger(__name__)
+# Use secure logger instead of standard logger
+logger = get_secure_logger(__name__)
 
 
 class KeyManager:
@@ -38,7 +40,7 @@ class KeyManager:
     
     def get_key(self) -> bytes:
         """
-        Get or generate encryption key.
+        Get or generate encryption key with secure memory handling.
         
         Returns:
             32-byte AES-256 encryption key
@@ -49,6 +51,8 @@ class KeyManager:
         try:
             # Check if we have a cached key that's still valid
             if self._is_key_cache_valid():
+                # Lock cached key in memory for security
+                secure_memory.lock_memory(self._cached_key)
                 return self._cached_key
             
             # Try to retrieve key from keyring
@@ -58,18 +62,48 @@ class KeyManager:
                 # Decode existing key
                 key = self._decode_key(key_str)
                 self._cache_key(key)
+                
+                # Log security event
+                logger.security_event(
+                    "key_access",
+                    {
+                        "operation": "retrieve_existing_key",
+                        "source": "keyring"
+                    },
+                    "DEBUG"
+                )
+                
                 return key
             else:
                 # Generate new key if none exists
                 key = self._generate_key()
                 self._store_key(key)
                 self._cache_key(key)
+                
+                # Log security event
+                logger.security_event(
+                    "key_generation",
+                    {
+                        "operation": "generate_new_key",
+                        "key_length": len(key)
+                    },
+                    "INFO"
+                )
+                
                 logger.info("Generated new encryption key and stored in keyring")
                 return key
                 
         except EncryptionError:
             raise
         except Exception as e:
+            logger.security_event(
+                "key_error",
+                {
+                    "operation": "get_key",
+                    "error_type": type(e).__name__
+                },
+                "ERROR"
+            )
             raise EncryptionError(
                 f"Failed to get encryption key: {e}",
                 encryption_type="key_management",
@@ -326,17 +360,29 @@ class KeyManager:
     
     def _cache_key(self, key: bytes) -> None:
         """
-        Cache key in memory for performance.
+        Cache key in memory for performance with secure memory handling.
         
         Args:
             key: Key bytes to cache
         """
         import time
+        
+        # Clear any existing cached key securely
+        if self._cached_key:
+            self._clear_key_cache()
+        
+        # Cache new key and lock it in memory
         self._cached_key = key
         self._key_cache_time = time.time()
+        secure_memory.lock_memory(key)
     
     def _clear_key_cache(self) -> None:
-        """Clear cached key from memory."""
+        """Clear cached key from memory securely."""
+        if self._cached_key:
+            # Create mutable copy for secure zeroing
+            key_array = bytearray(self._cached_key)
+            secure_memory.secure_zero(key_array)
+            
         self._cached_key = None
         self._key_cache_time = None
     

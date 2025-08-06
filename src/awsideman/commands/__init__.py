@@ -8,6 +8,7 @@ from . import permission_set
 from . import assignment
 from . import org
 from . import cache
+from . import bulk
 
 __all__ = [
     'profile',
@@ -17,5 +18,6 @@ __all__ = [
     'permission_set',
     'assignment',
     'org',
-    'cache'
+    'cache',
+    'bulk'
 ]

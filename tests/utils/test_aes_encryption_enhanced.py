@@ -119,6 +119,88 @@ class TestAESEncryptionEnhanced:
         
         assert decrypted == unicode_data
     
+    def test_encrypt_datetime_data(self):
+        """Test encrypting data with datetime objects (AWS API response format)."""
+        from datetime import datetime
+        
+        # Simulate AWS API response with datetime objects
+        aws_account_data = {
+            "Id": "123456789012",
+            "Name": "Test Account",
+            "Email": "test@example.com",
+            "Status": "ACTIVE",
+            "JoinedTimestamp": datetime(2023, 1, 15, 10, 30, 45),
+            "Arn": "arn:aws:organizations::123456789012:account/o-example123456/123456789012",
+            "Tags": [
+                {
+                    "Key": "Environment",
+                    "Value": "Production"
+                }
+            ]
+        }
+        
+        # Should encrypt and decrypt successfully
+        encrypted = self.encryption.encrypt(aws_account_data)
+        decrypted = self.encryption.decrypt(encrypted)
+        
+        # Verify all fields match, including datetime
+        assert decrypted["Id"] == aws_account_data["Id"]
+        assert decrypted["Name"] == aws_account_data["Name"]
+        assert decrypted["Email"] == aws_account_data["Email"]
+        assert decrypted["Status"] == aws_account_data["Status"]
+        assert decrypted["JoinedTimestamp"] == aws_account_data["JoinedTimestamp"]
+        assert decrypted["Arn"] == aws_account_data["Arn"]
+        assert decrypted["Tags"] == aws_account_data["Tags"]
+        
+        # Verify the datetime object is properly preserved
+        assert isinstance(decrypted["JoinedTimestamp"], datetime)
+        assert decrypted["JoinedTimestamp"].year == 2023
+        assert decrypted["JoinedTimestamp"].month == 1
+        assert decrypted["JoinedTimestamp"].day == 15
+    
+    def test_encrypt_mixed_datetime_data(self):
+        """Test encrypting complex data structures with multiple datetime objects."""
+        from datetime import datetime
+        
+        complex_data = {
+            "accounts": [
+                {
+                    "Id": "111111111111",
+                    "JoinedTimestamp": datetime(2021, 1, 1, 12, 0, 0),
+                    "LastModified": datetime(2023, 6, 15, 14, 30, 0)
+                },
+                {
+                    "Id": "222222222222", 
+                    "JoinedTimestamp": datetime(2022, 3, 10, 9, 15, 30),
+                    "LastModified": datetime(2023, 7, 20, 16, 45, 15)
+                }
+            ],
+            "metadata": {
+                "created_at": datetime(2023, 1, 1, 0, 0, 0),
+                "updated_at": datetime(2023, 12, 31, 23, 59, 59),
+                "version": "1.0"
+            }
+        }
+        
+        encrypted = self.encryption.encrypt(complex_data)
+        decrypted = self.encryption.decrypt(encrypted)
+        
+        # Verify structure is preserved
+        assert len(decrypted["accounts"]) == 2
+        assert decrypted["metadata"]["version"] == "1.0"
+        
+        # Verify all datetime objects are preserved
+        for i, account in enumerate(decrypted["accounts"]):
+            assert isinstance(account["JoinedTimestamp"], datetime)
+            assert isinstance(account["LastModified"], datetime)
+            assert account["JoinedTimestamp"] == complex_data["accounts"][i]["JoinedTimestamp"]
+            assert account["LastModified"] == complex_data["accounts"][i]["LastModified"]
+        
+        assert isinstance(decrypted["metadata"]["created_at"], datetime)
+        assert isinstance(decrypted["metadata"]["updated_at"], datetime)
+        assert decrypted["metadata"]["created_at"] == complex_data["metadata"]["created_at"]
+        assert decrypted["metadata"]["updated_at"] == complex_data["metadata"]["updated_at"]
+    
     def test_encrypt_different_keys_produce_different_results(self):
         """Test that different keys produce different encrypted results."""
         data = {"test": "data"}
@@ -178,7 +260,7 @@ class TestAESEncryptionEnhanced:
             self.encryption.decrypt(invalid_data)
         
         assert exc_info.value.encryption_type == "aes256"
-        assert "Invalid encrypted data" in str(exc_info.value)
+        assert "Decryption failed: invalid data format" in str(exc_info.value)
     
     def test_decrypt_invalid_padding(self):
         """Test decryption with invalid padding."""
@@ -191,7 +273,7 @@ class TestAESEncryptionEnhanced:
             self.encryption.decrypt(invalid_data)
         
         assert exc_info.value.encryption_type == "aes256"
-        assert "AES decryption failed" in str(exc_info.value)
+        assert "Decryption failed: invalid data format" in str(exc_info.value)
     
     def test_decrypt_wrong_key(self):
         """Test decryption with wrong key."""
@@ -219,7 +301,7 @@ class TestAESEncryptionEnhanced:
             self.encryption.decrypt(encrypted)
         
         assert exc_info.value.encryption_type == "aes256"
-        assert "AES decryption failed" in str(exc_info.value)
+        assert "Decryption failed: unexpected error" in str(exc_info.value)
     
     def test_decrypt_invalid_json(self):
         """Test decryption that results in invalid JSON."""
@@ -232,7 +314,7 @@ class TestAESEncryptionEnhanced:
                 self.encryption.decrypt(encrypted)
             
             assert exc_info.value.encryption_type == "aes256"
-            assert "Failed to deserialize decrypted JSON data" in str(exc_info.value)
+            assert "Decryption failed: invalid data format" in str(exc_info.value)
     
     def test_padding_functionality_through_encryption(self):
         """Test padding functionality indirectly through encryption/decryption."""

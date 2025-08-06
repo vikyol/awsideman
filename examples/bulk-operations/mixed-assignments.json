@@ -1,0 +1,40 @@
+{
+  "assignments": [
+    {
+      "principal_name": "john.doe",
+      "permission_set_name": "ReadOnlyAccess",
+      "account_name": "Production",
+      "principal_type": "USER"
+    },
+    {
+      "principal_name": "Developers",
+      "permission_set_name": "PowerUserAccess",
+      "account_name": "Development",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "jane.smith",
+      "permission_set_name": "AdministratorAccess",
+      "account_name": "Staging",
+      "principal_type": "USER"
+    },
+    {
+      "principal_name": "DevOps-Team",
+      "permission_set_name": "AdministratorAccess",
+      "account_name": "Production",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "bob.wilson",
+      "permission_set_name": "PowerUserAccess",
+      "account_name": "Development",
+      "principal_type": "USER"
+    },
+    {
+      "principal_name": "QA-Engineers",
+      "permission_set_name": "ReadOnlyAccess",
+      "account_name": "Staging",
+      "principal_type": "GROUP"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "assignments": [
+    {
+      "principal_name": "john.doe",
+      "permission_set_name": "ReadOnlyAccess",
+      "account_name": "Production",
+      "principal_type": "USER",
+      "account_id": "123456789012",
+      "permission_set_arn": "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef"
+    },
+    {
+      "principal_name": "jane.smith",
+      "permission_set_name": "PowerUserAccess",
+      "account_name": "Development",
+      "principal_type": "USER"
+    },
+    {
+      "principal_name": "Developers",
+      "permission_set_name": "PowerUserAccess",
+      "account_name": "Development",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "admin.user",
+      "permission_set_name": "AdministratorAccess",
+      "account_name": "Management",
+      "principal_type": "USER",
+      "account_id": "987654321098"
+    }
+  ]
+}
