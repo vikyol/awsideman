@@ -30,14 +30,16 @@ The IDC Status feature provides comprehensive status monitoring and health check
 
 ### Requirement 3
 
-**User Story:** As an administrator, I want to check the assignment status of permission sets across accounts, so that I can verify that access policies are properly deployed and identify any assignment failures.
+**User Story:** As an administrator, I want to see orphaned permission set assignments, so that I can identify and clean up assignments for principals that no longer exist in the identity provider.
 
 #### Acceptance Criteria
 
-1. WHEN the user requests assignment status THEN the system SHALL display the status of permission set assignments across all accounts
-2. WHEN assignments are in progress THEN the system SHALL show progress indicators and estimated completion times
-3. WHEN assignments have failed THEN the system SHALL display error details and affected accounts/users
-4. WHEN all assignments are current THEN the system SHALL display "All assignments up to date"
+1. WHEN the user requests orphaned assignment status THEN the system SHALL identify and display permission set assignments where the principal has been deleted from the identity provider
+2. WHEN orphaned assignments are found THEN the system SHALL display the assignment details including permission set name, account, and the orphaned principal identifier
+3. WHEN displaying orphaned assignments THEN the system SHALL show error messages that AWS Identity Center displays for missing user names
+4. WHEN orphaned assignments are displayed THEN the system SHALL prompt the user with an option to clean up the orphaned assignments
+5. WHEN the user confirms cleanup THEN the system SHALL remove the orphaned assignments and display a summary of cleaned up items
+6. WHEN no orphaned assignments exist THEN the system SHALL display "No orphaned assignments found"
 
 ### Requirement 4
 

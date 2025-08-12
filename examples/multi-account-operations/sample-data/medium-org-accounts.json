@@ -1,0 +1,275 @@
+{
+  "organization": "Medium Enterprise",
+  "total_accounts": 45,
+  "description": "A medium-sized enterprise with multiple departments and environments",
+  "account_structure": {
+    "environments": ["Production", "Staging", "Development", "Testing", "Sandbox"],
+    "departments": ["Engineering", "Finance", "HR", "Marketing", "Sales", "Operations", "Security"],
+    "regions": ["us-east-1", "us-west-2", "eu-west-1"]
+  },
+  "sample_accounts": [
+    {
+      "account_id": "234567890123",
+      "account_name": "eng-prod-us-east",
+      "email": "aws-eng-prod-use1@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Engineering",
+        "Region": "us-east-1",
+        "CostCenter": "1000",
+        "Owner": "Platform Team",
+        "Compliance": "SOX"
+      }
+    },
+    {
+      "account_id": "234567890124",
+      "account_name": "eng-prod-eu-west",
+      "email": "aws-eng-prod-euw1@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Engineering",
+        "Region": "eu-west-1",
+        "CostCenter": "1000",
+        "Owner": "Platform Team",
+        "Compliance": "GDPR"
+      }
+    },
+    {
+      "account_id": "234567890125",
+      "account_name": "eng-staging-us-east",
+      "email": "aws-eng-staging-use1@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Staging",
+        "Department": "Engineering",
+        "Region": "us-east-1",
+        "CostCenter": "1000",
+        "Owner": "QA Team"
+      }
+    },
+    {
+      "account_id": "234567890126",
+      "account_name": "eng-dev-shared",
+      "email": "aws-eng-dev@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Development",
+        "Department": "Engineering",
+        "Region": "us-east-1",
+        "CostCenter": "1000",
+        "Owner": "Engineering Team",
+        "Purpose": "Shared Development"
+      }
+    },
+    {
+      "account_id": "234567890127",
+      "account_name": "finance-prod",
+      "email": "aws-finance-prod@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Finance",
+        "Region": "us-east-1",
+        "CostCenter": "3000",
+        "Owner": "Finance Team",
+        "Compliance": "SOX",
+        "DataClassification": "Confidential"
+      }
+    },
+    {
+      "account_id": "234567890128",
+      "account_name": "hr-prod",
+      "email": "aws-hr-prod@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "HR",
+        "Region": "us-east-1",
+        "CostCenter": "4000",
+        "Owner": "HR Team",
+        "DataClassification": "Sensitive",
+        "Compliance": "GDPR"
+      }
+    },
+    {
+      "account_id": "234567890129",
+      "account_name": "marketing-prod",
+      "email": "aws-marketing-prod@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Marketing",
+        "Region": "us-east-1",
+        "CostCenter": "5000",
+        "Owner": "Marketing Team"
+      }
+    },
+    {
+      "account_id": "234567890130",
+      "account_name": "security-central",
+      "email": "aws-security@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Security",
+        "Region": "us-east-1",
+        "CostCenter": "2000",
+        "Owner": "Security Team",
+        "Purpose": "Central Security",
+        "Compliance": "SOX"
+      }
+    },
+    {
+      "account_id": "234567890131",
+      "account_name": "logging-central",
+      "email": "aws-logging@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Operations",
+        "Region": "us-east-1",
+        "CostCenter": "2000",
+        "Owner": "Platform Team",
+        "Purpose": "Centralized Logging"
+      }
+    },
+    {
+      "account_id": "234567890132",
+      "account_name": "backup-dr",
+      "email": "aws-backup@company.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Operations",
+        "Region": "us-west-2",
+        "CostCenter": "2000",
+        "Owner": "Platform Team",
+        "Purpose": "Disaster Recovery"
+      }
+    }
+  ],
+  "common_filters": {
+    "all_accounts": "*",
+    "production_only": "tag:Environment=Production",
+    "non_production": [
+      "tag:Environment=Development",
+      "tag:Environment=Staging",
+      "tag:Environment=Testing",
+      "tag:Environment=Sandbox"
+    ],
+    "engineering_accounts": "tag:Department=Engineering",
+    "finance_accounts": "tag:Department=Finance",
+    "hr_accounts": "tag:Department=HR",
+    "us_east_region": "tag:Region=us-east-1",
+    "eu_region": "tag:Region=eu-west-1",
+    "sox_compliance": "tag:Compliance=SOX",
+    "gdpr_compliance": "tag:Compliance=GDPR",
+    "sensitive_data": "tag:DataClassification=Sensitive"
+  },
+  "example_commands": {
+    "new_engineer_onboarding": [
+      "awsideman assignment multi-assign ReadOnlyAccess new.engineer --filter '*'",
+      "awsideman assignment multi-assign DeveloperAccess new.engineer --filter 'tag:Environment=Development'",
+      "awsideman assignment multi-assign DeveloperAccess new.engineer --filter 'tag:Department=Engineering'"
+    ],
+    "devops_engineer_access": [
+      "awsideman assignment multi-assign PowerUserAccess devops.engineer --filter 'tag:Environment=Development'",
+      "awsideman assignment multi-assign PowerUserAccess devops.engineer --filter 'tag:Environment=Staging'",
+      "awsideman assignment multi-assign ReadOnlyAccess devops.engineer --filter 'tag:Environment=Production'"
+    ],
+    "finance_manager_access": [
+      "awsideman assignment multi-assign ManagerAccess finance.manager --filter 'tag:Department=Finance'",
+      "awsideman assignment multi-assign BillingAccess finance.manager --filter '*'"
+    ],
+    "security_auditor_access": [
+      "awsideman assignment multi-assign SecurityAuditor security.auditor --filter '*'"
+    ],
+    "regional_admin_access": [
+      "awsideman assignment multi-assign PowerUserAccess eu.admin --filter 'tag:Region=eu-west-1'"
+    ]
+  },
+  "typical_workflows": [
+    {
+      "workflow": "New Employee Onboarding",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Assign basic read access to all accounts",
+          "command": "awsideman assignment multi-assign ReadOnlyAccess {username} --filter '*' --dry-run"
+        },
+        {
+          "step": 2,
+          "description": "Assign department-specific access",
+          "command": "awsideman assignment multi-assign DepartmentAccess {username} --filter 'tag:Department={department}'"
+        },
+        {
+          "step": 3,
+          "description": "Assign role-specific environment access",
+          "command": "awsideman assignment multi-assign {role}Access {username} --filter 'tag:Environment={environment}'"
+        }
+      ]
+    },
+    {
+      "workflow": "Quarterly Access Review",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Review production access",
+          "command": "awsideman assignment list --filter 'tag:Environment=Production' > prod-access-review.csv"
+        },
+        {
+          "step": 2,
+          "description": "Review sensitive data access",
+          "command": "awsideman assignment list --filter 'tag:DataClassification=Sensitive' > sensitive-access-review.csv"
+        },
+        {
+          "step": 3,
+          "description": "Review compliance accounts",
+          "command": "awsideman assignment list --filter 'tag:Compliance=SOX' > sox-compliance-review.csv"
+        }
+      ]
+    },
+    {
+      "workflow": "Department Reorganization",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Remove old department access",
+          "command": "awsideman assignment revoke OldDepartmentAccess {username} --filter 'tag:Department={old_department}'"
+        },
+        {
+          "step": 2,
+          "description": "Assign new department access",
+          "command": "awsideman assignment multi-assign NewDepartmentAccess {username} --filter 'tag:Department={new_department}'"
+        }
+      ]
+    }
+  ],
+  "performance_considerations": {
+    "recommended_batch_sizes": {
+      "small_operations": "10-15 accounts",
+      "medium_operations": "8-12 accounts",
+      "large_operations": "5-8 accounts"
+    },
+    "rate_limiting": {
+      "sso_admin_api": "~10 requests/second",
+      "organizations_api": "~20 requests/second"
+    },
+    "optimization_tips": [
+      "Use specific filters instead of wildcards when possible",
+      "Process different environments in separate commands",
+      "Run large operations during off-peak hours",
+      "Monitor memory usage for operations with 30+ accounts"
+    ]
+  },
+  "security_best_practices": [
+    "Always use --dry-run first for any multi-account operation",
+    "Use specific department/environment filters instead of '*' when possible",
+    "Implement approval workflows for production account changes",
+    "Regularly audit assignments using automated reports",
+    "Use groups instead of individual assignments where possible",
+    "Maintain detailed logs of all multi-account operations"
+  ]
+}

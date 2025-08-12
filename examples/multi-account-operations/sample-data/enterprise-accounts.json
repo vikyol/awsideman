@@ -1,0 +1,385 @@
+{
+  "organization": "Large Enterprise Corporation",
+  "total_accounts": 250,
+  "description": "A large enterprise with complex multi-region, multi-business-unit structure",
+  "organizational_structure": {
+    "business_units": ["Retail", "Financial Services", "Healthcare", "Manufacturing", "Technology"],
+    "environments": ["Production", "Staging", "Development", "Testing", "Sandbox", "DR"],
+    "regions": ["us-east-1", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-northeast-1"],
+    "compliance_frameworks": ["SOX", "GDPR", "HIPAA", "PCI-DSS", "ISO27001"],
+    "data_classifications": ["Public", "Internal", "Confidential", "Restricted"]
+  },
+  "sample_accounts": [
+    {
+      "account_id": "345678901234",
+      "account_name": "retail-prod-us-east-web",
+      "email": "aws-retail-prod-use1-web@enterprise.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "BusinessUnit": "Retail",
+        "Department": "Engineering",
+        "Region": "us-east-1",
+        "CostCenter": "1001",
+        "Owner": "Retail Platform Team",
+        "Compliance": "PCI-DSS",
+        "DataClassification": "Confidential",
+        "Purpose": "Web Applications",
+        "Tier": "Tier1"
+      }
+    },
+    {
+      "account_id": "345678901235",
+      "account_name": "finserv-prod-eu-west-core",
+      "email": "aws-finserv-prod-euw1-core@enterprise.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "BusinessUnit": "Financial Services",
+        "Department": "Engineering",
+        "Region": "eu-west-1",
+        "CostCenter": "2001",
+        "Owner": "FinServ Core Team",
+        "Compliance": "SOX,GDPR",
+        "DataClassification": "Restricted",
+        "Purpose": "Core Banking",
+        "Tier": "Tier1"
+      }
+    },
+    {
+      "account_id": "345678901236",
+      "account_name": "healthcare-prod-us-east-hipaa",
+      "email": "aws-healthcare-prod-use1@enterprise.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "BusinessUnit": "Healthcare",
+        "Department": "Engineering",
+        "Region": "us-east-1",
+        "CostCenter": "3001",
+        "Owner": "Healthcare Platform Team",
+        "Compliance": "HIPAA,SOX",
+        "DataClassification": "Restricted",
+        "Purpose": "Patient Data Systems",
+        "Tier": "Tier1"
+      }
+    },
+    {
+      "account_id": "345678901237",
+      "account_name": "manufacturing-prod-eu-central-iot",
+      "email": "aws-manufacturing-prod-euc1@enterprise.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "BusinessUnit": "Manufacturing",
+        "Department": "Operations",
+        "Region": "eu-central-1",
+        "CostCenter": "4001",
+        "Owner": "Manufacturing IoT Team",
+        "Compliance": "ISO27001",
+        "DataClassification": "Internal",
+        "Purpose": "IoT Data Processing",
+        "Tier": "Tier2"
+      }
+    },
+    {
+      "account_id": "345678901238",
+      "account_name": "tech-dev-us-west-ml",
+      "email": "aws-tech-dev-usw2-ml@enterprise.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Development",
+        "BusinessUnit": "Technology",
+        "Department": "Engineering",
+        "Region": "us-west-2",
+        "CostCenter": "5001",
+        "Owner": "ML Platform Team",
+        "DataClassification": "Internal",
+        "Purpose": "Machine Learning",
+        "Tier": "Tier3"
+      }
+    },
+    {
+      "account_id": "345678901239",
+      "account_name": "shared-security-central",
+      "email": "aws-security-central@enterprise.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "BusinessUnit": "Shared Services",
+        "Department": "Security",
+        "Region": "us-east-1",
+        "CostCenter": "9001",
+        "Owner": "Central Security Team",
+        "Compliance": "SOX,GDPR,HIPAA,PCI-DSS,ISO27001",
+        "DataClassification": "Restricted",
+        "Purpose": "Central Security Services",
+        "Tier": "Tier1"
+      }
+    },
+    {
+      "account_id": "345678901240",
+      "account_name": "shared-logging-global",
+      "email": "aws-logging-global@enterprise.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "BusinessUnit": "Shared Services",
+        "Department": "Operations",
+        "Region": "us-east-1",
+        "CostCenter": "9002",
+        "Owner": "Central Platform Team",
+        "Compliance": "SOX,GDPR,HIPAA",
+        "DataClassification": "Confidential",
+        "Purpose": "Centralized Logging",
+        "Tier": "Tier1"
+      }
+    },
+    {
+      "account_id": "345678901241",
+      "account_name": "shared-backup-dr-us-west",
+      "email": "aws-backup-dr-usw2@enterprise.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "DR",
+        "BusinessUnit": "Shared Services",
+        "Department": "Operations",
+        "Region": "us-west-2",
+        "CostCenter": "9003",
+        "Owner": "DR Team",
+        "Compliance": "SOX,GDPR,HIPAA,PCI-DSS",
+        "DataClassification": "Restricted",
+        "Purpose": "Disaster Recovery",
+        "Tier": "Tier1"
+      }
+    }
+  ],
+  "complex_filters": {
+    "all_accounts": "*",
+    "production_tier1": "tag:Environment=Production,Tier=Tier1",
+    "financial_compliance": "tag:Compliance=SOX",
+    "healthcare_hipaa": "tag:Compliance=HIPAA",
+    "eu_gdpr_accounts": "tag:Compliance=GDPR",
+    "restricted_data": "tag:DataClassification=Restricted",
+    "retail_business_unit": "tag:BusinessUnit=Retail",
+    "shared_services": "tag:BusinessUnit=Shared Services",
+    "us_production": "tag:Environment=Production,Region=us-east-1",
+    "eu_production": "tag:Environment=Production,Region=eu-west-1",
+    "development_environments": "tag:Environment=Development",
+    "non_production": [
+      "tag:Environment=Development",
+      "tag:Environment=Staging",
+      "tag:Environment=Testing",
+      "tag:Environment=Sandbox"
+    ]
+  },
+  "enterprise_workflows": [
+    {
+      "workflow": "New Business Unit Onboarding",
+      "description": "Onboard a new employee to a specific business unit with appropriate access",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Assign basic read access to all accounts",
+          "command": "awsideman assignment assign ReadOnlyAccess {username} --filter '*' --batch-size 5 --dry-run"
+        },
+        {
+          "step": 2,
+          "description": "Assign business unit specific access",
+          "command": "awsideman assignment assign BusinessUnitAccess {username} --filter 'tag:BusinessUnit={business_unit}' --batch-size 8"
+        },
+        {
+          "step": 3,
+          "description": "Assign development environment access for their BU",
+          "command": "awsideman assignment assign DeveloperAccess {username} --filter 'tag:BusinessUnit={business_unit},Environment=Development' --batch-size 10"
+        },
+        {
+          "step": 4,
+          "description": "Assign staging access for senior developers",
+          "command": "awsideman assignment assign PowerUserAccess {username} --filter 'tag:BusinessUnit={business_unit},Environment=Staging' --batch-size 8"
+        }
+      ]
+    },
+    {
+      "workflow": "Compliance Auditor Access",
+      "description": "Grant auditor access to all accounts with specific compliance requirements",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Assign SOX compliance auditor access",
+          "command": "awsideman assignment multi-assign ComplianceAuditor sox.auditor --filter 'tag:Compliance=SOX' --batch-size 5"
+        },
+        {
+          "step": 2,
+          "description": "Assign GDPR compliance auditor access",
+          "command": "awsideman assignment multi-assign ComplianceAuditor gdpr.auditor --filter 'tag:Compliance=GDPR' --batch-size 5"
+        },
+        {
+          "step": 3,
+          "description": "Assign HIPAA compliance auditor access",
+          "command": "awsideman assignment multi-assign ComplianceAuditor hipaa.auditor --filter 'tag:Compliance=HIPAA' --batch-size 3"
+        }
+      ]
+    },
+    {
+      "workflow": "Regional Administrator Setup",
+      "description": "Set up regional administrators with appropriate regional access",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Assign US East regional admin access",
+          "command": "awsideman assignment multi-assign RegionalAdmin us.east.admin --filter 'tag:Region=us-east-1' --batch-size 8"
+        },
+        {
+          "step": 2,
+          "description": "Assign EU West regional admin access",
+          "command": "awsideman assignment multi-assign RegionalAdmin eu.west.admin --filter 'tag:Region=eu-west-1' --batch-size 8"
+        },
+        {
+          "step": 3,
+          "description": "Assign Asia Pacific regional admin access",
+          "command": "awsideman assignment multi-assign RegionalAdmin ap.admin --filter 'tag:Region=ap-southeast-1' --batch-size 6"
+        }
+      ]
+    },
+    {
+      "workflow": "Security Incident Response",
+      "description": "Grant emergency access during security incidents",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Grant emergency read access to all production accounts",
+          "command": "awsideman assignment multi-assign EmergencyReadOnly incident.responder --filter 'tag:Environment=Production' --batch-size 3"
+        },
+        {
+          "step": 2,
+          "description": "Grant emergency admin access to affected business unit",
+          "command": "awsideman assignment multi-assign EmergencyAdmin incident.responder --filter 'tag:BusinessUnit={affected_bu},Environment=Production' --batch-size 2"
+        }
+      ]
+    },
+    {
+      "workflow": "Quarterly Access Review",
+      "description": "Comprehensive quarterly review of all access across the enterprise",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Review all production access",
+          "command": "awsideman assignment list --filter 'tag:Environment=Production' --output csv > quarterly-prod-access.csv"
+        },
+        {
+          "step": 2,
+          "description": "Review restricted data access",
+          "command": "awsideman assignment list --filter 'tag:DataClassification=Restricted' --output csv > quarterly-restricted-access.csv"
+        },
+        {
+          "step": 3,
+          "description": "Review compliance account access by framework",
+          "commands": [
+            "awsideman assignment list --filter 'tag:Compliance=SOX' --output csv > quarterly-sox-access.csv",
+            "awsideman assignment list --filter 'tag:Compliance=GDPR' --output csv > quarterly-gdpr-access.csv",
+            "awsideman assignment list --filter 'tag:Compliance=HIPAA' --output csv > quarterly-hipaa-access.csv"
+          ]
+        }
+      ]
+    }
+  ],
+  "performance_optimization": {
+    "large_scale_operations": {
+      "recommended_batch_sizes": {
+        "tier1_accounts": 3,
+        "tier2_accounts": 5,
+        "tier3_accounts": 8,
+        "development_accounts": 10
+      },
+      "processing_strategies": [
+        "Process by business unit to reduce scope",
+        "Process by region to optimize API calls",
+        "Process by environment to manage risk",
+        "Use smaller batch sizes for compliance accounts"
+      ]
+    },
+    "rate_limiting_considerations": {
+      "concurrent_operations": "Avoid running multiple multi-account operations simultaneously",
+      "api_throttling": "Monitor for throttling and implement exponential backoff",
+      "peak_hours": "Schedule large operations during off-peak hours (weekends, evenings)",
+      "monitoring": "Set up CloudWatch alarms for API throttling events"
+    }
+  },
+  "security_and_compliance": {
+    "access_patterns": {
+      "principle_of_least_privilege": "Grant minimum necessary access based on role and business unit",
+      "segregation_of_duties": "Separate development, staging, and production access",
+      "compliance_isolation": "Restrict access to compliance-sensitive accounts",
+      "data_classification": "Align access levels with data classification requirements"
+    },
+    "audit_requirements": {
+      "change_logging": "Log all multi-account permission changes",
+      "approval_workflows": "Implement approval workflows for production changes",
+      "regular_reviews": "Conduct quarterly access reviews",
+      "compliance_reporting": "Generate compliance-specific access reports"
+    },
+    "emergency_procedures": {
+      "incident_response": "Procedures for granting emergency access during incidents",
+      "access_revocation": "Rapid revocation procedures for compromised accounts",
+      "break_glass": "Emergency access procedures for critical situations"
+    }
+  },
+  "automation_examples": {
+    "ci_cd_integration": {
+      "description": "Integration with CI/CD pipelines for automated permission management",
+      "example_pipeline": {
+        "trigger": "New employee in HR system",
+        "steps": [
+          "Validate employee data",
+          "Determine business unit and role",
+          "Generate permission assignment commands",
+          "Execute with dry-run for approval",
+          "Execute actual assignments after approval",
+          "Send notification to security team"
+        ]
+      }
+    },
+    "scheduled_operations": {
+      "description": "Scheduled operations for regular maintenance",
+      "examples": [
+        {
+          "schedule": "Weekly",
+          "operation": "Review and revoke temporary access",
+          "command": "awsideman assignment revoke TemporaryAccess * --filter 'tag:AccessType=Temporary'"
+        },
+        {
+          "schedule": "Monthly",
+          "operation": "Rotate contractor access",
+          "command": "awsideman assignment revoke ContractorAccess * --filter 'tag:UserType=Contractor'"
+        }
+      ]
+    }
+  },
+  "troubleshooting_enterprise": {
+    "common_issues": [
+      {
+        "issue": "Rate limiting with large account sets",
+        "solution": "Reduce batch size to 3-5 for operations affecting 100+ accounts"
+      },
+      {
+        "issue": "Memory usage with complex filters",
+        "solution": "Break down operations by business unit or region"
+      },
+      {
+        "issue": "Long operation times",
+        "solution": "Use parallel processing by running separate commands for different filters"
+      },
+      {
+        "issue": "Partial failures in large operations",
+        "solution": "Implement retry logic and maintain detailed logs for failed accounts"
+      }
+    ],
+    "monitoring_recommendations": [
+      "Set up CloudWatch dashboards for multi-account operations",
+      "Monitor API throttling rates",
+      "Track operation success rates",
+      "Alert on failed operations affecting compliance accounts"
+    ]
+  }
+}

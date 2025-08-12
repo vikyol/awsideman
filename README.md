@@ -15,6 +15,7 @@ A comprehensive CLI tool for managing AWS Identity Center operations at scale. D
 - **Multi-Account Operations** - Assign/revoke permission sets across multiple accounts with filtering
 - **AWS Organizations Integration** - Query organization structure, accounts, and policies
 - **Name Resolution** - Automatic conversion of human-readable names to AWS resource identifiers
+- **Access Reviews** - Export permissions for accounts, principals, or permission sets for auditing and compliance
 
 ### Performance & Caching
 - **Advanced Caching System** - File-based, DynamoDB, and hybrid cache backends
@@ -125,13 +126,13 @@ awsideman permission-set delete ps-12345
 ```bash
 # Individual assignments
 awsideman assignment list --account-id 123456789012
-awsideman assignment assign ps-arn user-id 123456789012
-awsideman assignment revoke ps-arn user-id 123456789012
+awsideman assignment assign ReadOnlyAccess john.doe --account 123456789012
+awsideman assignment revoke ReadOnlyAccess john.doe --account 123456789012
 
 # Multi-account assignments
-awsideman assignment assign-multi ps-arn user-id --filter "*"
-awsideman assignment assign-multi ps-arn user-id --filter-tag Environment=Production
-awsideman assignment revoke-multi ps-arn user-id --filter-tag Team=DevOps --dry-run
+awsideman assignment assign ReadOnlyAccess john.doe --filter "*"
+awsideman assignment assign PowerUserAccess jane.smith --filter "tag:Environment=Production"
+awsideman assignment revoke DeveloperAccess former.employee --filter "tag:Team=DevOps" --dry-run
 ```
 
 ### Bulk Operations
@@ -170,6 +171,21 @@ awsideman org list-accounts --filter-tag Environment=Production
 awsideman org get-account 123456789012
 awsideman org list-policies
 awsideman org tree
+```
+
+### Access Reviews
+
+```bash
+# Export permissions for specific account
+awsideman access-review export-account 123456789012
+awsideman access-review export-account 123456789012 --format csv --output account_permissions.csv
+
+# Export permissions for specific principal
+awsideman access-review export-principal john.doe@example.com
+awsideman access-review export-principal Developers --type GROUP --format json
+
+# Export assignments for specific permission set
+awsideman access-review export-permission-set ReadOnlyAccess --format csv
 ```
 
 ### Example Bulk Operations File Formats
@@ -220,7 +236,7 @@ cache:
 
 profiles:
   default: "production"
-  
+
 logging:
   level: "INFO"
   file: "~/.awsideman/logs/awsideman.log"
@@ -233,7 +249,9 @@ See [CONFIGURATION.md](CONFIGURATION.md) for complete configuration options and 
 The `examples/` directory contains comprehensive examples:
 
 - **[Bulk Operations](examples/bulk-operations/)** - CSV/JSON file formats and usage patterns
+- **[Multi-Account Operations](examples/multi-account-operations/)** - Account filtering, automation scripts, and enterprise workflows
 - **[Cache Configurations](examples/cache-configurations/)** - Environment-specific cache setups
+- **[Access Reviews](examples/access-reviews/)** - Permission export examples for auditing and compliance
 
 ## Development
 

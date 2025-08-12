@@ -1,0 +1,32 @@
+# Requirements Document
+
+## Introduction
+
+Divide large Command files into submodules
+
+## Problem Statement
+
+Some command files are quite large and could benefit from further modularization:
+
+- assignment.py (130KB, 2775 lines)
+- cache.py (131KB, 2970 lines)
+- user.py (50KB, 1177 lines)
+
+## Requirements
+
+### Requirement 1
+
+**User Story:** As a developer, I want to break assigment.py command file into submodules to improve readability and maintainability.
+
+**Acceptance Criteria:**
+
+- [ ] The command files are broken into submodules
+- [ ] The submodules are named according to the command file
+- [ ] The submodules are placed in the src/awsideman/commands/assignment/ directory
+
+src/awsideman/commands/assignment/
+├── __init__.py
+├── assign.py
+├── revoke.py
+├── list.py
+└── helpers.py

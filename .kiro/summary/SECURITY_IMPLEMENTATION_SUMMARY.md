@@ -92,7 +92,7 @@ This document summarizes the security enhancements implemented for the advanced 
 
 ### 3. Cache Backends
 
-**Files:** 
+**Files:**
 - `src/awsideman/cache/backends/file.py`
 - `src/awsideman/cache/backends/dynamodb.py`
 

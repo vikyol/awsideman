@@ -2,13 +2,9 @@
 
 ## Introduction
 
-Awsideman currently supports managing permission set assignments either by invoking individual CLI commands or through a bulk operations mode. These capabilities are effective for small to medium-scale organizations but become inefficient for large enterprises with many accounts and users.
+This feature enhances awsideman's assignment capabilities to support multi-account operations at scale. Currently, permission set assignments must be managed through individual CLI commands or bulk operations, which becomes inefficient for large enterprises managing hundreds of AWS accounts.
 
-This feature enhancement aims to improve the scalability of permission set assignment and revocation across large account structures. It introduces the ability to assign or revoke a permission set to/from a user across all or a filtered set of accounts in a single operation.
-
-To increase flexibility, the feature will support an optional account filter parameter. The filter may be specified using:
-- A wildcard character (*) to select all accounts
-- An account tag (key-value pair) to select a subset of accounts
+The multi-account assignment feature enables administrators to assign or revoke permission sets across multiple accounts in a single operation, with flexible account filtering options including wildcard selection and tag-based filtering.
 
 ## Requirements
 
@@ -78,5 +74,35 @@ To increase flexibility, the feature will support an optional account filter par
 3. WHEN batch size is configured THEN the CLI SHALL process accounts in batches of the specified size
 4. WHEN rate limits are encountered THEN the CLI SHALL implement exponential backoff and retry logic
 
+### Requirement 7
 
+**User Story:** As an administrator, I want to specify explicit account lists for multi-account operations so that I can target specific accounts without using filters.
 
+#### Acceptance Criteria
+
+1. WHEN using explicit account lists THEN the CLI SHALL support --accounts parameter with comma-separated account IDs
+2. WHEN providing explicit accounts THEN the CLI SHALL validate all account IDs exist and are accessible
+3. WHEN using explicit accounts THEN the CLI SHALL not require filter parameters
+4. IF both explicit accounts and filters are provided THEN the CLI SHALL return an error indicating conflicting parameters
+
+### Requirement 8
+
+**User Story:** As an administrator, I want enhanced filtering options for multi-account operations so that I can target accounts using more sophisticated criteria.
+
+#### Acceptance Criteria
+
+1. WHEN using OU-based filtering THEN the CLI SHALL support filtering accounts by organizational unit path
+2. WHEN using account name patterns THEN the CLI SHALL support regex-based account name matching
+3. WHEN using complex filters THEN the CLI SHALL support boolean combinations of filter criteria
+4. WHEN filters return no matches THEN the CLI SHALL display a clear message and exit without error
+
+### Requirement 9
+
+**User Story:** As an administrator, I want optimized batch operations for very large account sets so that I can efficiently manage thousands of accounts.
+
+#### Acceptance Criteria
+
+1. WHEN processing large account sets THEN the CLI SHALL implement memory-efficient account processing
+2. WHEN handling thousands of accounts THEN the CLI SHALL support streaming account resolution
+3. WHEN rate limits are encountered THEN the CLI SHALL implement intelligent backoff strategies
+4. WHEN operations take extended time THEN the CLI SHALL provide detailed progress information

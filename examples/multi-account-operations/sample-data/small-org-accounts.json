@@ -1,0 +1,146 @@
+{
+  "organization": "Small Tech Startup",
+  "total_accounts": 8,
+  "description": "A small technology startup with basic AWS account structure",
+  "accounts": [
+    {
+      "account_id": "123456789012",
+      "account_name": "startup-production",
+      "email": "aws-prod@startup.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Engineering",
+        "CostCenter": "1000",
+        "Owner": "DevOps Team"
+      }
+    },
+    {
+      "account_id": "123456789013",
+      "account_name": "startup-staging",
+      "email": "aws-staging@startup.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Staging",
+        "Department": "Engineering",
+        "CostCenter": "1000",
+        "Owner": "DevOps Team"
+      }
+    },
+    {
+      "account_id": "123456789014",
+      "account_name": "startup-development",
+      "email": "aws-dev@startup.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Development",
+        "Department": "Engineering",
+        "CostCenter": "1000",
+        "Owner": "Engineering Team"
+      }
+    },
+    {
+      "account_id": "123456789015",
+      "account_name": "startup-sandbox",
+      "email": "aws-sandbox@startup.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Sandbox",
+        "Department": "Engineering",
+        "CostCenter": "1000",
+        "Owner": "Engineering Team"
+      }
+    },
+    {
+      "account_id": "123456789016",
+      "account_name": "startup-security",
+      "email": "aws-security@startup.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Security",
+        "CostCenter": "2000",
+        "Owner": "Security Team",
+        "Compliance": "Required"
+      }
+    },
+    {
+      "account_id": "123456789017",
+      "account_name": "startup-logging",
+      "email": "aws-logging@startup.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Operations",
+        "CostCenter": "2000",
+        "Owner": "DevOps Team",
+        "Purpose": "Centralized Logging"
+      }
+    },
+    {
+      "account_id": "123456789018",
+      "account_name": "startup-billing",
+      "email": "aws-billing@startup.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Finance",
+        "CostCenter": "3000",
+        "Owner": "Finance Team",
+        "Purpose": "Cost Management"
+      }
+    },
+    {
+      "account_id": "123456789019",
+      "account_name": "startup-backup",
+      "email": "aws-backup@startup.com",
+      "status": "ACTIVE",
+      "tags": {
+        "Environment": "Production",
+        "Department": "Operations",
+        "CostCenter": "2000",
+        "Owner": "DevOps Team",
+        "Purpose": "Disaster Recovery"
+      }
+    }
+  ],
+  "common_filters": {
+    "all_accounts": "*",
+    "production_only": "tag:Environment=Production",
+    "development_environments": "tag:Environment=Development",
+    "engineering_accounts": "tag:Department=Engineering",
+    "operations_accounts": "tag:Department=Operations",
+    "compliance_required": "tag:Compliance=Required"
+  },
+  "example_commands": {
+    "assign_readonly_all": "awsideman assignment assign ReadOnlyAccess john.doe --filter '*'",
+    "assign_dev_access": "awsideman assignment assign DeveloperAccess jane.smith --filter 'tag:Environment=Development'",
+    "assign_prod_access": "awsideman assignment assign PowerUserAccess senior.dev --filter 'tag:Environment=Production'",
+    "revoke_contractor": "awsideman assignment revoke ContractorAccess former.contractor --filter '*'"
+  },
+  "typical_use_cases": [
+    {
+      "scenario": "New Developer Onboarding",
+      "description": "Assign development access to sandbox and development environments",
+      "command": "awsideman assignment multi-assign DeveloperAccess new.developer --filter 'tag:Environment=Development'"
+    },
+    {
+      "scenario": "DevOps Engineer Access",
+      "description": "Assign PowerUser access to all non-production environments",
+      "commands": [
+        "awsideman assignment multi-assign PowerUserAccess devops.engineer --filter 'tag:Environment=Development'",
+        "awsideman assignment multi-assign PowerUserAccess devops.engineer --filter 'tag:Environment=Staging'"
+      ]
+    },
+    {
+      "scenario": "Security Audit Access",
+      "description": "Assign read-only access to all accounts for security auditor",
+      "command": "awsideman assignment multi-assign SecurityAuditor security.auditor --filter '*'"
+    },
+    {
+      "scenario": "Finance Team Billing Access",
+      "description": "Assign billing access to finance team members",
+      "command": "awsideman assignment multi-assign BillingAccess finance.manager --filter 'tag:Department=Finance'"
+    }
+  ]
+}
