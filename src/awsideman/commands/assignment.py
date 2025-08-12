@@ -446,20 +446,26 @@ def get_assignment(
     # Display a message indicating that we're fetching assignment details
     with console.status("[blue]Fetching assignment details...[/blue]"):
         try:
-            # Check if assignment exists by listing assignments with specific filters
+            # Check if assignment exists by listing assignments for the permission set and account
             list_params = {
                 "InstanceArn": instance_arn,
                 "AccountId": account_id,
                 "PermissionSetArn": permission_set_arn,
-                "PrincipalId": principal_id,
-                "PrincipalType": principal_type,
             }
 
-            # Make the API call to list account assignments with filters
+            # Make the API call to list account assignments
             response = sso_admin_client.list_account_assignments(**list_params)
 
             # Extract assignments from the response
-            assignments = response.get("AccountAssignments", [])
+            all_assignments = response.get("AccountAssignments", [])
+
+            # Filter assignments by principal ID and type locally
+            assignments = [
+                assignment
+                for assignment in all_assignments
+                if assignment.get("PrincipalId") == principal_id
+                and assignment.get("PrincipalType") == principal_type
+            ]
 
             # Check if the assignment exists
             if not assignments:
@@ -1915,7 +1921,7 @@ def assign_multi_account_explicit(
         if stats["skipped_count"] > 0:
             console.print(f"  Skipped: [yellow]{stats['skipped_count']}[/yellow]")
 
-        console.print(f"  Duration: {stats['duration']:.1f} seconds")
+        console.print(f"  Duration: {stats['duration_seconds']:.1f} seconds")
 
         # Show failed accounts if any
         if results.failed_accounts:
@@ -1929,7 +1935,7 @@ def assign_multi_account_explicit(
 
         # Show performance recommendations if applicable
         if len(accounts) > 50:
-            display_performance_recommendations(len(accounts), stats["duration"])
+            display_performance_recommendations(len(accounts), stats["duration_seconds"])
 
     except ClientError as e:
         handle_aws_error(e, "MultiAccountAssign")
@@ -2132,7 +2138,7 @@ def assign_multi_account_advanced(
         if stats["skipped_count"] > 0:
             console.print(f"  Skipped: [yellow]{stats['skipped_count']}[/yellow]")
 
-        console.print(f"  Duration: {stats['duration']:.1f} seconds")
+        console.print(f"  Duration: {stats['duration_seconds']:.1f} seconds")
 
         # Show failed accounts if any
         if results.failed_accounts:
@@ -2146,7 +2152,7 @@ def assign_multi_account_advanced(
 
         # Show performance recommendations if applicable
         if len(accounts) > 50:
-            display_performance_recommendations(len(accounts), stats["duration"])
+            display_performance_recommendations(len(accounts), stats["duration_seconds"])
 
     except ClientError as e:
         handle_aws_error(e, "MultiAccountAssign")
@@ -2341,7 +2347,7 @@ def revoke_multi_account_explicit(
         if stats["skipped_count"] > 0:
             console.print(f"  Skipped: [yellow]{stats['skipped_count']}[/yellow]")
 
-        console.print(f"  Duration: {stats['duration']:.1f} seconds")
+        console.print(f"  Duration: {stats['duration_seconds']:.1f} seconds")
 
         # Show failed accounts if any
         if results.failed_accounts:
@@ -2355,7 +2361,7 @@ def revoke_multi_account_explicit(
 
         # Show performance recommendations if applicable
         if len(accounts) > 50:
-            display_performance_recommendations(len(accounts), stats["duration"])
+            display_performance_recommendations(len(accounts), stats["duration_seconds"])
 
     except ClientError as e:
         handle_aws_error(e, "MultiAccountRevoke")

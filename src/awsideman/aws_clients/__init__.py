@@ -7,16 +7,22 @@ This package provides AWS client management functionality including:
 - Cached AWS client wrappers for transparent caching
 """
 
+from .cached_client import (
+    CachedAwsClient,
+    CachedIdentityCenterClient,
+    CachedIdentityStoreClient,
+    CachedOrganizationsClient,
+    create_cached_client_manager,
+)
 from .manager import AWSClientManager
-from .cached_client import CachedAwsClient, CachedOrganizationsClient, CachedIdentityCenterClient, CachedIdentityStoreClient, create_cached_client_manager
 
 __all__ = [
-    'AWSClientManager',
-    'CachedAwsClient',
-    'CachedOrganizationsClient', 
-    'CachedIdentityCenterClient',
-    'CachedIdentityStoreClient',
-    'create_cached_client_manager',
+    "AWSClientManager",
+    "CachedAwsClient",
+    "CachedOrganizationsClient",
+    "CachedIdentityCenterClient",
+    "CachedIdentityStoreClient",
+    "create_cached_client_manager",
 ]
 
-__version__ = '1.0.0'
+__version__ = "1.0.0"

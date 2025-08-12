@@ -114,7 +114,7 @@ def test_list_assignments_successful(
     # Verify the command executed successfully
     assert result.exit_code == 0
 
-    # Verify the function called the APIs correctly
+    # Verify the function calledga the APIs correctly
     mock_sso_admin.list_account_assignments.assert_called_once_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef"
     )
@@ -185,8 +185,6 @@ def test_list_assignments_with_filters(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         AccountId="123456789012",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
-        PrincipalId="user-1234567890abcdef",
-        PrincipalType="USER",
     )
 
 
@@ -430,12 +428,10 @@ def test_list_assignments_principal_id_without_type(
 
     # Verify warning message is displayed
     mock_console.print.assert_any_call(
-        "[yellow]Warning: Principal ID provided without principal type. Using default type 'USER'.[/yellow]"
+        "[yellow]Warning: Principal ID provided without principal type. Using default type 'USER' for filtering.[/yellow]"
     )
 
     # Verify the function called the API with default USER type
     mock_sso_admin.list_account_assignments.assert_called_once_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
-        PrincipalId="user-1234567890abcdef",
-        PrincipalType="USER",
     )

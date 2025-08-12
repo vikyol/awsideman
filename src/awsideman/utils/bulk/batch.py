@@ -918,9 +918,9 @@ class BatchProcessor:
                 ]
 
                 if matching_assignments:
-                    # Assignment already exists - this is not an error for assign operations
+                    # Assignment already exists - this should be skipped, not counted as success
                     return {
-                        "status": "success",
+                        "status": "skipped",
                         "message": "Assignment already exists",
                         "retry_count": retry_count,
                     }
@@ -975,7 +975,7 @@ class BatchProcessor:
                 if error_code == "ConflictException":
                     # Assignment might already exist due to race condition
                     return {
-                        "status": "success",
+                        "status": "skipped",
                         "message": "Assignment already exists (conflict resolved)",
                         "retry_count": retry_count,
                     }
@@ -1064,9 +1064,9 @@ class BatchProcessor:
                 ]
 
                 if not matching_assignments:
-                    # Assignment doesn't exist - this is not an error for revoke operations
+                    # Assignment doesn't exist - this should be skipped, not counted as success
                     return {
-                        "status": "success",
+                        "status": "skipped",
                         "message": "Assignment does not exist (already revoked)",
                         "retry_count": retry_count,
                     }
@@ -1119,9 +1119,9 @@ class BatchProcessor:
 
                 # Handle specific error cases
                 if error_code == "ResourceNotFoundException":
-                    # Assignment doesn't exist
+                    # Assignment doesn't exist - should be skipped, not counted as success
                     return {
-                        "status": "success",
+                        "status": "skipped",
                         "message": "Assignment does not exist (already revoked)",
                         "retry_count": retry_count,
                     }

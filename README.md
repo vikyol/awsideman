@@ -41,7 +41,7 @@ A comprehensive CLI tool for managing AWS Identity Center operations at scale. D
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/awsideman.git
+git clone https://github.com/vikyol/awsideman.git
 cd awsideman
 
 # Install using Poetry

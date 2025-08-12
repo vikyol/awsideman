@@ -553,7 +553,7 @@ class MultiAccountBatchProcessor(BatchProcessor):
 
         try:
             # Use intelligent backoff manager for execution with retry logic
-            asyncio.run(
+            operation_result = asyncio.run(
                 self.backoff_manager.execute_with_backoff(
                     func=self._execute_account_operation_sync,
                     context_key=context_key,
@@ -565,10 +565,15 @@ class MultiAccountBatchProcessor(BatchProcessor):
                 )
             )
 
+            # Use the actual status from the batch operation result
+            operation_status = operation_result.get("status", "success")
+            operation_message = operation_result.get("message", "")
+
             return AccountResult(
                 account_id=account.account_id,
                 account_name=account.account_name,
-                status="success",
+                status=operation_status,
+                error_message=operation_message if operation_status != "success" else None,
                 processing_time=time.time() - start_time,
                 retry_count=getattr(
                     self.backoff_manager.contexts.get(context_key), "retry_count", 0
@@ -759,12 +764,18 @@ class MultiAccountBatchProcessor(BatchProcessor):
                 "InstanceArn": instance_arn,
                 "AccountId": account.account_id,
                 "PermissionSetArn": multi_assignment.permission_set_arn,
-                "PrincipalId": multi_assignment.principal_id,
-                "PrincipalType": multi_assignment.principal_type,
             }
 
             response = sso_admin_client.list_account_assignments(**list_params)
-            existing_assignments = response.get("AccountAssignments", [])
+            all_assignments = response.get("AccountAssignments", [])
+
+            # Filter assignments by principal ID and type locally
+            existing_assignments = [
+                assignment
+                for assignment in all_assignments
+                if assignment.get("PrincipalId") == multi_assignment.principal_id
+                and assignment.get("PrincipalType") == multi_assignment.principal_type
+            ]
             assignment_exists = len(existing_assignments) > 0
 
             # Simulate operation based on current state and requested operation

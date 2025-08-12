@@ -165,7 +165,7 @@ awsideman cache warm --resource-type <type>
 4. Update documentation for new features
 
 ### Resources
-- [GitHub Repository](https://github.com/yourusername/awsideman)
-- [Issue Tracker](https://github.com/yourusername/awsideman/issues)
+- [GitHub Repository](https://github.com/vikyol/awsideman)
+- [Issue Tracker](https://github.com/vikyol/awsideman/issues)
 - [AWS Identity Center Documentation](https://docs.aws.amazon.com/singlesignon/)
 - [AWS Organizations Documentation](https://docs.aws.amazon.com/organizations/)
