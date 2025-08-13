@@ -1,4 +1,5 @@
 """Status monitoring commands for awsideman."""
+
 import asyncio
 from typing import Optional
 
@@ -683,8 +684,16 @@ def monitor_config(
     """
     try:
         # Initialize configuration manager
-        config_manager = MonitoringConfigManager(config)
-        monitoring_config = config_manager.get_monitoring_config()
+        try:
+            config_manager = MonitoringConfigManager(config)
+            monitoring_config = config_manager.get_monitoring_config()
+        except Exception as e:
+            console.print(f"[red]Error initializing monitoring config: {str(e)}[/red]")
+            console.print(f"[red]Error type: {type(e).__name__}[/red]")
+            import traceback
+
+            console.print(f"[red]Traceback: {traceback.format_exc()}[/red]")
+            raise typer.Exit(1)
 
         if action == "show":
             _show_monitoring_config(monitoring_config)
@@ -750,7 +759,7 @@ def _show_monitoring_config(monitoring_config: MonitoringConfig):
     # Notifications
     console.print("\n[bold]Notifications:[/bold]")
 
-    if monitoring_config.email_notifications:
+    if monitoring_config.email_notifications is not None:
         status = "✅" if monitoring_config.email_notifications.enabled else "❌"
         console.print(f"  {status} Email: {monitoring_config.email_notifications.smtp_server}")
         if (
@@ -761,17 +770,17 @@ def _show_monitoring_config(monitoring_config: MonitoringConfig):
                 f"    Recipients: {', '.join(monitoring_config.email_notifications.to_addresses)}"
             )
 
-    if monitoring_config.webhook_notifications:
+    if monitoring_config.webhook_notifications is not None:
         status = "✅" if monitoring_config.webhook_notifications.enabled else "❌"
         console.print(f"  {status} Webhook: {monitoring_config.webhook_notifications.url}")
 
-    if monitoring_config.log_notifications:
+    if monitoring_config.log_notifications is not None:
         status = "✅" if monitoring_config.log_notifications.enabled else "❌"
         log_dest = monitoring_config.log_notifications.log_file or "console"
         console.print(f"  {status} Log: {log_dest}")
 
     # Schedule
-    if monitoring_config.schedule:
+    if monitoring_config.schedule is not None:
         console.print("\n[bold]Schedule:[/bold]")
         status = "✅" if monitoring_config.schedule.enabled else "❌"
         console.print(
@@ -849,12 +858,18 @@ def _test_notifications(monitoring_config: MonitoringConfig):
 
     # Check if any notifications are configured
     has_notifications = (
-        (monitoring_config.email_notifications and monitoring_config.email_notifications.enabled)
+        (
+            monitoring_config.email_notifications is not None
+            and monitoring_config.email_notifications.enabled
+        )
         or (
-            monitoring_config.webhook_notifications
+            monitoring_config.webhook_notifications is not None
             and monitoring_config.webhook_notifications.enabled
         )
-        or (monitoring_config.log_notifications and monitoring_config.log_notifications.enabled)
+        or (
+            monitoring_config.log_notifications is not None
+            and monitoring_config.log_notifications.enabled
+        )
     )
 
     if not has_notifications:
@@ -865,7 +880,15 @@ def _test_notifications(monitoring_config: MonitoringConfig):
     console.print("[blue]Testing notification systems...[/blue]")
 
     # Test notifications
-    notification_system = NotificationSystem(monitoring_config)
+    try:
+        notification_system = NotificationSystem(monitoring_config)
+    except Exception as e:
+        console.print(f"[red]Error creating notification system: {str(e)}[/red]")
+        console.print(f"[red]Error type: {type(e).__name__}[/red]")
+        import traceback
+
+        console.print(f"[red]Traceback: {traceback.format_exc()}[/red]")
+        raise typer.Exit(1)
 
     with console.status("Sending test notifications..."):
         results = asyncio.run(notification_system.test_notifications())

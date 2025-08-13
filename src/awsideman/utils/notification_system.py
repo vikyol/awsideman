@@ -1,4 +1,5 @@
 """Notification system for monitoring alerts."""
+
 import asyncio
 import json
 import logging
@@ -52,7 +53,7 @@ class NotificationSystem:
     def _setup_logging(self):
         """Setup logging configuration for notifications."""
         if (
-            self.monitoring_config.log_notifications
+            self.monitoring_config.log_notifications is not None
             and self.monitoring_config.log_notifications.enabled
         ):
             log_config = self.monitoring_config.log_notifications
@@ -124,38 +125,58 @@ class NotificationSystem:
             "threshold_level": threshold_level.value,
             "message": message,
             "status_report": {
-                "overall_health": status_report.overall_health.status.value
-                if status_report.overall_health
-                else "unknown",
-                "health_message": status_report.overall_health.message
-                if status_report.overall_health
-                else "",
-                "provisioning_active": len(status_report.provisioning_status.active_operations)
-                if status_report.provisioning_status
-                else 0,
-                "provisioning_failed": len(status_report.provisioning_status.failed_operations)
-                if status_report.provisioning_status
-                else 0,
-                "orphaned_assignments": len(status_report.orphaned_assignment_status)
-                if status_report.orphaned_assignment_status
-                else 0,
-                "sync_issues": len(
-                    [s for s in status_report.sync_status if s.status != StatusLevel.HEALTHY]
-                )
-                if status_report.sync_status
-                else 0,
-                "total_users": status_report.summary_statistics.total_users
-                if status_report.summary_statistics
-                else 0,
-                "total_groups": status_report.summary_statistics.total_groups
-                if status_report.summary_statistics
-                else 0,
-                "total_permission_sets": status_report.summary_statistics.total_permission_sets
-                if status_report.summary_statistics
-                else 0,
-                "report_timestamp": status_report.timestamp.isoformat()
-                if status_report.timestamp
-                else "",
+                "overall_health": (
+                    status_report.overall_health.status.value
+                    if status_report.overall_health
+                    else "unknown"
+                ),
+                "health_message": (
+                    status_report.overall_health.message if status_report.overall_health else ""
+                ),
+                "provisioning_active": (
+                    len(status_report.provisioning_status.active_operations)
+                    if status_report.provisioning_status
+                    and hasattr(status_report.provisioning_status, "active_operations")
+                    else 0
+                ),
+                "provisioning_failed": (
+                    len(status_report.provisioning_status.failed_operations)
+                    if status_report.provisioning_status
+                    and hasattr(status_report.provisioning_status, "failed_operations")
+                    else 0
+                ),
+                "orphaned_assignments": (
+                    len(status_report.orphaned_assignment_status.orphaned_assignments)
+                    if status_report.orphaned_assignment_status
+                    and hasattr(status_report.orphaned_assignment_status, "orphaned_assignments")
+                    else 0
+                ),
+                "sync_issues": (
+                    len([s for s in status_report.sync_status if s.status != StatusLevel.HEALTHY])
+                    if status_report.sync_status and hasattr(status_report.sync_status, "__iter__")
+                    else 0
+                ),
+                "total_users": (
+                    status_report.summary_statistics.total_users
+                    if status_report.summary_statistics
+                    and hasattr(status_report.summary_statistics, "total_users")
+                    else 0
+                ),
+                "total_groups": (
+                    status_report.summary_statistics.total_groups
+                    if status_report.summary_statistics
+                    and hasattr(status_report.summary_statistics, "total_groups")
+                    else 0
+                ),
+                "total_permission_sets": (
+                    status_report.summary_statistics.total_permission_sets
+                    if status_report.summary_statistics
+                    and hasattr(status_report.summary_statistics, "total_permission_sets")
+                    else 0
+                ),
+                "report_timestamp": (
+                    status_report.timestamp.isoformat() if status_report.timestamp else ""
+                ),
             },
         }
 
@@ -169,7 +190,15 @@ class NotificationSystem:
             # Create email message
             msg = MIMEMultipart()
             msg["From"] = email_config.from_address
-            msg["To"] = ", ".join(email_config.to_addresses)
+
+            # Ensure to_addresses is a list and not None
+            to_addresses = email_config.to_addresses or []
+            if not to_addresses:
+                raise EmailNotificationError(
+                    "No recipient addresses configured for email notifications"
+                )
+
+            msg["To"] = ", ".join(to_addresses)
             msg["Subject"] = email_config.subject_template.format(
                 level=notification_data["threshold_level"].upper(),
                 message=notification_data["message"],
@@ -206,11 +235,13 @@ class NotificationSystem:
 
     def _create_email_body(self, notification_data: Dict[str, Any]) -> str:
         """Create HTML email body from notification data."""
-        status_report = notification_data["status_report"]
+        status_report = notification_data.get("status_report", {})
 
         # Determine alert color based on threshold level
         alert_colors = {"warning": "#FFA500", "critical": "#FF0000"}
-        alert_color = alert_colors.get(notification_data["threshold_level"], "#FFA500")
+        alert_color = alert_colors.get(
+            notification_data.get("threshold_level", "warning"), "#FFA500"
+        )
 
         html_body = f"""
         <html>
@@ -302,17 +333,17 @@ class NotificationSystem:
                 except (KeyError, json.JSONDecodeError):
                     # If template formatting fails, use a simple message payload
                     payload = {
-                        "message": notification_data["message"],
-                        "level": notification_data["threshold_level"],
+                        "message": notification_data.get("message", "No message"),
+                        "level": notification_data.get("threshold_level", "unknown"),
                     }
             else:
                 # Use default payload structure
                 payload = {
                     "alert_type": "aws_identity_center_monitoring",
-                    "level": notification_data["threshold_level"],
-                    "message": notification_data["message"],
-                    "timestamp": notification_data["timestamp"],
-                    "status_summary": notification_data["status_report"],
+                    "level": notification_data.get("threshold_level", "unknown"),
+                    "message": notification_data.get("message", "No message"),
+                    "timestamp": notification_data.get("timestamp", "unknown"),
+                    "status_summary": notification_data.get("status_report", {}),
                 }
 
             # Send webhook with retry logic
@@ -385,19 +416,19 @@ class NotificationSystem:
 
     def _create_log_message(self, notification_data: Dict[str, Any]) -> str:
         """Create structured log message from notification data."""
-        status_report = notification_data["status_report"]
+        status_report = notification_data.get("status_report", {})
 
         return (
-            f"AWS Identity Center Alert [{notification_data['threshold_level'].upper()}]: "
-            f"{notification_data['message']} | "
-            f"Health: {status_report['overall_health']} | "
-            f"Provisioning Active: {status_report['provisioning_active']} | "
-            f"Provisioning Failed: {status_report['provisioning_failed']} | "
-            f"Orphaned Assignments: {status_report['orphaned_assignments']} | "
-            f"Sync Issues: {status_report['sync_issues']} | "
-            f"Users: {status_report['total_users']} | "
-            f"Groups: {status_report['total_groups']} | "
-            f"Permission Sets: {status_report['total_permission_sets']}"
+            f"AWS Identity Center Alert [{notification_data.get('threshold_level', 'unknown').upper()}]: "
+            f"{notification_data.get('message', 'No message')} | "
+            f"Health: {status_report.get('overall_health', 'unknown')} | "
+            f"Provisioning Active: {status_report.get('provisioning_active', 0)} | "
+            f"Provisioning Failed: {status_report.get('provisioning_failed', 0)} | "
+            f"Orphaned Assignments: {status_report.get('orphaned_assignments', 0)} | "
+            f"Sync Issues: {status_report.get('sync_issues', 0)} | "
+            f"Users: {status_report.get('total_users', 0)} | "
+            f"Groups: {status_report.get('total_groups', 0)} | "
+            f"Permission Sets: {status_report.get('total_permission_sets', 0)}"
         )
 
     async def test_notifications(self) -> Dict[str, bool]:

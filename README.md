@@ -12,7 +12,10 @@ A comprehensive CLI tool for managing AWS Identity Center operations at scale. D
 
 ### Advanced Operations
 - **Bulk Operations** - Process hundreds of assignments from CSV/JSON files with human-readable names
-- **Multi-Account Operations** - Assign/revoke permission sets across multiple accounts with filtering
+- **Multi-Account Operations** - Assign/revoke permission sets across multiple accounts with advanced filtering
+  - **Organizational Unit (OU) Filtering** - Target accounts by organizational structure (e.g., "Root/Security", "Root/Development")
+  - **Regex Pattern Filtering** - Filter accounts by name patterns (e.g., "prod-.*", ".*-staging")
+  - **Explicit Account Lists** - Specify exact account IDs for precise targeting
 - **AWS Organizations Integration** - Query organization structure, accounts, and policies
 - **Name Resolution** - Automatic conversion of human-readable names to AWS resource identifiers
 - **Access Reviews** - Export permissions for accounts, principals, or permission sets for auditing and compliance
@@ -129,10 +132,21 @@ awsideman assignment list --account-id 123456789012
 awsideman assignment assign ReadOnlyAccess john.doe --account 123456789012
 awsideman assignment revoke ReadOnlyAccess john.doe --account 123456789012
 
-# Multi-account assignments
+# Multi-account assignments with advanced filtering
 awsideman assignment assign ReadOnlyAccess john.doe --filter "*"
 awsideman assignment assign PowerUserAccess jane.smith --filter "tag:Environment=Production"
 awsideman assignment revoke DeveloperAccess former.employee --filter "tag:Team=DevOps" --dry-run
+
+# Organizational Unit (OU) filtering
+awsideman assignment assign ReadOnlyAccess john.doe --ou-filter "Root/Security"
+awsideman assignment assign DeveloperAccess dev.team --ou-filter "Root/Development" --principal-type GROUP
+
+# Regex pattern filtering for account names
+awsideman assignment assign ReadOnlyAccess john.doe --account-pattern "prod-.*"
+awsideman assignment assign AdminAccess admin.user --account-pattern ".*-prod-.*"
+
+# Explicit account list
+awsideman assignment assign ReadOnlyAccess john.doe --accounts "123456789012,987654321098"
 ```
 
 ### Bulk Operations
@@ -171,6 +185,26 @@ awsideman org list-accounts --filter-tag Environment=Production
 awsideman org get-account 123456789012
 awsideman org list-policies
 awsideman org tree
+```
+
+### Advanced Account Filtering
+
+```bash
+# Organizational Unit (OU) filtering
+awsideman assignment assign ReadOnlyAccess john.doe --ou-filter "Root/Security"
+awsideman assignment assign DeveloperAccess dev.team --ou-filter "Root/Development/TeamA"
+
+# Regex pattern filtering for account names
+awsideman assignment assign ReadOnlyAccess john.doe --account-pattern "prod-.*"
+awsideman assignment assign AdminAccess admin.user --account-pattern ".*-prod-.*"
+
+# Explicit account list targeting
+awsideman assignment assign ReadOnlyAccess john.doe --accounts "123456789012,987654321098"
+
+# Combined filtering strategies
+awsideman assignment assign ReadOnlyAccess john.doe \
+  --ou-filter "Root/Production" \
+  --account-pattern ".*-us-east-1"
 ```
 
 ### Access Reviews

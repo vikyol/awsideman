@@ -1,4 +1,5 @@
 """Timeout handling system for AWS Identity Center status monitoring operations."""
+
 import asyncio
 import functools
 import signal
@@ -294,7 +295,12 @@ class TimeoutHandler:
             )
 
     async def _execute_fail_fast(
-        self, operation: Callable, operation_id: str, timeout_seconds: float, *args, **kwargs
+        self,
+        operation: Callable[..., Awaitable[Any]],
+        operation_id: str,
+        timeout_seconds: float,
+        *args,
+        **kwargs,
     ) -> TimeoutResult:
         """Execute operation with fail-fast timeout strategy."""
         try:
@@ -340,7 +346,12 @@ class TimeoutHandler:
             return TimeoutResult(success=False, error=status_error, timeout_occurred=True)
 
     async def _execute_with_retry(
-        self, operation: Callable, operation_id: str, timeout_seconds: float, *args, **kwargs
+        self,
+        operation: Callable[..., Awaitable[Any]],
+        operation_id: str,
+        timeout_seconds: float,
+        *args,
+        **kwargs,
     ) -> TimeoutResult:
         """Execute operation with retry and backoff strategy."""
         last_error = None
@@ -480,9 +491,11 @@ class TimeoutHandler:
                 return TimeoutResult(
                     success=True,
                     result=result,
-                    warnings=[f"Used {extensions_used} timeout extensions"]
-                    if extensions_used > 0
-                    else [],
+                    warnings=(
+                        [f"Used {extensions_used} timeout extensions"]
+                        if extensions_used > 0
+                        else []
+                    ),
                 )
 
             except asyncio.TimeoutError:
@@ -638,9 +651,11 @@ class TimeoutHandler:
                 "min_duration": min(successful_durations),
                 "max_duration": max(successful_durations),
                 "p50_duration": successful_durations[count // 2],
-                "p95_duration": successful_durations[int(count * 0.95)]
-                if count > 20
-                else max(successful_durations),
+                "p95_duration": (
+                    successful_durations[int(count * 0.95)]
+                    if count > 20
+                    else max(successful_durations)
+                ),
                 "success_rate": len(successful_durations) / len(history),
                 "sample_count": count,
             }

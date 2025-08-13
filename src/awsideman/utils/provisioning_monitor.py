@@ -1,4 +1,5 @@
 """Provisioning monitoring component for AWS Identity Center status monitoring."""
+
 import logging
 import time
 from datetime import datetime, timedelta
@@ -141,7 +142,7 @@ class ProvisioningMonitor(BaseStatusChecker):
         active_operations = []
 
         try:
-            client = self.idc_client.client
+            client = self.idc_client.get_sso_admin_client()
 
             # Get all Identity Center instances
             instances_response = client.list_instances()

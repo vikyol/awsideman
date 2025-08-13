@@ -25,8 +25,9 @@ Examples:
     # Revoke a permission set assignment
     $ awsideman assignment revoke arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012
 """
+
 import sys
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -114,7 +115,7 @@ def list_assignments(
         True, "--interactive/--no-interactive", help="Enable/disable interactive pagination"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """List all permission set assignments.
 
     Displays a table of assignments with permission set name, principal name, principal type, and target account.
@@ -183,7 +184,7 @@ def list_assignments(
     with console.status("[blue]Fetching permission set assignments...[/blue]"):
         try:
             # Set up the base parameters for the list_account_assignments API call
-            list_params = {
+            list_params: Dict[str, Any] = {
                 "InstanceArn": instance_arn,
             }
 
@@ -272,9 +273,9 @@ def list_assignments(
                         permission_set_info = resolve_permission_set_info(
                             instance_arn, assignment_info["PermissionSetArn"], sso_admin_client
                         )
-                        permission_set_cache[
-                            assignment_info["PermissionSetArn"]
-                        ] = permission_set_info
+                        permission_set_cache[assignment_info["PermissionSetArn"]] = (
+                            permission_set_info
+                        )
                     except typer.Exit:
                         # If we can't resolve the permission set, use a placeholder
                         permission_set_cache[assignment_info["PermissionSetArn"]] = {
@@ -378,7 +379,7 @@ def get_assignment(
         "USER", "--principal-type", help="Principal type (USER or GROUP)"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Get details about a specific permission set assignment.
 
     Retrieves and displays comprehensive information about an assignment by its permission set ARN,
@@ -634,7 +635,7 @@ def assign_permission_set(
         help="Continue processing on individual account failures (for multi-account operations)",
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Assign a permission set to a principal for one or more AWS accounts.
 
     This unified command supports both single-account and multi-account assignments:
@@ -760,7 +761,7 @@ def assign_single_account(
     account_id: str,
     principal_type: str = "USER",
     profile: Optional[str] = None,
-):
+) -> None:
     """Assign a permission set to a principal for a specific account.
 
     Creates an assignment linking a permission set to a principal (user or group) for a specific AWS account.
@@ -842,6 +843,9 @@ def assign_single_account(
                 raise typer.Exit(1)
 
             principal_id = principal_result.resolved_value
+            if principal_id is None:
+                console.print("[red]Error: Failed to resolve principal ID[/red]")
+                raise typer.Exit(1)
 
         except Exception as e:
             console.print(f"[red]Error resolving principal name: {str(e)}[/red]")
@@ -1026,7 +1030,7 @@ def revoke_permission_set(
         help="Continue processing on individual account failures (for multi-account operations)",
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Revoke a permission set assignment from a principal for one or more AWS accounts.
 
     This unified command supports both single-account and multi-account revocations:
@@ -1161,7 +1165,7 @@ def revoke_single_account(
     principal_type: str = "USER",
     force: bool = False,
     profile: Optional[str] = None,
-):
+) -> None:
     """Revoke a permission set assignment from a principal.
 
     Removes an assignment linking a permission set to a principal (user or group) for a specific AWS account.
@@ -1253,6 +1257,9 @@ def revoke_single_account(
                 raise typer.Exit(1)
 
             principal_id = principal_result.resolved_value
+            if principal_id is None:
+                console.print("[red]Error: Failed to resolve principal ID[/red]")
+                raise typer.Exit(1)
 
         except Exception as e:
             console.print(f"[red]Error resolving principal name: {str(e)}[/red]")
@@ -1513,8 +1520,8 @@ def revoke_single_account(
 
 
 def resolve_permission_set_info(
-    instance_arn: str, permission_set_arn: str, sso_admin_client
-) -> dict:
+    instance_arn: str, permission_set_arn: str, sso_admin_client: Any
+) -> Dict[str, Any]:
     """
     Resolve permission set information from ARN.
 
@@ -1567,6 +1574,8 @@ def resolve_permission_set_info(
     except ClientError as e:
         # Handle AWS API errors with centralized error handling
         handle_aws_error(e, "DescribePermissionSet")
+        # This line is unreachable as handle_aws_error raises an exception
+        return {}  # type: ignore[unreachable]
     except Exception as e:
         # Handle other unexpected errors
         console.print(f"[red]Error: {str(e)}[/red]")
@@ -1574,8 +1583,8 @@ def resolve_permission_set_info(
 
 
 def resolve_principal_info(
-    identity_store_id: str, principal_id: str, principal_type: str, identity_store_client
-) -> dict:
+    identity_store_id: str, principal_id: str, principal_type: str, identity_store_client: Any
+) -> Dict[str, Any]:
     """
     Resolve principal information (name, type) from principal ID.
 
@@ -1683,8 +1692,8 @@ def _log_individual_operation(
     permission_set_name: str,
     account_id: str,
     success: bool = True,
-    error: str = None,
-    request_id: str = None,
+    error: Optional[str] = None,
+    request_id: Optional[str] = None,
 ) -> None:
     """Log an individual assignment operation for rollback tracking.
 
@@ -1825,7 +1834,7 @@ def assign_multi_account_explicit(
 
         if not accounts:
             console.print("[yellow]No valid accounts found in the provided list.[/yellow]")
-            raise typer.Exit(0)
+            return  # Return instead of raising typer.Exit(0)
 
         console.print(f"[green]Validated {len(accounts)} account(s) from explicit list.[/green]")
 
@@ -2037,7 +2046,7 @@ def assign_multi_account_advanced(
         if not accounts:
             console.print("[yellow]No accounts found matching the filter criteria.[/yellow]")
             console.print("[yellow]Please check your filter options and try again.[/yellow]")
-            raise typer.Exit(0)
+            return  # Return instead of raising typer.Exit(0)
 
         console.print(f"[green]Found {len(accounts)} account(s) matching filter criteria.[/green]")
 

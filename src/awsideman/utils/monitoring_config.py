@@ -1,4 +1,5 @@
 """Monitoring configuration for automated status checks."""
+
 import logging
 import os
 from dataclasses import asdict, dataclass, field
@@ -188,7 +189,7 @@ class MonitoringConfigManager:
 
         # Extract notification configurations
         email_config = None
-        if "email_notifications" in config_data:
+        if "email_notifications" in config_data and config_data["email_notifications"] is not None:
             email_data = config_data["email_notifications"]
             email_config = EmailNotificationConfig(
                 smtp_server=email_data.get("smtp_server", ""),
@@ -196,7 +197,7 @@ class MonitoringConfigManager:
                 username=email_data.get("username", ""),
                 password=email_data.get("password", ""),
                 from_address=email_data.get("from_address", ""),
-                to_addresses=email_data.get("to_addresses", []),
+                to_addresses=email_data.get("to_addresses") or [],
                 use_tls=email_data.get("use_tls", True),
                 subject_template=email_data.get(
                     "subject_template", "AWS Identity Center Alert: {level} - {message}"
@@ -205,7 +206,10 @@ class MonitoringConfigManager:
             )
 
         webhook_config = None
-        if "webhook_notifications" in config_data:
+        if (
+            "webhook_notifications" in config_data
+            and config_data["webhook_notifications"] is not None
+        ):
             webhook_data = config_data["webhook_notifications"]
             webhook_config = WebhookNotificationConfig(
                 url=webhook_data.get("url", ""),
@@ -219,7 +223,7 @@ class MonitoringConfigManager:
             )
 
         log_config = None
-        if "log_notifications" in config_data:
+        if "log_notifications" in config_data and config_data["log_notifications"] is not None:
             log_data = config_data["log_notifications"]
             log_config = LogNotificationConfig(
                 log_level=log_data.get("log_level", "WARNING"),
@@ -232,7 +236,7 @@ class MonitoringConfigManager:
 
         # Extract schedule configuration
         schedule_config = None
-        if "schedule" in config_data:
+        if "schedule" in config_data and config_data["schedule"] is not None:
             schedule_data = config_data["schedule"]
             schedule_config = ScheduleConfig(
                 enabled=schedule_data.get("enabled", False),

@@ -1,6 +1,7 @@
 """Health checking component for AWS Identity Center status monitoring."""
+
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
@@ -42,7 +43,7 @@ class HealthChecker(BaseStatusChecker):
         """
         self.logger.info("Starting comprehensive health check")
         start_time = time.time()
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         try:
             # Execute health check with timeout handling
@@ -127,7 +128,7 @@ class HealthChecker(BaseStatusChecker):
             HealthStatus: Health check results
         """
         start_time = time.time()
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         # Test basic connectivity with timeout
         connectivity_result = await self.timeout_handler.execute_with_timeout(
@@ -146,9 +147,11 @@ class HealthChecker(BaseStatusChecker):
             else {
                 "status": "Error",
                 "available": False,
-                "errors": [connectivity_result.error.message]
-                if connectivity_result.error
-                else ["Connectivity check failed"],
+                "errors": (
+                    [connectivity_result.error.message]
+                    if connectivity_result.error
+                    else ["Connectivity check failed"]
+                ),
             }
         )
 
@@ -158,9 +161,11 @@ class HealthChecker(BaseStatusChecker):
             else {
                 "available": False,
                 "status": "Error",
-                "errors": [service_result.error.message]
-                if service_result.error
-                else ["Service check failed"],
+                "errors": (
+                    [service_result.error.message]
+                    if service_result.error
+                    else ["Service check failed"]
+                ),
             }
         )
 
@@ -178,9 +183,9 @@ class HealthChecker(BaseStatusChecker):
             service_available=service_data["available"],
             connectivity_status=connectivity_data["status"],
             response_time_ms=response_time_ms,
-            last_successful_check=timestamp
-            if overall_status["status"] == StatusLevel.HEALTHY
-            else None,
+            last_successful_check=(
+                timestamp if overall_status["status"] == StatusLevel.HEALTHY else None
+            ),
         )
 
         # Add detailed information
@@ -213,7 +218,7 @@ class HealthChecker(BaseStatusChecker):
 
         try:
             # Attempt to get the Identity Center client
-            client = self.idc_client.client
+            client = self.idc_client.get_sso_admin_client()
 
             # Test basic connectivity with a lightweight operation
             # List instances is a good connectivity test as it requires minimal permissions
@@ -295,7 +300,7 @@ class HealthChecker(BaseStatusChecker):
         self.logger.debug("Starting service availability check")
 
         try:
-            client = self.idc_client.client
+            client = self.idc_client.get_sso_admin_client()
 
             # Test multiple service endpoints to verify availability
             checks = []

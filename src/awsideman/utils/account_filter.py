@@ -1,4 +1,6 @@
 """Account filtering infrastructure for multi-account operations."""
+
+import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -6,6 +8,8 @@ from typing import Any, Dict, Generator, List, Optional
 
 from ..aws_clients.manager import OrganizationsClientWrapper
 from .models import AccountDetails
+
+logger = logging.getLogger(__name__)
 
 
 class FilterType(str, Enum):
@@ -813,12 +817,25 @@ class AccountFilter:
         # First get all accounts
         all_accounts = self._resolve_wildcard_accounts()
 
+        logger.info(f"OU Filter: Retrieved {len(all_accounts)} total accounts")
+        logger.info(f"OU Filter: Looking for accounts matching OU path: '{self.ou_filter}'")
+
         # Filter by OU path
         filtered_accounts = []
         for account in all_accounts:
             if self._account_matches_ou_filter(account):
                 filtered_accounts.append(account)
+                logger.debug(
+                    f"OU Filter: Account {account.account_name} ({account.account_id}) matches OU path: {account.ou_path}"
+                )
+            else:
+                logger.debug(
+                    f"OU Filter: Account {account.account_name} ({account.account_id}) does not match OU path: {account.ou_path}"
+                )
 
+        logger.info(
+            f"OU Filter: Found {len(filtered_accounts)} accounts matching OU filter '{self.ou_filter}'"
+        )
         return filtered_accounts
 
     def _resolve_ou_filtered_accounts_streaming(
@@ -884,15 +901,35 @@ class AccountFilter:
             True if account is in the specified OU path, False otherwise
         """
         if not self.ou_filter or not account.ou_path:
+            logger.debug(
+                f"OU Filter: Account {account.account_name} ({account.account_id}) - no filter or no OU path"
+            )
             return False
 
         # Convert OU path to string for matching
         account_ou_path = "/".join(account.ou_path)
 
+        logger.debug(
+            f"OU Filter: Comparing account OU path '{account_ou_path}' with filter '{self.ou_filter}'"
+        )
+
         # Support both exact match and prefix match
         # Exact match: "Root/Production" matches exactly "Root/Production"
         # Prefix match: "Root/Production" matches "Root/Production/SubOU"
-        return account_ou_path == self.ou_filter or account_ou_path.startswith(self.ou_filter + "/")
+        matches = account_ou_path == self.ou_filter or account_ou_path.startswith(
+            self.ou_filter + "/"
+        )
+
+        if matches:
+            logger.debug(
+                f"OU Filter: Account {account.account_name} ({account.account_id}) MATCHES filter '{self.ou_filter}'"
+            )
+        else:
+            logger.debug(
+                f"OU Filter: Account {account.account_name} ({account.account_id}) does NOT match filter '{self.ou_filter}'"
+            )
+
+        return matches
 
     def _account_matches_pattern_filter(self, account: AccountInfo) -> bool:
         """

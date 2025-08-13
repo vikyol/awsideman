@@ -1,6 +1,7 @@
 """Factory functions and utilities for creating status monitoring components."""
+
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from .status_infrastructure import StatusCheckConfig, StatusOrchestrator
@@ -73,7 +74,7 @@ class StatusFactory:
             HealthStatus: Health status instance
         """
         return HealthStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=status,
             message=message,
             service_available=kwargs.get("service_available", True),
@@ -100,7 +101,7 @@ class StatusFactory:
             ProvisioningStatus: Provisioning status instance
         """
         return ProvisioningStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=status,
             message=message,
             active_operations=kwargs.get("active_operations", []),
@@ -128,7 +129,7 @@ class StatusFactory:
             OrphanedAssignmentStatus: Orphaned assignment status instance
         """
         return OrphanedAssignmentStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=status,
             message=message,
             orphaned_assignments=kwargs.get("orphaned_assignments", []),
@@ -155,7 +156,7 @@ class StatusFactory:
             SyncMonitorStatus: Sync monitor status instance
         """
         return SyncMonitorStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=status,
             message=message,
             sync_providers=kwargs.get("sync_providers", []),
@@ -180,7 +181,7 @@ class StatusFactory:
             total_permission_sets=kwargs.get("total_permission_sets", 0),
             total_assignments=kwargs.get("total_assignments", 0),
             active_accounts=kwargs.get("active_accounts", 0),
-            last_updated=kwargs.get("last_updated", datetime.utcnow()),
+            last_updated=kwargs.get("last_updated", datetime.now(timezone.utc)),
             user_creation_dates=kwargs.get("user_creation_dates", {}),
             group_creation_dates=kwargs.get("group_creation_dates", {}),
             permission_set_creation_dates=kwargs.get("permission_set_creation_dates", {}),
@@ -210,7 +211,7 @@ class StatusFactory:
             StatusReport: Complete status report
         """
         return StatusReport(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             overall_health=overall_health or self.create_health_status(),
             provisioning_status=provisioning_status or self.create_provisioning_status(),
             orphaned_assignment_status=orphaned_assignment_status
@@ -241,7 +242,7 @@ class StatusFactory:
             BaseStatusResult: Error status result
         """
         result = BaseStatusResult(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=status,
             message=error_message,
             details=details or {},
@@ -249,7 +250,7 @@ class StatusFactory:
         )
 
         result.add_detail("component", component)
-        result.add_detail("error_timestamp", datetime.utcnow())
+        result.add_detail("error_timestamp", datetime.now(timezone.utc))
 
         return result
 

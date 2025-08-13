@@ -1,4 +1,5 @@
 """Configuration utilities for awsideman."""
+
 import json
 import os
 from pathlib import Path
@@ -62,14 +63,23 @@ class Config:
     def __init__(self):
         """Initialize the configuration manager."""
         self.config_data = {}
-        self._ensure_config_dir()
-        self._load_config()
+        self._config_loaded = False
+        self._config_dir_ensured = False
 
     def _ensure_config_dir(self):
         """Ensure the configuration directory exists."""
-        if not CONFIG_DIR.exists():
-            CONFIG_DIR.mkdir(parents=True)
-            console.print(f"Created configuration directory: {CONFIG_DIR}")
+        if not self._config_dir_ensured:
+            if not CONFIG_DIR.exists():
+                CONFIG_DIR.mkdir(parents=True)
+                console.print(f"Created configuration directory: {CONFIG_DIR}")
+            self._config_dir_ensured = True
+
+    def _ensure_config_loaded(self):
+        """Ensure configuration is loaded from file."""
+        if not self._config_loaded:
+            self._ensure_config_dir()
+            self._load_config()
+            self._config_loaded = True
 
     def _load_config(self):
         """Load the configuration from file, with automatic migration from JSON to YAML."""
@@ -200,6 +210,7 @@ class Config:
         Returns:
             Configuration value
         """
+        self._ensure_config_loaded()
         return self.config_data.get(key, default)
 
     def set(self, key: str, value: Any):
@@ -231,6 +242,7 @@ class Config:
         Returns:
             All configuration values
         """
+        self._ensure_config_loaded()
         return self.config_data.copy()
 
     def get_cache_config(self) -> Dict[str, Any]:
@@ -240,6 +252,7 @@ class Config:
         Returns:
             Cache configuration dictionary
         """
+        self._ensure_config_loaded()
         # Start with default cache config
         cache_config = DEFAULT_CACHE_CONFIG.copy()
 
@@ -278,6 +291,7 @@ class Config:
         Returns:
             Rollback configuration dictionary
         """
+        self._ensure_config_loaded()
         # Start with default rollback config
         rollback_config = DEFAULT_ROLLBACK_CONFIG.copy()
 

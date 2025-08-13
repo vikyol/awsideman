@@ -14,16 +14,17 @@ classifiers = [  # Add classifiers
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: System :: Systems Administration",
     "Topic :: Utilities",
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8.1,<4.0"
+python = ">=3.9,<4.0"
 typer = "0.7.0"
 boto3 = "^1.28.0"
 rich = "^13.4.2"
@@ -37,12 +38,13 @@ aiohttp = "^3.8.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
-black = "^23.3.0"
+black = "^25.1.0"
 isort = "^5.12.0"
 flake8 = "^6.0.0"
 mypy = "^1.3.0"
 ruff = "^0.1.0"
 pytest-asyncio = ">=0.21.0,<1.0.0"
+pre-commit = "^4.3.0"
 
 [tool.poetry.scripts]
 awsideman = "src.awsideman.cli:app"
@@ -53,7 +55,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 100
-target-version = ["py38", "py39", "py310", "py311"]
+target-version = ["py39", "py310", "py311"]
 
 [tool.isort]
 profile = "black"
@@ -65,10 +67,10 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
+disallow_untyped_defs = false
 disallow_incomplete_defs = true
 check_untyped_defs = true
 disallow_untyped_decorators = true

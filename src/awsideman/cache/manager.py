@@ -30,7 +30,7 @@ class CacheManager:
         config: Optional[Union[CacheConfig, AdvancedCacheConfig]] = None,
         base_cache_dir: Optional[str] = None,
         backend: Optional[CacheBackend] = None,
-        encryption_provider=None,
+        encryption_provider: Optional[Any] = None,
     ):
         """Initialize cache manager with configuration-driven initialization.
 
@@ -48,17 +48,27 @@ class CacheManager:
         # Initialize configuration with comprehensive loading and validation
         self.config = self._load_and_validate_configuration(config)
 
-        # Initialize path manager for backward compatibility
-        self._initialize_path_manager(base_cache_dir)
-
         # Initialize backend and encryption with fallback mechanisms
-        self.backend = None
-        self.encryption_provider = None
+        self.backend: Optional[CacheBackend] = None
+        self.encryption_provider: Optional[Any] = None
+        self.path_manager: Optional[CachePathManager] = None
 
-        if self.config.enabled:
-            self._initialize_advanced_features(backend, encryption_provider, base_cache_dir)
+        # Check if this is an advanced configuration
+        if isinstance(self.config, AdvancedCacheConfig):
+            # For advanced configs, initialize backend/encryption and set path_manager to None
+            if self.config.enabled:
+                self._initialize_advanced_features(backend, encryption_provider, base_cache_dir)
+            self.path_manager = None
         else:
-            logger.info("Cache is disabled in configuration")
+            # For basic configs, always initialize path_manager for legacy methods
+            self._initialize_path_manager(base_cache_dir)
+
+            # Only initialize advanced features if cache is enabled
+            if self.config.enabled:
+                # For basic configs, we don't initialize advanced features
+                pass
+            else:
+                logger.info("Cache is disabled in configuration")
 
     def _load_and_validate_configuration(
         self, config: Optional[Union[CacheConfig, AdvancedCacheConfig]]
@@ -83,43 +93,40 @@ class CacheManager:
                         logger.warning(f"Config validation - {field}: {error}")
             return config
 
-        # Load configuration from file and environment with fallback chain
+        # Fast path: Use minimal default configuration for simple initialization
+        # This avoids expensive file/environment loading for basic use cases
+        logger.debug("No configuration provided, using minimal default configuration")
+        return CacheConfig(enabled=True, default_ttl=3600, max_size_mb=100)
+
+    def _load_cache_config(self) -> CacheConfig:
+        """Load cache configuration from file with fast path optimization.
+
+        Returns:
+            CacheConfig instance
+        """
+        # Fast path: Check for simple configuration files that don't require advanced features
         try:
-            logger.debug("Loading advanced configuration from file and environment")
-            advanced_config = AdvancedCacheConfig.from_config_and_environment()
+            from ..utils.config import Config
 
-            # Validate the loaded configuration
-            validation_errors = advanced_config.validate()
-            if validation_errors:
-                logger.warning(f"Advanced configuration has validation errors: {validation_errors}")
-                for field, error in validation_errors.items():
-                    logger.warning(f"Config validation - {field}: {error}")
+            config = Config()
 
-                # For critical errors, fall back to basic config
-                critical_errors = ["backend_type", "encryption_type"]
-                has_critical_errors = any(
-                    field in critical_errors for field in validation_errors.keys()
-                )
-                if has_critical_errors:
-                    logger.warning(
-                        "Critical configuration errors detected, falling back to basic configuration"
+            # If we have a simple cache config, use it directly
+            if hasattr(config, "cache") and config.cache:
+                cache_config = config.cache
+                # Check if this is a simple configuration that can use fast path
+                # Even with encryption enabled, if it's just file backend, we can use fast path
+                if isinstance(cache_config, dict) and cache_config.get("backend_type") == "file":
+                    logger.debug("Using simple file-based cache configuration (fast path)")
+                    return CacheConfig(
+                        enabled=cache_config.get("enabled", True),
+                        default_ttl=cache_config.get("default_ttl", 3600),
+                        max_size_mb=cache_config.get("max_size_mb", 100),
                     )
-                    return self._load_basic_cache_config()
+        except Exception:
+            pass
 
-            # Check if advanced features are actually configured (not just defaults)
-            if self._is_advanced_config_meaningful(advanced_config):
-                logger.debug("Using advanced configuration with meaningful settings")
-                return advanced_config
-            else:
-                logger.debug(
-                    "Advanced configuration contains only defaults, using basic configuration for compatibility"
-                )
-                return self._load_basic_cache_config()
-
-        except Exception as e:
-            logger.warning(f"Failed to load advanced configuration: {e}")
-            logger.debug("Falling back to basic cache configuration")
-            return self._load_basic_cache_config()
+        # Fall back to standard configuration loading
+        return self._load_cache_config_standard()
 
     def _is_advanced_config_meaningful(self, config: AdvancedCacheConfig) -> bool:
         """Check if advanced configuration has meaningful non-default settings.
@@ -163,7 +170,7 @@ class CacheManager:
             Basic CacheConfig instance
         """
         try:
-            return self._load_cache_config()
+            return self._load_cache_config_standard()
         except Exception as e:
             logger.error(f"Failed to load basic cache configuration: {e}")
             # Return minimal working configuration as last resort
@@ -195,7 +202,10 @@ class CacheManager:
             logger.debug("Path manager not needed for advanced configuration")
 
     def _initialize_advanced_features(
-        self, backend: Optional[CacheBackend], encryption_provider, base_cache_dir: Optional[str]
+        self,
+        backend: Optional[CacheBackend],
+        encryption_provider: Optional[Any],
+        base_cache_dir: Optional[str],
     ) -> None:
         """Initialize advanced cache features with comprehensive error handling and fallbacks.
 
@@ -224,7 +234,12 @@ class CacheManager:
                 self.backend = None
                 self.encryption_provider = None
 
-    def _initialize_backend_and_encryption(self, backend, encryption_provider, base_cache_dir):
+    def _initialize_backend_and_encryption(
+        self,
+        backend: Optional[CacheBackend],
+        encryption_provider: Optional[Any],
+        base_cache_dir: Optional[str],
+    ) -> None:
         """Initialize backend and encryption providers with comprehensive error handling.
 
         Args:
@@ -268,12 +283,18 @@ class CacheManager:
             return
 
         # Set file cache directory if provided for backward compatibility
-        if base_cache_dir and not self.config.file_cache_dir:
+        if (
+            isinstance(self.config, AdvancedCacheConfig)
+            and base_cache_dir
+            and not self.config.file_cache_dir
+        ):
             logger.debug(f"Setting file cache directory from base_cache_dir: {base_cache_dir}")
             self.config.file_cache_dir = base_cache_dir
 
         # Validate backend availability before attempting creation
-        if not BackendFactory.validate_backend_availability(self.config.backend_type):
+        if isinstance(
+            self.config, AdvancedCacheConfig
+        ) and not BackendFactory.validate_backend_availability(self.config.backend_type):
             logger.warning(f"Requested backend '{self.config.backend_type}' is not available")
             available_backends = BackendFactory.get_available_backends()
             logger.info(f"Available backends: {available_backends}")
@@ -281,29 +302,45 @@ class CacheManager:
             # If requested backend is not available, try to use file backend as fallback
             if "file" in available_backends:
                 logger.info("Falling back to file backend")
-                original_backend_type = self.config.backend_type
-                self.config.backend_type = "file"
-                try:
-                    self.backend = BackendFactory.create_backend(self.config)
-                    logger.info(
-                        f"Successfully fell back from {original_backend_type} to file backend"
-                    )
-                    return
-                except Exception as e:
-                    logger.error(f"File backend fallback also failed: {e}")
-                    raise CacheBackendError(f"Both {original_backend_type} and file backend failed")
+                if isinstance(self.config, AdvancedCacheConfig):
+                    original_backend_type = self.config.backend_type
+                    self.config.backend_type = "file"
+                    try:
+                        self.backend = BackendFactory.create_backend(self.config)
+                        logger.info(
+                            f"Successfully fell back from {original_backend_type} to file backend"
+                        )
+                        return
+                    except Exception as e:
+                        logger.error(f"File backend fallback also failed: {e}")
+                        raise CacheBackendError(
+                            f"Both {original_backend_type} and file backend failed"
+                        )
+                else:
+                    raise CacheBackendError("Cannot fallback backend type for basic configuration")
             else:
                 raise CacheBackendError("No available backends found")
 
         # Create backend with fallback mechanism
         try:
-            logger.debug(f"Creating {self.config.backend_type} backend")
-            self.backend = BackendFactory.create_backend_with_fallback(self.config)
+            if isinstance(self.config, AdvancedCacheConfig):
+                logger.debug(f"Creating {self.config.backend_type} backend")
+                self.backend = BackendFactory.create_backend_with_fallback(self.config)
+            else:
+                logger.debug("Creating basic file backend")
+                # For basic config, create file backend directly
+                from .backends.file import FileBackend
+
+                self.backend = FileBackend(cache_dir=base_cache_dir or ".cache")
             logger.debug(f"Successfully created backend: {type(self.backend).__name__}")
 
             # Test backend health if possible
             try:
-                if hasattr(self.backend, "health_check") and callable(self.backend.health_check):
+                if (
+                    self.backend is not None
+                    and hasattr(self.backend, "health_check")
+                    and callable(self.backend.health_check)
+                ):
                     if not self.backend.health_check():
                         logger.warning(
                             f"Backend health check failed for {type(self.backend).__name__}"
@@ -322,7 +359,7 @@ class CacheManager:
             logger.error(f"Unexpected error creating cache backend: {e}")
             raise CacheBackendError(f"Unexpected error creating backend: {e}")
 
-    def _initialize_encryption(self, encryption_provider) -> None:
+    def _initialize_encryption(self, encryption_provider: Optional[Any]) -> None:
         """Initialize encryption provider with fallback to no encryption.
 
         Args:
@@ -337,7 +374,7 @@ class CacheManager:
 
         # Determine encryption type from configuration
         encryption_type = "none"
-        if self.config.encryption_enabled:
+        if isinstance(self.config, AdvancedCacheConfig) and self.config.encryption_enabled:
             encryption_type = self.config.encryption_type
             logger.debug(f"Encryption enabled with type: {encryption_type}")
         else:
@@ -349,7 +386,7 @@ class CacheManager:
             logger.debug(f"Successfully created encryption provider: {encryption_type}")
 
             # Test encryption provider if it's not the no-encryption provider
-            if encryption_type != "none":
+            if encryption_type != "none" and self.encryption_provider is not None:
                 try:
                     # Test encrypt/decrypt cycle with simple data
                     test_data = {"test": "encryption_test"}
@@ -477,6 +514,10 @@ class CacheManager:
 
     def _get_with_backend(self, key: str) -> Optional[Any]:
         """Get data using backend and encryption providers with transparent encryption/decryption."""
+        if self.backend is None or self.encryption_provider is None:
+            logger.debug("Backend or encryption provider not initialized")
+            return None
+
         try:
             # Get encrypted data from backend
             encrypted_data = self.backend.get(key)
@@ -491,7 +532,8 @@ class CacheManager:
                 logger.warning(f"Failed to decrypt cache data for key {key}: {e}")
                 # Invalidate corrupted entry
                 try:
-                    self.backend.invalidate(key)
+                    if self.backend is not None:
+                        self.backend.invalidate(key)
                 except Exception:
                     pass
                 return None
@@ -511,8 +553,9 @@ class CacheManager:
                 if self._is_expired(cache_entry):
                     # Remove expired entry
                     try:
-                        self.backend.invalidate(key)
-                        logger.debug(f"Removed expired cache entry for key: {key}")
+                        if self.backend is not None:
+                            self.backend.invalidate(key)
+                            logger.debug(f"Removed expired cache entry for key: {key}")
                     except Exception as e:
                         logger.warning(f"Failed to invalidate expired cache entry {key}: {e}")
                     return None
@@ -620,6 +663,10 @@ class CacheManager:
 
     def _set_with_backend(self, key: str, data: Any, ttl: Optional[int], operation: str) -> None:
         """Set data using backend and encryption providers with transparent encryption."""
+        if self.backend is None or self.encryption_provider is None:
+            logger.debug("Backend or encryption provider not initialized")
+            return
+
         try:
             # Validate input data - allow dict, list, or other JSON-serializable types
             if not isinstance(data, (dict, list, str, int, float, bool, type(None))):
@@ -752,6 +799,10 @@ class CacheManager:
 
     def _invalidate_with_backend(self, key: Optional[str]) -> None:
         """Invalidate using backend with proper error handling."""
+        if self.backend is None:
+            logger.debug("Backend not initialized")
+            return
+
         try:
             self.backend.invalidate(key)
             if key is None:
@@ -857,6 +908,9 @@ class CacheManager:
         Returns:
             Number of entries actually removed
         """
+        if self.path_manager is None:
+            return 0
+
         try:
             cache_files = self.path_manager.list_cache_files()
             if not cache_files:
@@ -933,6 +987,9 @@ class CacheManager:
         Returns:
             Number of entries removed
         """
+        if self.path_manager is None:
+            return 0
+
         try:
             cache_files = self.path_manager.list_cache_files()
             if not cache_files:
@@ -1016,9 +1073,9 @@ class CacheManager:
             "backend_instance": type(self.backend).__name__ if self.backend else None,
             "encryption_enabled": getattr(self.config, "encryption_enabled", False),
             "encryption_type": getattr(self.config, "encryption_type", "none"),
-            "encryption_provider": type(self.encryption_provider).__name__
-            if self.encryption_provider
-            else None,
+            "encryption_provider": (
+                type(self.encryption_provider).__name__ if self.encryption_provider else None
+            ),
             "default_ttl": self.config.default_ttl,
             "max_size_mb": self.config.max_size_mb,
         }
@@ -1068,9 +1125,11 @@ class CacheManager:
                         {
                             "backend_type": self.config.backend_type,
                             "encryption_enabled": self.config.encryption_enabled,
-                            "encryption_type": self.config.encryption_type
-                            if self.config.encryption_enabled
-                            else "none",
+                            "encryption_type": (
+                                self.config.encryption_type
+                                if self.config.encryption_enabled
+                                else "none"
+                            ),
                         }
                     )
                 return backend_stats
@@ -1090,6 +1149,17 @@ class CacheManager:
 
     def _get_size_info_legacy(self) -> Dict[str, Any]:
         """Legacy cache size info implementation for backward compatibility."""
+        if self.path_manager is None:
+            return {
+                "error": "Path manager not available",
+                "current_size_bytes": 0,
+                "current_size_mb": 0,
+                "max_size_bytes": 0,
+                "max_size_mb": 0,
+                "usage_percentage": 0,
+                "is_over_limit": False,
+            }
+
         try:
             current_size_bytes = self.path_manager.get_cache_size()
             max_size_bytes = self.config.max_size_bytes()
@@ -1140,6 +1210,13 @@ class CacheManager:
 
     def _get_stats_with_backend(self) -> Dict[str, Any]:
         """Get cache statistics using backend."""
+        if self.backend is None:
+            return {
+                "enabled": self.config.enabled,
+                "backend_type": "unknown",
+                "error": "Backend not initialized",
+            }
+
         try:
             # Get backend-specific stats
             backend_stats = self.backend.get_stats()
@@ -1243,9 +1320,11 @@ class CacheManager:
                 "enabled": self.config.enabled,
                 "backend_type": "file",
                 "error": str(e),
-                "cache_directory": str(self.path_manager.get_cache_directory())
-                if hasattr(self, "path_manager") and self.path_manager
-                else "unknown",
+                "cache_directory": (
+                    str(self.path_manager.get_cache_directory())
+                    if hasattr(self, "path_manager") and self.path_manager
+                    else "unknown"
+                ),
             }
 
     def get_backend_info(self) -> Dict[str, Any]:
@@ -1347,9 +1426,9 @@ class CacheManager:
                 backend_healthy = self.backend.health_check()
                 health["checks"]["backend"] = {
                     "status": "pass" if backend_healthy else "fail",
-                    "message": "Backend is healthy"
-                    if backend_healthy
-                    else "Backend health check failed",
+                    "message": (
+                        "Backend is healthy" if backend_healthy else "Backend health check failed"
+                    ),
                 }
                 if not backend_healthy:
                     health["overall_healthy"] = False
@@ -1369,9 +1448,11 @@ class CacheManager:
                 encryption_available = self.encryption_provider.is_available()
                 health["checks"]["encryption"] = {
                     "status": "pass" if encryption_available else "fail",
-                    "message": "Encryption provider is available"
-                    if encryption_available
-                    else "Encryption provider not available",
+                    "message": (
+                        "Encryption provider is available"
+                        if encryption_available
+                        else "Encryption provider not available"
+                    ),
                 }
                 if not encryption_available:
                     health["overall_healthy"] = False
@@ -1389,7 +1470,7 @@ class CacheManager:
 
         return health
 
-    def _load_cache_config(self) -> CacheConfig:
+    def _load_cache_config_standard(self) -> CacheConfig:
         """Load cache configuration from Config class with graceful fallback to defaults.
 
         Returns:
@@ -1404,7 +1485,7 @@ class CacheManager:
             cache_config = CacheConfig(
                 enabled=cache_config_dict.get("enabled", True),
                 default_ttl=cache_config_dict.get("default_ttl", 3600),
-                operation_ttls=cache_config_dict.get("operation_ttls", {}),
+                operation_ttls=cache_config_dict.get("operation_ttl", {}),
                 max_size_mb=cache_config_dict.get("max_size_mb", 100),
             )
 

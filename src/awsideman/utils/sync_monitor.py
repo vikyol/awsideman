@@ -1,4 +1,5 @@
 """Sync monitoring component for AWS Identity Center status monitoring."""
+
 import logging
 import time
 from datetime import datetime, timedelta
@@ -161,7 +162,7 @@ class SyncMonitor(BaseStatusChecker):
         providers = []
 
         try:
-            client = self.idc_client.client
+            client = self.idc_client.get_sso_admin_client()
 
             # Get all Identity Center instances
             instances_response = client.list_instances()
@@ -215,7 +216,7 @@ class SyncMonitor(BaseStatusChecker):
             Dict containing identity source information
         """
         try:
-            client = self.idc_client.client
+            identity_store_client = self.idc_client.get_identity_store_client()
 
             # In AWS Identity Center, external identity sources are configured at the instance level
             # However, there's no direct API to list identity sources
@@ -226,7 +227,7 @@ class SyncMonitor(BaseStatusChecker):
 
             # Method 1: Check for external groups (groups not created directly in IDC)
             try:
-                groups_response = client.list_groups(
+                groups_response = identity_store_client.list_groups(
                     IdentityStoreId=instance_arn.replace("sso", "identitystore")
                 )
                 groups = groups_response.get("Groups", [])
@@ -260,7 +261,7 @@ class SyncMonitor(BaseStatusChecker):
 
             # Method 2: Check for external users
             try:
-                users_response = client.list_users(
+                users_response = identity_store_client.list_users(
                     IdentityStoreId=instance_arn.replace("sso", "identitystore")
                 )
                 users = users_response.get("Users", [])
@@ -568,7 +569,7 @@ class SyncMonitor(BaseStatusChecker):
                 return None
 
         try:
-            client = self.idc_client.client
+            identity_store_client = self.idc_client.get_identity_store_client()
             identity_store_id = instance_arn.replace("sso", "identitystore")
 
             latest_modification = None
@@ -576,7 +577,9 @@ class SyncMonitor(BaseStatusChecker):
             if detected_from == "groups":
                 # Check group modification times
                 try:
-                    groups_response = client.list_groups(IdentityStoreId=identity_store_id)
+                    groups_response = identity_store_client.list_groups(
+                        IdentityStoreId=identity_store_id
+                    )
                     groups = groups_response.get("Groups", [])
 
                     for group in groups:
@@ -607,7 +610,9 @@ class SyncMonitor(BaseStatusChecker):
             elif detected_from == "users":
                 # Check user modification times
                 try:
-                    users_response = client.list_users(IdentityStoreId=identity_store_id)
+                    users_response = identity_store_client.list_users(
+                        IdentityStoreId=identity_store_id
+                    )
                     users = users_response.get("Users", [])
 
                     for user in users:

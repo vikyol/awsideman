@@ -1,5 +1,7 @@
 """AWS client utilities for awsideman."""
-from typing import Any, Dict, List, Optional
+
+import logging
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 import boto3
 from botocore.exceptions import ClientError
@@ -16,19 +18,24 @@ from ..utils.models import (
     PolicyType,
 )
 
+logger = logging.getLogger(__name__)
+
 
 # Simple error handling functions for backward compatibility
-def handle_aws_error(error: ClientError, operation: str):
+def handle_aws_error(error: ClientError, operation: str) -> None:
     """Simple AWS error handler for backward compatibility."""
     console.print(f"[red]AWS Error in {operation}: {error}[/red]")
     raise error
 
 
-def with_retry(max_retries: int = 3):
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def with_retry(max_retries: int = 3) -> Callable[[F], F]:
     """Simple retry decorator for backward compatibility."""
 
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+    def decorator(func: F) -> F:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
@@ -38,9 +45,10 @@ def with_retry(max_retries: int = 3):
                     console.print(
                         f"[yellow]Retry {attempt + 1}/{max_retries} for {func.__name__}[/yellow]"
                     )
+            # This should never be reached, but mypy needs it
             return func(*args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
@@ -69,10 +77,10 @@ class AWSClientManager:
         self.region = region
         self.enable_caching = enable_caching
         self.session = None
-        self._cached_client = None
+        self._cached_client: Optional[Any] = None
         self._init_session()
 
-    def _init_session(self):
+    def _init_session(self) -> None:
         """Initialize the AWS session."""
         session_kwargs = {}
         if self.profile:
@@ -107,7 +115,9 @@ class AWSClientManager:
         Returns:
             AWS service client
         """
-        return self.session.client(service_name)
+        if self.session is None:
+            raise RuntimeError("Session not initialized")
+        return self.session.client(service_name)  # type: ignore[unreachable]
 
     def get_raw_identity_center_client(self) -> Any:
         """
@@ -136,7 +146,7 @@ class AWSClientManager:
         """
         return self.get_client("organizations")
 
-    def get_cached_client(self):
+    def get_cached_client(self) -> Any:
         """
         Get a cached AWS client wrapper.
 
@@ -211,7 +221,7 @@ class OrganizationsClientWrapper:
         self._client = None
 
     @property
-    def client(self):
+    def client(self) -> Any:
         """Get the Organizations client, creating it if needed."""
         if self._client is None:
             self._client = self.client_manager.get_raw_organizations_client()
@@ -230,9 +240,12 @@ class OrganizationsClientWrapper:
         """
         try:
             response = self.client.list_roots()
-            return response.get("Roots", [])
+            result = response.get("Roots", [])
+            return result if isinstance(result, list) else []
         except ClientError as e:
             handle_aws_error(e, "ListRoots")
+            # This should never be reached, but mypy needs it
+            return []
 
     @with_retry(max_retries=3)
     def list_organizational_units_for_parent(self, parent_id: str) -> List[Dict[str, Any]]:
@@ -250,9 +263,12 @@ class OrganizationsClientWrapper:
         """
         try:
             response = self.client.list_organizational_units_for_parent(ParentId=parent_id)
-            return response.get("OrganizationalUnits", [])
+            result = response.get("OrganizationalUnits", [])
+            return result if isinstance(result, list) else []
         except ClientError as e:
             handle_aws_error(e, "ListOrganizationalUnitsForParent")
+            # This should never be reached, but mypy needs it
+            return []
 
     @with_retry(max_retries=3)
     def list_accounts_for_parent(self, parent_id: str) -> List[Dict[str, Any]]:
@@ -270,9 +286,12 @@ class OrganizationsClientWrapper:
         """
         try:
             response = self.client.list_accounts_for_parent(ParentId=parent_id)
-            return response.get("Accounts", [])
+            result = response.get("Accounts", [])
+            return result if isinstance(result, list) else []
         except ClientError as e:
             handle_aws_error(e, "ListAccountsForParent")
+            # This should never be reached, but mypy needs it
+            return []
 
     @with_retry(max_retries=3)
     def describe_account(self, account_id: str) -> Dict[str, Any]:
@@ -290,9 +309,12 @@ class OrganizationsClientWrapper:
         """
         try:
             response = self.client.describe_account(AccountId=account_id)
-            return response.get("Account", {})
+            result = response.get("Account", {})
+            return result if isinstance(result, dict) else {}
         except ClientError as e:
             handle_aws_error(e, "DescribeAccount")
+            # This should never be reached, but mypy needs it
+            return {}
 
     @with_retry(max_retries=3)
     def list_tags_for_resource(self, resource_id: str) -> List[Dict[str, str]]:
@@ -310,9 +332,12 @@ class OrganizationsClientWrapper:
         """
         try:
             response = self.client.list_tags_for_resource(ResourceId=resource_id)
-            return response.get("Tags", [])
+            result = response.get("Tags", [])
+            return result if isinstance(result, list) else []
         except ClientError as e:
             handle_aws_error(e, "ListTagsForResource")
+            # This should never be reached, but mypy needs it
+            return []
 
     @with_retry(max_retries=3)
     def list_policies_for_target(self, target_id: str, filter_type: str) -> List[Dict[str, Any]]:
@@ -331,9 +356,12 @@ class OrganizationsClientWrapper:
         """
         try:
             response = self.client.list_policies_for_target(TargetId=target_id, Filter=filter_type)
-            return response.get("Policies", [])
+            result = response.get("Policies", [])
+            return result if isinstance(result, list) else []
         except ClientError as e:
             handle_aws_error(e, "ListPoliciesForTarget")
+            # This should never be reached, but mypy needs it
+            return []
 
     @with_retry(max_retries=3)
     def list_parents(self, child_id: str) -> List[Dict[str, Any]]:
@@ -351,9 +379,12 @@ class OrganizationsClientWrapper:
         """
         try:
             response = self.client.list_parents(ChildId=child_id)
-            return response.get("Parents", [])
+            result = response.get("Parents", [])
+            return result if isinstance(result, list) else []
         except ClientError as e:
             handle_aws_error(e, "ListParents")
+            # This should never be reached, but mypy needs it
+            return []
 
 
 class IdentityCenterClientWrapper:
@@ -370,13 +401,13 @@ class IdentityCenterClientWrapper:
         self._client = None
 
     @property
-    def client(self):
+    def client(self) -> Any:
         """Get the Identity Center client, creating it if needed."""
         if self._client is None:
             self._client = self.client_manager.get_raw_identity_center_client()
         return self._client
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         """Delegate all other method calls to the underlying client."""
         return getattr(self.client, name)
 
@@ -395,13 +426,13 @@ class IdentityStoreClientWrapper:
         self._client = None
 
     @property
-    def client(self):
+    def client(self) -> Any:
         """Get the Identity Store client, creating it if needed."""
         if self._client is None:
             self._client = self.client_manager.get_raw_identity_store_client()
         return self._client
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         """Delegate all other method calls to the underlying client."""
         return getattr(self.client, name)
 
@@ -896,11 +927,13 @@ def _calculate_ou_path(
         console.print(
             f"[yellow]Warning: Failed to calculate OU path for {account_id}: {str(e)}[/yellow]"
         )
+        logger.warning(f"ClientError calculating OU path for {account_id}: {str(e)}")
         return []
     except Exception as e:
         console.print(
             f"[yellow]Warning: Unexpected error calculating OU path for {account_id}: {str(e)}[/yellow]"
         )
+        logger.error(f"Unexpected error calculating OU path for {account_id}: {str(e)}")
         return []
 
 

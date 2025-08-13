@@ -1,5 +1,6 @@
 """Tests for status command functionality."""
-from datetime import datetime
+
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -55,7 +56,7 @@ def mock_aws_client():
 @pytest.fixture
 def sample_status_report():
     """Create a sample status report for testing."""
-    timestamp = datetime.utcnow()
+    timestamp = datetime.now(timezone.utc)
 
     health_status = HealthStatus(
         timestamp=timestamp,
@@ -186,7 +187,9 @@ class TestStatusCheckCommand:
         mock_orchestrator.return_value = mock_orchestrator_instance
 
         specific_result = BaseStatusResult(
-            timestamp=datetime.utcnow(), status=StatusLevel.HEALTHY, message="Health check passed"
+            timestamp=datetime.now(timezone.utc),
+            status=StatusLevel.HEALTHY,
+            message="Health check passed",
         )
         mock_asyncio_run.return_value = specific_result
 
@@ -616,7 +619,7 @@ class TestCleanupOrphanedCommand:
             principal_type=PrincipalType.USER,
             principal_name="deleted-user",
             error_message="User not found",
-            created_date=datetime.utcnow(),
+            created_date=datetime.now(timezone.utc),
         )
         orphaned_assignment.get_age_days = Mock(return_value=30)
 

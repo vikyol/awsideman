@@ -1,7 +1,8 @@
 """Orphaned assignment detection component for AWS Identity Center status monitoring."""
+
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from botocore.exceptions import ClientError
@@ -16,6 +17,29 @@ from .status_models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_timezone_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    Ensure a datetime is timezone-aware.
+
+    If the datetime is timezone-naive, assume it's UTC and make it timezone-aware.
+    If the datetime is already timezone-aware, return it as-is.
+
+    Args:
+        dt: Datetime to make timezone-aware
+
+    Returns:
+        Timezone-aware datetime or None if input is None
+    """
+    if dt is None:
+        return None
+
+    if dt.tzinfo is None:
+        # Assume naive datetime is UTC
+        return dt.replace(tzinfo=timezone.utc)
+
+    return dt
 
 
 class OrphanedAssignmentDetector(BaseStatusChecker):
@@ -50,7 +74,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             OrphanedAssignmentStatus: Orphaned assignment status with detected assignments
         """
         start_time = time.time()
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         try:
             # Detect orphaned assignments
@@ -129,8 +153,8 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         orphaned_assignments = []
 
         try:
-            client = self.idc_client.client
-            identity_store_client = self.idc_client.client_manager.get_identity_store_client()
+            client = self.idc_client.get_sso_admin_client()
+            identity_store_client = self.idc_client.get_identity_store_client()
 
             # Get all Identity Center instances
             instances_response = client.list_instances()
@@ -259,7 +283,9 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             for assignment in assignments:
                 principal_id = assignment.get("PrincipalId")
                 principal_type = assignment.get("PrincipalType")
-                created_date = assignment.get("CreatedDate", datetime.utcnow())
+                created_date = _ensure_timezone_aware(
+                    assignment.get("CreatedDate")
+                ) or datetime.now(timezone.utc)
 
                 if not principal_id or not principal_type:
                     continue
@@ -513,7 +539,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             return cleanup_result
 
         try:
-            client = self.idc_client.client
+            client = self.idc_client.get_sso_admin_client()
 
             for assignment in assignments:
                 try:

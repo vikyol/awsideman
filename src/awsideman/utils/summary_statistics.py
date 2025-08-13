@@ -1,8 +1,9 @@
 """Summary statistics component for AWS Identity Center status monitoring."""
+
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Set
 
 from botocore.exceptions import ClientError
@@ -41,7 +42,7 @@ class SummaryStatisticsCollector(BaseStatusChecker):
             BaseStatusResult: Status result containing summary statistics
         """
         start_time = time.time()
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         try:
             self.logger.info("Starting summary statistics collection")
@@ -95,7 +96,7 @@ class SummaryStatisticsCollector(BaseStatusChecker):
         Returns:
             SummaryStatistics: Complete summary statistics object
         """
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         # Initialize statistics with defaults
         stats = SummaryStatistics(

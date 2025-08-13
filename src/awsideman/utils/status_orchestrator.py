@@ -1,8 +1,9 @@
 """Status orchestrator for coordinating AWS Identity Center status checks."""
+
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .health_checker import HealthChecker
@@ -79,7 +80,7 @@ class StatusOrchestrator:
             StatusReport: Complete status report with results from all components
         """
         start_time = time.time()
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         self.logger.info("Starting comprehensive status check")
 
@@ -188,7 +189,7 @@ class StatusOrchestrator:
         component = self._components.get(check_type)
         if not component:
             error_result = BaseStatusResult(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 status=StatusLevel.CRITICAL,
                 message=f"Unknown status check type: {check_type}",
                 errors=[f"Status checker '{check_type}' not found"],
@@ -209,7 +210,7 @@ class StatusOrchestrator:
             self.logger.error(f"Error in specific status check '{check_type}': {str(e)}")
 
             error_result = BaseStatusResult(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 status=StatusLevel.CRITICAL,
                 message=f"Status check '{check_type}' failed: {str(e)}",
                 errors=[str(e)],
@@ -399,7 +400,7 @@ class StatusOrchestrator:
 
         # All attempts failed, create error result
         error_result = BaseStatusResult(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.CRITICAL,
             message=f"Component '{component_name}' failed after {self.config.retry_attempts + 1} attempts: {last_error}",
             errors=[last_error] if last_error else [],
@@ -573,7 +574,7 @@ class StatusOrchestrator:
             else:
                 # Handle collection failure
                 self.logger.warning("Summary statistics collection failed, using defaults")
-                summary_stats.last_updated = datetime.utcnow()
+                summary_stats.last_updated = datetime.now(timezone.utc)
 
                 # Track the failure
                 if "summary" not in self._component_failures:
@@ -588,7 +589,7 @@ class StatusOrchestrator:
             self._component_failures["summary"].append(str(e))
 
             # Set default values
-            summary_stats.last_updated = datetime.utcnow()
+            summary_stats.last_updated = datetime.now(timezone.utc)
             raise
 
     def _create_default_health_status(self, timestamp: datetime) -> HealthStatus:

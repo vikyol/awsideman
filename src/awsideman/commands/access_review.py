@@ -7,7 +7,7 @@ for specified accounts or principals.
 
 import csv
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -104,7 +104,7 @@ def export_account(
         if output_format == "json":
             output_data = {
                 "account_id": account_id,
-                "export_timestamp": datetime.utcnow().isoformat(),
+                "export_timestamp": datetime.now(timezone.utc).isoformat(),
                 "total_assignments": len(enriched_assignments),
                 "assignments": enriched_assignments,
             }
@@ -199,7 +199,7 @@ def export_principal(
                 "principal_name": principal_name,
                 "principal_id": principal_id,
                 "principal_type": resolved_type,
-                "export_timestamp": datetime.utcnow().isoformat(),
+                "export_timestamp": datetime.now(timezone.utc).isoformat(),
                 "total_assignments": len(enriched_assignments),
                 "assignments": enriched_assignments,
             }
@@ -296,7 +296,7 @@ def export_permission_set(
             output_data = {
                 "permission_set_name": permission_set_name,
                 "permission_set_arn": permission_set_arn,
-                "export_timestamp": datetime.utcnow().isoformat(),
+                "export_timestamp": datetime.now(timezone.utc).isoformat(),
                 "total_assignments": len(enriched_assignments),
                 "assignments": enriched_assignments,
             }
@@ -599,7 +599,7 @@ def _enrich_assignment(
 
         # Add status (assume ACTIVE for now, could be enhanced with provisioning status)
         enriched["status"] = "ACTIVE"
-        enriched["export_timestamp"] = datetime.utcnow().isoformat()
+        enriched["export_timestamp"] = datetime.now(timezone.utc).isoformat()
 
         return enriched
 

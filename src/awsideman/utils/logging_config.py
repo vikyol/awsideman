@@ -1,4 +1,5 @@
 """Comprehensive logging configuration for AWS Identity Center status monitoring."""
+
 import json
 import logging
 import logging.handlers
@@ -53,7 +54,7 @@ class LoggingConfig:
         default_factory=lambda: [r"password", r"secret", r"token", r"key", r"credential"]
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
         if self.sensitive_data_patterns is None:
             self.sensitive_data_patterns = []
@@ -62,7 +63,7 @@ class LoggingConfig:
 class SensitiveDataFilter(logging.Filter):
     """Filter to redact sensitive data from log messages."""
 
-    def __init__(self, patterns: List[str]):
+    def __init__(self, patterns: List[str]) -> None:
         """
         Initialize the filter with sensitive data patterns.
 
@@ -108,7 +109,7 @@ class SensitiveDataFilter(logging.Filter):
 class StructuredFormatter(logging.Formatter):
     """Custom formatter for structured logging with JSON output."""
 
-    def __init__(self, include_extra: bool = True):
+    def __init__(self, include_extra: bool = True) -> None:
         """
         Initialize the structured formatter.
 
@@ -209,7 +210,7 @@ class ColoredConsoleFormatter(logging.Formatter):
         "RESET": "\033[0m",  # Reset
     }
 
-    def __init__(self, use_colors: bool = True):
+    def __init__(self, use_colors: bool = True) -> None:
         """
         Initialize the colored formatter.
 
@@ -267,7 +268,7 @@ class ColoredConsoleFormatter(logging.Formatter):
 class PerformanceFilter(logging.Filter):
     """Filter to add performance metrics to log records."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the performance filter."""
         super().__init__()
         self.start_times: Dict[str, float] = {}
@@ -355,6 +356,7 @@ class StatusLoggingManager:
         handler = logging.StreamHandler(sys.stdout)
         handler.setLevel(getattr(logging, self.config.level.value))
 
+        formatter: logging.Formatter
         if self.config.format_type == LogFormat.JSON:
             formatter = StructuredFormatter()
         elif self.config.console_colors:
@@ -389,6 +391,7 @@ class StatusLoggingManager:
 
         handler.setLevel(getattr(logging, self.config.level.value))
 
+        formatter: logging.Formatter
         if self.config.format_type == LogFormat.JSON or self.config.enable_structured_logging:
             formatter = StructuredFormatter()
         else:

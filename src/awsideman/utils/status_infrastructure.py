@@ -1,9 +1,10 @@
 """Core infrastructure classes for AWS Identity Center status monitoring."""
+
 import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Type
 
 from .status_models import (
@@ -29,7 +30,7 @@ class StatusCheckError(Exception):
         super().__init__(message)
         self.component = component
         self.details = details or {}
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
 
 
 class ConnectionError(StatusCheckError):
@@ -171,7 +172,7 @@ class BaseStatusChecker(ABC):
             status = StatusLevel.CRITICAL
 
         result = BaseStatusResult(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=status,
             message=str(error),
             details=error.details if hasattr(error, "details") else {},
@@ -185,7 +186,7 @@ class BaseStatusChecker(ABC):
             )
             result.add_detail(
                 "error_timestamp",
-                error.timestamp if hasattr(error, "timestamp") else datetime.utcnow(),
+                error.timestamp if hasattr(error, "timestamp") else datetime.now(timezone.utc),
             )
 
         return result
@@ -287,7 +288,7 @@ class StatusOrchestrator:
         Returns:
             StatusReport: Complete status report
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         self.logger.info("Starting comprehensive status check")
 
         # Initialize default status components
@@ -326,7 +327,7 @@ class StatusOrchestrator:
                 health_status, provisioning_status, orphaned_status, sync_status, summary_stats
             )
 
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
 
         # Create comprehensive report
@@ -356,7 +357,7 @@ class StatusOrchestrator:
         checker = self.get_checker(check_type)
         if not checker:
             return BaseStatusResult(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 status=StatusLevel.CRITICAL,
                 message=f"Unknown status check type: {check_type}",
                 errors=[f"Status checker '{check_type}' not found"],

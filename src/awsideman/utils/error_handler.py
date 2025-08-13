@@ -1,4 +1,5 @@
 """Comprehensive error handling system for AWS Identity Center status monitoring."""
+
 import asyncio
 import logging
 import traceback
@@ -690,6 +691,14 @@ def handle_network_error(exception: Exception, operation: str = "NetworkOperatio
 
     console = Console()
     logger = logging.getLogger(__name__)
+
+    # Validate that exception is actually an exception
+    if not isinstance(exception, Exception):
+        logger.error(
+            f"Invalid exception type passed to handle_network_error: {type(exception)} = {exception}"
+        )
+        console.print("[red]Network Error: Invalid error type passed to error handler[/red]")
+        return
 
     context = ErrorContext(component="awsideman", operation=operation)
 

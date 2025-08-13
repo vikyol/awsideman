@@ -1,6 +1,7 @@
 """Data models for AWS Identity Center status monitoring and health checking."""
+
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -68,11 +69,11 @@ class BaseStatusResult:
     details: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.details is None:
+        if self.details is None:  # type: ignore
             self.details = {}
-        if self.errors is None:
+        if self.errors is None:  # type: ignore
             self.errors = []
 
     def is_healthy(self) -> bool:
@@ -183,14 +184,14 @@ class ProvisioningStatus(BaseStatusResult):
     pending_count: int = 0
     estimated_completion: Optional[datetime] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize parent and ensure collections are properly set."""
         super().__post_init__()
-        if self.active_operations is None:
+        if self.active_operations is None:  # type: ignore
             self.active_operations = []
-        if self.failed_operations is None:
+        if self.failed_operations is None:  # type: ignore
             self.failed_operations = []
-        if self.completed_operations is None:
+        if self.completed_operations is None:  # type: ignore
             self.completed_operations = []
 
     def get_total_operations(self) -> int:
@@ -254,7 +255,7 @@ class OrphanedAssignment:
 
     def get_age_days(self) -> int:
         """Get the age of the assignment in days."""
-        delta = datetime.utcnow() - self.created_date
+        delta = datetime.now(timezone.utc) - self.created_date
         return delta.days
 
 
@@ -274,11 +275,11 @@ class CleanupResult:
     cleaned_assignments: List[str] = field(default_factory=list)
     duration_seconds: float = 0.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.cleanup_errors is None:
+        if self.cleanup_errors is None:  # type: ignore
             self.cleanup_errors = []
-        if self.cleaned_assignments is None:
+        if self.cleaned_assignments is None:  # type: ignore
             self.cleaned_assignments = []
 
     def get_success_rate(self) -> float:
@@ -310,12 +311,12 @@ class OrphanedAssignmentStatus(BaseStatusResult):
     last_cleanup: Optional[datetime] = None
     cleanup_history: List[CleanupResult] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize parent and ensure collections are properly set."""
         super().__post_init__()
-        if self.orphaned_assignments is None:
+        if self.orphaned_assignments is None:  # type: ignore
             self.orphaned_assignments = []
-        if self.cleanup_history is None:
+        if self.cleanup_history is None:  # type: ignore
             self.cleanup_history = []
 
     def get_orphaned_count(self) -> int:
@@ -362,7 +363,7 @@ class SyncStatus:
         if not self.last_sync_time:
             return True
 
-        threshold = datetime.utcnow() - timedelta(hours=threshold_hours)
+        threshold = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
         return self.last_sync_time < threshold
 
     def has_sync_errors(self) -> bool:
@@ -374,7 +375,7 @@ class SyncStatus:
         if not self.last_sync_time:
             return None
 
-        delta = datetime.utcnow() - self.last_sync_time
+        delta = datetime.now(timezone.utc) - self.last_sync_time
         return delta.total_seconds() / 3600
 
     def is_healthy(self) -> bool:
@@ -396,10 +397,10 @@ class SyncMonitorStatus(BaseStatusResult):
     providers_healthy: int = 0
     providers_with_errors: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize parent and calculate provider counts."""
         super().__post_init__()
-        if self.sync_providers is None:
+        if self.sync_providers is None:  # type: ignore
             self.sync_providers = []
 
         self.providers_configured = len(self.sync_providers)
@@ -444,11 +445,11 @@ class ResourceStatus:
     health_details: Dict[str, Any] = field(default_factory=dict)
     error_message: Optional[str] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.configuration is None:
+        if self.configuration is None:  # type: ignore
             self.configuration = {}
-        if self.health_details is None:
+        if self.health_details is None:  # type: ignore
             self.health_details = {}
 
     def is_healthy(self) -> bool:
@@ -468,7 +469,7 @@ class ResourceStatus:
         if not self.last_updated:
             return None
 
-        delta = datetime.utcnow() - self.last_updated
+        delta = datetime.now(timezone.utc) - self.last_updated
         return delta.days
 
 
@@ -485,10 +486,10 @@ class ResourceInspectionStatus(BaseStatusResult):
     similar_resources: List[str] = field(default_factory=list)
     inspection_type: Optional[ResourceType] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize parent and ensure collections are properly set."""
         super().__post_init__()
-        if self.similar_resources is None:
+        if self.similar_resources is None:  # type: ignore
             self.similar_resources = []
 
     def resource_found(self) -> bool:
@@ -501,7 +502,7 @@ class ResourceInspectionStatus(BaseStatusResult):
 
     def get_resource_summary(self) -> str:
         """Get a summary of the resource inspection."""
-        if self.resource_found():
+        if self.resource_found() and self.target_resource is not None:
             return f"Found: {self.target_resource.get_display_name()}"
         elif self.has_suggestions():
             return f"Not found, {len(self.similar_resources)} similar resources available"
@@ -528,13 +529,13 @@ class SummaryStatistics:
     group_creation_dates: Dict[str, datetime] = field(default_factory=dict)
     permission_set_creation_dates: Dict[str, datetime] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.user_creation_dates is None:
+        if self.user_creation_dates is None:  # type: ignore
             self.user_creation_dates = {}
-        if self.group_creation_dates is None:
+        if self.group_creation_dates is None:  # type: ignore
             self.group_creation_dates = {}
-        if self.permission_set_creation_dates is None:
+        if self.permission_set_creation_dates is None:  # type: ignore
             self.permission_set_creation_dates = {}
 
     def get_total_principals(self) -> int:
@@ -584,9 +585,9 @@ class StatusReport:
     resource_inspections: List[ResourceInspectionStatus] = field(default_factory=list)
     check_duration_seconds: float = 0.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.resource_inspections is None:
+        if self.resource_inspections is None:  # type: ignore
             self.resource_inspections = []
 
     def get_overall_status_level(self) -> StatusLevel:
@@ -673,9 +674,9 @@ class FormattedOutput:
     metadata: Dict[str, Any] = field(default_factory=dict)
     generated_at: datetime = field(default_factory=datetime.utcnow)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure metadata is properly initialized."""
-        if self.metadata is None:
+        if self.metadata is None:  # type: ignore
             self.metadata = {}
 
     def get_content_length(self) -> int:
