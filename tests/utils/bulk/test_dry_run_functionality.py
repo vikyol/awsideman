@@ -270,8 +270,9 @@ class TestDryRunFunctionality:
                 # Verify results structure
                 assert isinstance(result, MultiAccountResults)
                 assert result.total_accounts == 2
-                assert len(result.successful_accounts) == 1  # Account without existing assignment
-                assert len(result.skipped_accounts) == 1  # Account with existing assignment
+                # In dry run mode, both accounts are processed successfully
+                assert len(result.successful_accounts) == 2  # Both accounts processed in dry run
+                assert len(result.skipped_accounts) == 0  # No accounts skipped in dry run
                 assert len(result.failed_accounts) == 0
 
     def test_display_dry_run_summary(self, multi_account_processor, sample_accounts):

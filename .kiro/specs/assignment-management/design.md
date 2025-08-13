@@ -120,12 +120,12 @@ def revoke_assignment(
 def resolve_principal_info(identity_store_id: str, principal_id: str, identity_store_client) -> dict:
     """
     Resolve principal information (name, type) from principal ID.
-    
+
     Args:
         identity_store_id: Identity store ID
         principal_id: Principal ID to resolve
         identity_store_client: Identity store client
-        
+
     Returns:
         Dictionary containing principal information
     """
@@ -137,12 +137,12 @@ def resolve_principal_info(identity_store_id: str, principal_id: str, identity_s
 def resolve_permission_set_info(instance_arn: str, permission_set_arn: str, sso_admin_client) -> dict:
     """
     Resolve permission set information from ARN.
-    
+
     Args:
         instance_arn: SSO instance ARN
         permission_set_arn: Permission set ARN
         sso_admin_client: SSO admin client
-        
+
     Returns:
         Dictionary containing permission set information
     """

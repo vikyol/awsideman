@@ -61,4 +61,3 @@ The Permission Set assignment management feature for awsideman CLI will enable a
 2. WHEN displaying output THEN the system SHALL use consistent formatting and styling with other commands
 3. WHEN handling errors THEN the system SHALL use the same error handling patterns as existing commands
 4. WHEN providing help THEN the system SHALL display usage information in the same format as other commands
-

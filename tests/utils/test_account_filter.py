@@ -460,6 +460,25 @@ class TestAccountFilter:
 
         assert filter_obj._account_matches_all_tag_filters(account) is False
 
+    def test_validation_error_details(self):
+        """Test that validation errors contain proper details."""
+        # Test empty expression
+        filter_obj = AccountFilter("", self.mock_org_client)
+        errors = filter_obj.validate_filter()
+
+        assert len(errors) == 1
+        assert errors[0].field == "filter_options"
+        assert errors[0].value == "no_filters_specified"
+        assert "Must specify at least one filter option" in errors[0].message
+
+        # Test invalid wildcard
+        filter_obj = AccountFilter("invalid_wildcard", self.mock_org_client)
+        errors = filter_obj.validate_filter()
+
+        assert len(errors) == 1
+        assert errors[0].field == "filter_expression"
+        assert errors[0].value == "invalid_wildcard"
+
 
 class TestAccountFilterAdvancedFiltering:
     """Tests for advanced filtering options (OU and pattern filtering)."""
@@ -850,25 +869,6 @@ class TestAccountFilterEdgeCases:
             self.mock_org_client,
         )
         assert filter_obj._account_matches_all_tag_filters(account) is True
-
-    def test_validation_error_details(self):
-        """Test that validation errors contain proper details."""
-        # Test empty expression
-        filter_obj = AccountFilter("", self.mock_org_client)
-        errors = filter_obj.validate_filter()
-
-        assert len(errors) == 1
-        assert errors[0].field == "filter_expression"
-        assert errors[0].value == ""
-        assert "Filter expression cannot be empty" in errors[0].message
-
-        # Test invalid wildcard
-        filter_obj = AccountFilter("invalid_wildcard", self.mock_org_client)
-        errors = filter_obj.validate_filter()
-
-        assert len(errors) == 1
-        assert errors[0].field == "filter_expression"
-        assert errors[0].value == "invalid_wildcard"
 
     def test_filter_type_determination_edge_cases(self):
         """Test filter type determination for edge cases."""

@@ -538,7 +538,7 @@ class TestBuildOrganizationHierarchy:
         with pytest.raises(ClientError):
             build_organization_hierarchy(mock_organizations_client)
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_build_hierarchy_partial_failure(self, mock_console, mock_organizations_client):
         """Test hierarchy building with partial failures."""
         # Mock successful root listing
@@ -639,7 +639,7 @@ class TestBuildChildrenRecursive:
         assert account.id == "111111111111"
         assert account.name == "dev-account"
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_build_children_ou_failure(self, mock_console, mock_organizations_client):
         """Test children building with OU processing failure."""
         parent = OrgNode("r-1234567890", "Root", NodeType.ROOT, [])
@@ -662,7 +662,7 @@ class TestBuildChildrenRecursive:
         assert parent.children[0].id == "ou-good"
         mock_console.print.assert_called()
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_build_children_account_failure(self, mock_console, mock_organizations_client):
         """Test children building with account processing failure."""
         parent = OrgNode("r-1234567890", "Root", NodeType.ROOT, [])
@@ -682,7 +682,7 @@ class TestBuildChildrenRecursive:
         assert parent.children[0].id == "111111111111"
         mock_console.print.assert_called()
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_build_children_api_failure(self, mock_console, mock_organizations_client):
         """Test children building with API failure."""
         parent = OrgNode("r-1234567890", "Root", NodeType.ROOT, [])
@@ -722,7 +722,7 @@ class TestGetAccountDetails:
         ]
 
         # Mock OU path calculation
-        with patch("src.awsideman.utils.aws_client._calculate_ou_path") as mock_calc_path:
+        with patch("src.awsideman.aws_clients.manager._calculate_ou_path") as mock_calc_path:
             mock_calc_path.return_value = ["Root", "Engineering"]
 
             # Get account details
@@ -756,7 +756,7 @@ class TestGetAccountDetails:
         }
         mock_organizations_client.list_tags_for_resource.return_value = []
 
-        with patch("src.awsideman.utils.aws_client._calculate_ou_path") as mock_calc_path:
+        with patch("src.awsideman.aws_clients.manager._calculate_ou_path") as mock_calc_path:
             mock_calc_path.return_value = []
 
             details = get_account_details(mock_organizations_client, "111111111111")
@@ -777,7 +777,7 @@ class TestGetAccountDetails:
         }
         mock_organizations_client.list_tags_for_resource.return_value = []
 
-        with patch("src.awsideman.utils.aws_client._calculate_ou_path") as mock_calc_path:
+        with patch("src.awsideman.aws_clients.manager._calculate_ou_path") as mock_calc_path:
             mock_calc_path.return_value = []
 
             details = get_account_details(mock_organizations_client, "111111111111")
@@ -785,7 +785,7 @@ class TestGetAccountDetails:
             # Should use datetime.min for missing timestamp
             assert details.joined_timestamp == datetime.min
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_get_account_details_tags_failure(self, mock_console, mock_organizations_client):
         """Test account details with tags retrieval failure."""
         mock_organizations_client.describe_account.return_value = {
@@ -797,7 +797,7 @@ class TestGetAccountDetails:
         }
         mock_organizations_client.list_tags_for_resource.side_effect = Exception("Tags error")
 
-        with patch("src.awsideman.utils.aws_client._calculate_ou_path") as mock_calc_path:
+        with patch("src.awsideman.aws_clients.manager._calculate_ou_path") as mock_calc_path:
             mock_calc_path.return_value = []
 
             details = get_account_details(mock_organizations_client, "111111111111")
@@ -861,7 +861,7 @@ class TestCalculateOuPath:
 
         assert path == []
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_calculate_ou_path_client_error(self, mock_console, mock_organizations_client):
         """Test OU path calculation with client error."""
         mock_organizations_client.list_parents.side_effect = ClientError(
@@ -873,7 +873,7 @@ class TestCalculateOuPath:
         assert path == []
         mock_console.print.assert_called()
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_calculate_ou_path_root_name_failure(self, mock_console, mock_organizations_client):
         """Test OU path calculation with root name retrieval failure."""
         mock_organizations_client.list_parents.return_value = [
@@ -964,7 +964,7 @@ class TestSearchAccounts:
         """Test successful account search."""
         # Mock get_all_accounts_in_organization
         with patch(
-            "src.awsideman.utils.aws_client._get_all_accounts_in_organization"
+            "src.awsideman.aws_clients.manager._get_all_accounts_in_organization"
         ) as mock_get_all:
             mock_get_all.return_value = [
                 {"Id": "111111111111", "Name": "dev-account"},
@@ -973,7 +973,7 @@ class TestSearchAccounts:
             ]
 
             # Mock get_account_details
-            with patch("src.awsideman.utils.aws_client.get_account_details") as mock_get_details:
+            with patch("src.awsideman.aws_clients.manager.get_account_details") as mock_get_details:
                 mock_get_details.side_effect = [
                     AccountDetails(
                         id="111111111111",
@@ -1014,14 +1014,14 @@ class TestSearchAccounts:
     def test_search_accounts_case_insensitive(self, mock_organizations_client):
         """Test case-insensitive search."""
         with patch(
-            "src.awsideman.utils.aws_client._get_all_accounts_in_organization"
+            "src.awsideman.aws_clients.manager._get_all_accounts_in_organization"
         ) as mock_get_all:
             mock_get_all.return_value = [
                 {"Id": "111111111111", "Name": "DEV-Account"},
                 {"Id": "222222222222", "Name": "prod-account"},
             ]
 
-            with patch("src.awsideman.utils.aws_client.get_account_details") as mock_get_details:
+            with patch("src.awsideman.aws_clients.manager.get_account_details") as mock_get_details:
                 mock_get_details.return_value = AccountDetails(
                     id="111111111111",
                     name="DEV-Account",
@@ -1041,14 +1041,14 @@ class TestSearchAccounts:
     def test_search_accounts_with_ou_filter(self, mock_organizations_client):
         """Test search with OU filter."""
         with patch(
-            "src.awsideman.utils.aws_client._get_all_accounts_in_organization"
+            "src.awsideman.aws_clients.manager._get_all_accounts_in_organization"
         ) as mock_get_all:
             mock_get_all.return_value = [
                 {"Id": "111111111111", "Name": "dev-account"},
                 {"Id": "222222222222", "Name": "dev-account-2"},
             ]
 
-            with patch("src.awsideman.utils.aws_client.get_account_details") as mock_get_details:
+            with patch("src.awsideman.aws_clients.manager.get_account_details") as mock_get_details:
                 mock_get_details.side_effect = [
                     AccountDetails(
                         id="111111111111",
@@ -1080,14 +1080,14 @@ class TestSearchAccounts:
     def test_search_accounts_with_tag_filter(self, mock_organizations_client):
         """Test search with tag filter."""
         with patch(
-            "src.awsideman.utils.aws_client._get_all_accounts_in_organization"
+            "src.awsideman.aws_clients.manager._get_all_accounts_in_organization"
         ) as mock_get_all:
             mock_get_all.return_value = [
                 {"Id": "111111111111", "Name": "dev-account"},
                 {"Id": "222222222222", "Name": "dev-account-2"},
             ]
 
-            with patch("src.awsideman.utils.aws_client.get_account_details") as mock_get_details:
+            with patch("src.awsideman.aws_clients.manager.get_account_details") as mock_get_details:
                 mock_get_details.side_effect = [
                     AccountDetails(
                         id="111111111111",
@@ -1118,18 +1118,18 @@ class TestSearchAccounts:
                 assert len(results) == 1
                 assert results[0].id == "111111111111"
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_search_accounts_account_details_failure(self, mock_console, mock_organizations_client):
         """Test search with account details retrieval failure."""
         with patch(
-            "src.awsideman.utils.aws_client._get_all_accounts_in_organization"
+            "src.awsideman.aws_clients.manager._get_all_accounts_in_organization"
         ) as mock_get_all:
             mock_get_all.return_value = [
                 {"Id": "111111111111", "Name": "dev-account"},
                 {"Id": "222222222222", "Name": "good-account"},
             ]
 
-            with patch("src.awsideman.utils.aws_client.get_account_details") as mock_get_details:
+            with patch("src.awsideman.aws_clients.manager.get_account_details") as mock_get_details:
 
                 def mock_details_side_effect(client, account_id):
                     if account_id == "111111111111":
@@ -1163,7 +1163,7 @@ class TestGetAllAccountsInOrganization:
     def test_get_all_accounts_success(self, mock_organizations_client):
         """Test successful retrieval of all accounts."""
         # Mock build_organization_hierarchy
-        with patch("src.awsideman.utils.aws_client.build_organization_hierarchy") as mock_build:
+        with patch("src.awsideman.aws_clients.manager.build_organization_hierarchy") as mock_build:
             # Create a mock hierarchy
             account1 = OrgNode("111111111111", "dev-account", NodeType.ACCOUNT, [])
             account2 = OrgNode("222222222222", "prod-account", NodeType.ACCOUNT, [])
@@ -1186,10 +1186,10 @@ class TestGetAllAccountsInOrganization:
             assert accounts[0]["Id"] == "111111111111"
             assert accounts[1]["Id"] == "222222222222"
 
-    @patch("src.awsideman.utils.aws_client.console")
+    @patch("src.awsideman.aws_clients.manager.console")
     def test_get_all_accounts_describe_failure(self, mock_console, mock_organizations_client):
         """Test retrieval with describe_account failure."""
-        with patch("src.awsideman.utils.aws_client.build_organization_hierarchy") as mock_build:
+        with patch("src.awsideman.aws_clients.manager.build_organization_hierarchy") as mock_build:
             account1 = OrgNode("111111111111", "dev-account", NodeType.ACCOUNT, [])
             account2 = OrgNode("222222222222", "prod-account", NodeType.ACCOUNT, [])
             root = OrgNode("r-1234", "Root", NodeType.ROOT, [account1, account2])
@@ -1272,7 +1272,7 @@ class TestEdgeCasesAndMalformedData:
         mock_organizations_client.list_parents.side_effect = mock_list_parents
 
         # The function should handle this gracefully
-        with patch("src.awsideman.utils.aws_client.console"):
+        with patch("src.awsideman.aws_clients.manager.console"):
             path = _calculate_ou_path(mock_organizations_client, "111111111111")
             # Should return empty path when error occurs
             assert path == []

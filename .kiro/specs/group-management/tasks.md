@@ -12,7 +12,7 @@
     - Add profile parameter for AWS credentials
     - Format and display results in a table
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
-  
+
   - [x] 2.2 Create unit tests for list_groups
     - Test successful listing
     - Test with filters
@@ -27,7 +27,7 @@
     - Format and display detailed group information
     - Add profile parameter for AWS credentials
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
-  
+
   - [x] 3.2 Create unit tests for get_group
     - Test successful retrieval by ID
     - Test successful retrieval by name
@@ -41,7 +41,7 @@
     - Format and display the created group details
     - Add profile parameter for AWS credentials
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
-  
+
   - [x] 4.2 Create unit tests for create_group
     - Test successful creation
     - Test error handling for duplicate groups
@@ -55,7 +55,7 @@
     - Format and display the updated group details
     - Add profile parameter for AWS credentials
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
-  
+
   - [x] 5.2 Create unit tests for update_group
     - Test successful update
     - Test error handling for non-existent groups
@@ -68,7 +68,7 @@
     - Display appropriate success or error messages
     - Add profile parameter for AWS credentials
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
-  
+
   - [x] 6.2 Create unit tests for delete_group
     - Test successful deletion
     - Test error handling for non-existent groups
@@ -81,21 +81,21 @@
     - Format and display members in a table
     - Add profile parameter for AWS credentials
     - _Requirements: 6.3, 6.4, 6.5, 6.6_
-  
+
   - [x] 7.2 Implement add_member function
     - Create function to add a user to a group
     - Support identifying users by ID, username, or email
     - Display appropriate success or error messages
     - Add profile parameter for AWS credentials
     - _Requirements: 6.1, 6.4, 6.5, 6.6_
-  
+
   - [x] 7.3 Implement remove_member function
     - Create function to remove a user from a group
     - Support identifying users by ID, username, or email
     - Display appropriate success or error messages
     - Add profile parameter for AWS credentials
     - _Requirements: 6.2, 6.4, 6.5, 6.6_
-  
+
   - [x] 7.4 Create unit tests for membership functions
     - Test list_members with pagination
     - Test add_member with different user identifiers
@@ -108,17 +108,17 @@
     - Handle common error codes with clear messages
     - Provide guidance for resolving issues
     - _Requirements: 7.1, 7.4_
-  
+
   - [x] 8.2 Add input validation for all commands
     - Validate required parameters
     - Provide helpful error messages for invalid inputs
     - _Requirements: 7.2, 7.3_
-  
+
   - [x] 8.3 Add permission error handling
     - Detect and handle permission-related errors
     - Provide clear guidance on required permissions
     - _Requirements: 7.4_
-  
+
   - [x] 8.4 Add network error handling
     - Implement retry mechanisms for transient errors
     - Provide clear error messages for network issues

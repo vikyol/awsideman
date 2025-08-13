@@ -37,20 +37,20 @@ The CacheManager provides a unified interface with pluggable backends and encryp
 
 ```python
 class CacheManager:
-    def __init__(self, 
+    def __init__(self,
                  config: CacheConfig,
                  backend: CacheBackend = None,
                  encryption: EncryptionProvider = None):
         self.config = config
         self.backend = backend or self._create_default_backend()
         self.encryption = encryption or self._create_default_encryption()
-    
+
     def get(self, key: str) -> Optional[Any]:
         encrypted_data = self.backend.get(key)
         if encrypted_data:
             return self.encryption.decrypt(encrypted_data)
         return None
-    
+
     def set(self, key: str, data: Any, ttl: Optional[int] = None, operation: str = "unknown"):
         encrypted_data = self.encryption.encrypt(data)
         self.backend.set(key, encrypted_data, ttl, operation)
@@ -66,22 +66,22 @@ class CacheBackend(ABC):
     def get(self, key: str) -> Optional[bytes]:
         """Retrieve raw encrypted data from backend"""
         pass
-    
+
     @abstractmethod
     def set(self, key: str, data: bytes, ttl: Optional[int] = None, operation: str = "unknown"):
         """Store raw encrypted data to backend"""
         pass
-    
+
     @abstractmethod
     def invalidate(self, key: Optional[str] = None):
         """Remove cache entries"""
         pass
-    
+
     @abstractmethod
     def get_stats(self) -> Dict[str, Any]:
         """Get backend-specific statistics"""
         pass
-    
+
     @abstractmethod
     def health_check(self) -> bool:
         """Check if backend is healthy"""
@@ -95,13 +95,13 @@ class FileBackend(CacheBackend):
     def __init__(self, cache_dir: str):
         self.cache_dir = Path(cache_dir)
         self.path_manager = CachePathManager(cache_dir)
-    
+
     def get(self, key: str) -> Optional[bytes]:
         cache_file = self.path_manager.get_cache_file_path(key)
         if cache_file.exists():
             return cache_file.read_bytes()
         return None
-    
+
     def set(self, key: str, data: bytes, ttl: Optional[int] = None, operation: str = "unknown"):
         cache_file = self.path_manager.get_cache_file_path(key)
         cache_file.write_bytes(data)
@@ -117,22 +117,22 @@ class DynamoDBBackend(CacheBackend):
         self.profile = profile
         self._client = None
         self._table = None
-    
+
     @property
     def client(self):
         if not self._client:
             session = boto3.Session(profile_name=self.profile, region_name=self.region)
             self._client = session.client('dynamodb')
         return self._client
-    
+
     @property
     def table(self):
         if not self._table:
-            self._table = boto3.resource('dynamodb', 
+            self._table = boto3.resource('dynamodb',
                                        region_name=self.region,
                                        profile_name=self.profile).Table(self.table_name)
         return self._table
-    
+
     def get(self, key: str) -> Optional[bytes]:
         try:
             response = self.table.get_item(Key={'cache_key': key})
@@ -145,7 +145,7 @@ class DynamoDBBackend(CacheBackend):
         except Exception as e:
             logger.error(f"DynamoDB get error: {e}")
             return None
-    
+
     def set(self, key: str, data: bytes, ttl: Optional[int] = None, operation: str = "unknown"):
         try:
             item = {
@@ -154,14 +154,14 @@ class DynamoDBBackend(CacheBackend):
                 'operation': operation,
                 'created_at': int(time.time())
             }
-            
+
             if ttl:
                 item['ttl'] = int(time.time() + ttl)
-            
+
             self.table.put_item(Item=item)
         except Exception as e:
             logger.error(f"DynamoDB set error: {e}")
-    
+
     def ensure_table_exists(self):
         """Create DynamoDB table if it doesn't exist"""
         try:
@@ -171,13 +171,13 @@ class DynamoDBBackend(CacheBackend):
                 self._create_table()
             else:
                 raise
-    
+
     def _create_table(self):
         """Create the DynamoDB table with proper configuration"""
-        dynamodb = boto3.resource('dynamodb', 
+        dynamodb = boto3.resource('dynamodb',
                                 region_name=self.region,
                                 profile_name=self.profile)
-        
+
         table = dynamodb.create_table(
             TableName=self.table_name,
             KeySchema=[
@@ -192,7 +192,7 @@ class DynamoDBBackend(CacheBackend):
                 'Enabled': True
             }
         )
-        
+
         # Wait for table to be created
         table.wait_until_exists()
         logger.info(f"Created DynamoDB table: {self.table_name}")
@@ -206,7 +206,7 @@ class EncryptionProvider(ABC):
     def encrypt(self, data: Any) -> bytes:
         """Encrypt data and return bytes"""
         pass
-    
+
     @abstractmethod
     def decrypt(self, encrypted_data: bytes) -> Any:
         """Decrypt bytes and return original data"""
@@ -216,54 +216,54 @@ class NoEncryption(EncryptionProvider):
     """No-encryption provider for development/testing"""
     def encrypt(self, data: Any) -> bytes:
         return json.dumps(data).encode('utf-8')
-    
+
     def decrypt(self, encrypted_data: bytes) -> Any:
         return json.loads(encrypted_data.decode('utf-8'))
 
 class AESEncryption(EncryptionProvider):
     def __init__(self, key_manager: KeyManager):
         self.key_manager = key_manager
-    
+
     def encrypt(self, data: Any) -> bytes:
         # Serialize data to JSON
         json_data = json.dumps(data).encode('utf-8')
-        
+
         # Get encryption key
         key = self.key_manager.get_key()
-        
+
         # Generate random IV
         iv = os.urandom(16)
-        
+
         # Encrypt data
         cipher = AES.new(key, AES.MODE_CBC, iv)
         padded_data = self._pad(json_data)
         encrypted_data = cipher.encrypt(padded_data)
-        
+
         # Return IV + encrypted data
         return iv + encrypted_data
-    
+
     def decrypt(self, encrypted_data: bytes) -> Any:
         # Extract IV and encrypted data
         iv = encrypted_data[:16]
         encrypted_content = encrypted_data[16:]
-        
+
         # Get decryption key
         key = self.key_manager.get_key()
-        
+
         # Decrypt data
         cipher = AES.new(key, AES.MODE_CBC, iv)
         padded_data = cipher.decrypt(encrypted_content)
         json_data = self._unpad(padded_data)
-        
+
         # Deserialize JSON
         return json.loads(json_data.decode('utf-8'))
-    
+
     def _pad(self, data: bytes) -> bytes:
         """PKCS7 padding"""
         padding_length = 16 - (len(data) % 16)
         padding = bytes([padding_length] * padding_length)
         return data + padding
-    
+
     def _unpad(self, data: bytes) -> bytes:
         """Remove PKCS7 padding"""
         padding_length = data[-1]
@@ -280,7 +280,7 @@ class KeyManager:
     def __init__(self, service_name: str = "awsideman-cache"):
         self.service_name = service_name
         self.username = "encryption-key"
-    
+
     def get_key(self) -> bytes:
         """Get or generate encryption key"""
         key_str = keyring.get_password(self.service_name, self.username)
@@ -289,21 +289,21 @@ class KeyManager:
             self._store_key(key)
             return key
         return base64.b64decode(key_str.encode())
-    
+
     def rotate_key(self) -> bytes:
         """Generate new key and return old key for re-encryption"""
         old_key_str = keyring.get_password(self.service_name, self.username)
         old_key = base64.b64decode(old_key_str.encode()) if old_key_str else None
-        
+
         new_key = self._generate_key()
         self._store_key(new_key)
-        
+
         return old_key, new_key
-    
+
     def _generate_key(self) -> bytes:
         """Generate a new AES-256 key"""
         return os.urandom(32)  # 256 bits
-    
+
     def _store_key(self, key: bytes):
         """Store key in OS keyring"""
         key_str = base64.b64encode(key).decode()
@@ -317,33 +317,33 @@ class KeyManager:
 class AdvancedCacheConfig(CacheConfig):
     # Backend configuration
     backend_type: str = "file"  # "file", "dynamodb", "hybrid"
-    
+
     # DynamoDB configuration
     dynamodb_table_name: str = "awsideman-cache"
     dynamodb_region: str = None
     dynamodb_profile: str = None
-    
+
     # Encryption configuration
     encryption_enabled: bool = False
     encryption_type: str = "aes256"  # "none", "aes256"
-    
+
     # Hybrid backend configuration
     hybrid_local_ttl: int = 300  # 5 minutes local cache for hybrid mode
-    
+
     @classmethod
     def from_config_file(cls, config_path: str = None) -> 'AdvancedCacheConfig':
         """Load configuration from YAML file"""
         if not config_path:
             config_path = Path.home() / ".awsideman" / "config.yaml"
-        
+
         if config_path.exists():
             with open(config_path, 'r') as f:
                 config_data = yaml.safe_load(f)
                 cache_config = config_data.get('cache', {})
                 return cls(**cache_config)
-        
+
         return cls()
-    
+
     @classmethod
     def from_environment(cls) -> 'AdvancedCacheConfig':
         """Load configuration from environment variables"""
@@ -400,7 +400,7 @@ TTL: Enabled on 'ttl' attribute for automatic expiration
 
 ### Backend Failures
 - DynamoDB unavailable → Return cache miss, log error
-- File system errors → Return cache miss, log error  
+- File system errors → Return cache miss, log error
 - Encryption key unavailable → Fail fast with clear error message
 
 ### Migration Errors

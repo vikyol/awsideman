@@ -15,32 +15,32 @@ cache:
   backend_type: "file"
   default_ttl: 900   # 15 minutes - short TTL for security
   max_size_mb: 50    # Small cache to minimize data exposure
-  
+
   # Custom secure cache directory
   file_cache_dir: "/secure/cache/awsideman"
-  
+
   # Maximum encryption settings
   encryption_enabled: true
   encryption_type: "aes256"
-  
+
   # Security-focused TTLs - very short to minimize stale data
   operation_ttls:
     # User operations - short TTL for security
     list_users: 600           # 10 minutes
     describe_user: 300        # 5 minutes
-    
+
     # Group operations - short TTL
     list_groups: 600          # 10 minutes
     describe_group: 300       # 5 minutes
-    
+
     # Permission sets - moderate TTL (less dynamic)
     list_permission_sets: 1800 # 30 minutes
     describe_permission_set: 900 # 15 minutes
-    
+
     # Account operations - moderate TTL
     list_accounts: 3600       # 1 hour
     describe_account: 1800    # 30 minutes
-    
+
     # Assignments - very short TTL (security critical)
     list_account_assignments: 300 # 5 minutes
 

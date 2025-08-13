@@ -125,7 +125,7 @@ try:
 except ClientError as e:
     error_code = e.response.get("Error", {}).get("Code", "Unknown")
     error_message = e.response.get("Error", {}).get("Message", str(e))
-    
+
     if error_code == "ResourceNotFoundException":
         console.print("[red]Error: The specified resource was not found.[/red]")
     elif error_code == "AccessDeniedException":
@@ -182,21 +182,21 @@ def test_list_groups_successful(
     mock_aws_client_manager.return_value = mock_client
     mock_validate_profile.return_value = ("default", {"region": "us-east-1"})
     mock_validate_sso_instance.return_value = ("arn:aws:sso:::instance/ssoins-1234567890abcdef", "d-1234567890")
-    
+
     # Mock the list_groups API response
     mock_identity_store.list_groups.return_value = {
         "Groups": sample_groups,
         "NextToken": None
     }
-    
+
     # Call the function
     result, next_token = list_groups()
-    
+
     # Verify the function called the API correctly
     mock_identity_store.list_groups.assert_called_once_with(
         IdentityStoreId="d-1234567890"
     )
-    
+
     # Verify the function returned the correct data
     assert result == sample_groups
     assert next_token is None

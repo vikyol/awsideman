@@ -6,7 +6,7 @@ The project packaging feature will reorganize the current monolithic `utils` fol
 
 The reorganization will create four distinct packages:
 - **cache**: All caching-related functionality including backends, managers, and utilities
-- **encryption**: Security and encryption functionality 
+- **encryption**: Security and encryption functionality
 - **aws_clients**: AWS service integration and client management
 - **utils**: Core utilities and shared functionality
 
@@ -21,7 +21,7 @@ The existing `src/awsideman/utils/` directory contains 17 modules with mixed res
 **Cache-related modules (7 files):**
 - `cache_manager.py` - Core cache management logic
 - `file_backend.py` - File-based cache storage
-- `dynamodb_backend.py` - DynamoDB cache storage  
+- `dynamodb_backend.py` - DynamoDB cache storage
 - `backend_factory.py` - Cache backend creation
 - `cache_backend.py` - Abstract cache backend interface
 - `cache_utils.py` - Cache utility functions
@@ -186,12 +186,12 @@ from ..utils.cache_manager import CacheManager
 # becomes
 from ..cache.manager import CacheManager
 
-from ..utils.file_backend import FileBackend  
+from ..utils.file_backend import FileBackend
 # becomes
 from ..cache.backends.file import FileBackend
 
 from ..utils.encryption_provider import EncryptionProvider
-# becomes  
+# becomes
 from ..encryption.provider import EncryptionProvider
 
 from ..utils.aws_client import AWSClientManager
@@ -306,7 +306,7 @@ Files will be renamed to follow consistent naming conventions:
 from src.awsideman.utils.cache_manager import CacheManager
 from src.awsideman.utils.file_backend import FileBackend
 
-# New test imports  
+# New test imports
 from src.awsideman.cache.manager import CacheManager
 from src.awsideman.cache.backends.file import FileBackend
 ```

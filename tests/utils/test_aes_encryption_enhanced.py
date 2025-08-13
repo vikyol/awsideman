@@ -11,6 +11,24 @@ from src.awsideman.encryption.key_manager import KeyManager
 from src.awsideman.encryption.provider import EncryptionError
 
 
+# Mock timing protection to make tests run instantly
+@pytest.fixture(autouse=True)
+def mock_timing_protection():
+    """Mock timing protection and secure memory to make tests run instantly."""
+    with patch("src.awsideman.encryption.aes.timing_protection") as mock_timing, patch(
+        "src.awsideman.encryption.aes.secure_memory"
+    ) as mock_secure_memory:
+        # Mock all timing protection methods to do nothing
+        mock_timing.add_timing_jitter.return_value = None
+        mock_timing.constant_time_compare.return_value = True
+
+        # Mock secure memory operations to be instant
+        mock_secure_memory.lock_memory.return_value = 12345  # Fake memory address
+        mock_secure_memory.unlock_memory.return_value = True
+
+        yield mock_timing
+
+
 class TestAESEncryptionEnhanced:
     """Enhanced test cases for AES encryption provider."""
 

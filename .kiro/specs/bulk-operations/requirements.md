@@ -62,6 +62,3 @@ Before applying changes, provide a report to visually present what changes will 
 2. WHEN the preview report is displayed THEN the system SHALL show principal names, permission set names, and account details for each assignment
 3. IF the user chooses to proceed after preview THEN the system SHALL execute the bulk operation
 4. IF the user chooses not to proceed after preview THEN the system SHALL exit without making any changes
-
-
-

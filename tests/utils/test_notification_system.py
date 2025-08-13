@@ -1,7 +1,7 @@
 """Tests for notification system."""
 import logging
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
@@ -56,12 +56,15 @@ class TestNotificationSystem:
                 errors=[],
             ),
             provisioning_status=ProvisioningStatus(
+                timestamp=datetime.now(),
+                status=StatusLevel.HEALTHY,
+                message="Provisioning operations running normally",
                 active_operations=[],
                 failed_operations=[],
                 pending_count=0,
                 estimated_completion=None,
             ),
-            orphaned_assignments=[],
+            orphaned_assignment_status=[],
             sync_status=[],
             summary_statistics=SummaryStatistics(
                 total_users=100,
@@ -89,7 +92,7 @@ class TestNotificationSystem:
         assert "status_report" in data
 
         status_data = data["status_report"]
-        assert status_data["overall_health"] == "WARNING"
+        assert status_data["overall_health"] == "Warning"
         assert status_data["health_message"] == "System experiencing issues"
         assert status_data["provisioning_active"] == 0
         assert status_data["provisioning_failed"] == 0
@@ -239,7 +242,7 @@ class TestNotificationSystem:
     async def test_send_webhook_notification_custom_payload(self, mock_request):
         """Test webhook notification with custom payload template."""
         self.monitoring_config.webhook_notifications.payload_template = (
-            '{"alert": "{message}", "level": "{threshold_level}"}'
+            '{{"alert": "{message}", "level": "{threshold_level}"}}'
         )
 
         mock_response = Mock()
@@ -291,7 +294,7 @@ class TestNotificationSystem:
         """Test webhook retry when all attempts fail."""
         mock_response = Mock()
         mock_response.status = 500
-        mock_response.text.return_value = "Internal Server Error"
+        mock_response.text = AsyncMock(return_value="Internal Server Error")
         mock_request.return_value.__aenter__.return_value = mock_response
 
         webhook_config = self.monitoring_config.webhook_notifications
@@ -350,7 +353,7 @@ class TestNotificationSystem:
 
         assert "AWS Identity Center Alert [WARNING]" in message
         assert "Test message" in message
-        assert "Health: WARNING" in message
+        assert "Health: Warning" in message
         assert "Users: 100" in message
         assert "Groups: 10" in message
         assert "Permission Sets: 5" in message

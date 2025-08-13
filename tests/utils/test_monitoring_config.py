@@ -269,7 +269,7 @@ class TestMonitoringConfigManager:
             "thresholds": {
                 "warning": {
                     "level": "warning",
-                    "status_levels": ["WARNING"],
+                    "status_levels": ["Warning"],
                     "orphaned_assignment_count": 10,
                     "enabled": True,
                 }
@@ -468,7 +468,7 @@ class TestMonitoringConfigManager:
         result = self.config_manager._convert_enums_to_strings(data)
 
         assert result["level"] == "warning"
-        assert result["status_levels"] == ["WARNING", "CRITICAL"]
+        assert result["status_levels"] == ["Warning", "Critical"]
         assert result["nested"]["type"] == "email"
         assert result["list"] == ["critical", "string", 42]
 

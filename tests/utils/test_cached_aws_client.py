@@ -537,7 +537,7 @@ class TestCreateCachedClientManager:
 class TestAWSClientManagerIntegration:
     """Test cases for AWSClientManager integration with caching."""
 
-    @patch("src.awsideman.utils.aws_client.boto3.Session")
+    @patch("src.awsideman.aws_clients.manager.boto3.Session")
     def test_aws_client_manager_init_with_caching(self, mock_session):
         """Test AWSClientManager initialization with caching enabled."""
         mock_session.return_value = Mock()
@@ -551,7 +551,7 @@ class TestAWSClientManagerIntegration:
         assert client_manager.enable_caching is True
         assert client_manager._cached_client is None  # Lazy initialization
 
-    @patch("src.awsideman.utils.aws_client.boto3.Session")
+    @patch("src.awsideman.aws_clients.manager.boto3.Session")
     def test_aws_client_manager_init_without_caching(self, mock_session):
         """Test AWSClientManager initialization with caching disabled."""
         mock_session.return_value = Mock()

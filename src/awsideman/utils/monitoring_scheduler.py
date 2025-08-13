@@ -244,7 +244,7 @@ class MonitoringScheduler:
                 timestamp=datetime.now(),
                 overall_health=health_status,
                 provisioning_status=None,
-                orphaned_assignments=[],
+                orphaned_assignment_status=[],
                 sync_status=[],
                 summary_statistics=None,
             )
@@ -300,12 +300,12 @@ class MonitoringScheduler:
                 # Check orphaned assignments count
                 if (
                     threshold.orphaned_assignment_count is not None
-                    and len(status_report.orphaned_assignments)
+                    and len(status_report.orphaned_assignment_status)
                     >= threshold.orphaned_assignment_count
                 ):
                     alert_triggered = True
                     alert_reasons.append(
-                        f"Orphaned assignments: {len(status_report.orphaned_assignments)}"
+                        f"Orphaned assignments: {len(status_report.orphaned_assignment_status)}"
                     )
 
                 # Check provisioning failures

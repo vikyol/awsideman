@@ -9,6 +9,24 @@ from src.awsideman.encryption.aes import AESEncryption
 from src.awsideman.encryption.provider import EncryptionError
 
 
+# Mock timing protection to make tests run instantly
+@pytest.fixture(autouse=True)
+def mock_timing_protection():
+    """Mock timing protection and secure memory to make tests run instantly."""
+    with patch("src.awsideman.encryption.aes.timing_protection") as mock_timing, patch(
+        "src.awsideman.encryption.aes.secure_memory"
+    ) as mock_secure_memory:
+        # Mock all timing protection methods to do nothing
+        mock_timing.add_timing_jitter.return_value = None
+        mock_timing.constant_time_compare.return_value = True
+
+        # Mock secure memory operations to be instant
+        mock_secure_memory.lock_memory.return_value = 12345  # Fake memory address
+        mock_secure_memory.unlock_memory.return_value = True
+
+        yield mock_timing
+
+
 class MockKeyManager:
     """Mock key manager for testing."""
 
@@ -118,7 +136,7 @@ class TestAESEncryption:
             self.provider.decrypt(invalid_data)
 
         assert exc_info.value.encryption_type == "aes256"
-        assert "too short to contain IV" in str(exc_info.value)
+        assert "Decryption failed: invalid data format" in str(exc_info.value)
 
     def test_decrypt_invalid_data_no_content(self):
         """Test that data with only IV raises EncryptionError."""
@@ -128,7 +146,7 @@ class TestAESEncryption:
             self.provider.decrypt(invalid_data)
 
         assert exc_info.value.encryption_type == "aes256"
-        assert "no encrypted content" in str(exc_info.value)
+        assert "Decryption failed: invalid data format" in str(exc_info.value)
 
     def test_decrypt_with_wrong_key(self):
         """Test decryption with wrong key raises EncryptionError."""
@@ -326,7 +344,7 @@ class TestAESEncryption:
         with pytest.raises(EncryptionError) as exc_info:
             self.provider.decrypt(encrypted)
 
-        assert "AES decryption failed" in str(exc_info.value)
+        assert "Decryption failed: unexpected error" in str(exc_info.value)
         assert exc_info.value.encryption_type == "aes256"
 
 
@@ -372,4 +390,4 @@ class TestAESEncryptionIntegration:
         error = exc_info.value
         assert error.encryption_type == "aes256"
         assert error.original_error is None  # This specific validation error doesn't wrap another
-        assert "too short to contain IV" in str(error)
+        assert "Decryption failed: invalid data format" in str(error)

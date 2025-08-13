@@ -341,7 +341,7 @@ awsideman cache health connectivity
    ```bash
    # Check if variable is set
    echo $AWSIDEMAN_CACHE_BACKEND
-   
+
    # Check all cache-related variables
    env | grep AWSIDEMAN_CACHE
    ```
@@ -350,7 +350,7 @@ awsideman cache health connectivity
    ```bash
    # Validate configuration
    awsideman config validate
-   
+
    # Check specific setting
    awsideman config show --section cache
    ```
@@ -359,7 +359,7 @@ awsideman cache health connectivity
    ```bash
    # Boolean values: use "true" or "false" (case-insensitive)
    export AWSIDEMAN_CACHE_ENABLED=true
-   
+
    # Integer values: use numeric strings
    export AWSIDEMAN_CACHE_TTL_DEFAULT=3600
    ```

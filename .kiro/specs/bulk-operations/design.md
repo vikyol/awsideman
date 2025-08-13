@@ -97,15 +97,15 @@ def bulk_revoke(
 ```python
 class CSVProcessor:
     """Handles CSV file parsing and validation for bulk operations."""
-    
+
     def __init__(self, file_path: Path):
         self.file_path = file_path
         self.required_columns = ['principal_name', 'permission_set_name', 'account_name']
         self.optional_columns = ['principal_type', 'account_id', 'permission_set_arn', 'principal_id']
-    
+
     def validate_format(self) -> List[str]:
         """Validate CSV format and return list of validation errors."""
-    
+
     def parse_assignments(self) -> List[Dict[str, Any]]:
         """Parse CSV file and return list of assignment dictionaries."""
 ```
@@ -115,7 +115,7 @@ class CSVProcessor:
 ```python
 class JSONProcessor:
     """Handles JSON file parsing and validation for bulk operations."""
-    
+
     def __init__(self, file_path: Path):
         self.file_path = file_path
         self.schema = {
@@ -140,10 +140,10 @@ class JSONProcessor:
             },
             "required": ["assignments"]
         }
-    
+
     def validate_format(self) -> List[str]:
         """Validate JSON format and schema, return list of validation errors."""
-    
+
     def parse_assignments(self) -> List[Dict[str, Any]]:
         """Parse JSON file and return list of assignment dictionaries."""
 ```
@@ -155,7 +155,7 @@ class JSONProcessor:
 ```python
 class BatchProcessor:
     """Handles batch processing of assignments with progress tracking."""
-    
+
     def __init__(self, aws_client_manager: AWSClientManager, batch_size: int = 10):
         self.aws_client_manager = aws_client_manager
         self.batch_size = batch_size
@@ -164,10 +164,10 @@ class BatchProcessor:
             'failed': [],
             'skipped': []
         }
-    
+
     async def process_assignments(
-        self, 
-        assignments: List[Dict[str, Any]], 
+        self,
+        assignments: List[Dict[str, Any]],
         operation: str,
         dry_run: bool = False,
         continue_on_error: bool = True
@@ -180,7 +180,7 @@ class BatchProcessor:
 ```python
 class ResourceResolver:
     """Resolves human-readable names to AWS resource identifiers."""
-    
+
     def __init__(self, identity_store_client, sso_admin_client, instance_arn: str, identity_store_id: str):
         self.identity_store_client = identity_store_client
         self.sso_admin_client = sso_admin_client
@@ -189,16 +189,16 @@ class ResourceResolver:
         self._principal_cache = {}
         self._permission_set_cache = {}
         self._account_cache = {}
-    
+
     def resolve_principal_name(self, principal_name: str, principal_type: str) -> Optional[str]:
         """Resolve principal name to principal ID."""
-    
+
     def resolve_permission_set_name(self, permission_set_name: str) -> Optional[str]:
         """Resolve permission set name to permission set ARN."""
-    
+
     def resolve_account_name(self, account_name: str) -> Optional[str]:
         """Resolve account name to account ID."""
-    
+
     def resolve_assignment(self, assignment: Dict[str, Any]) -> Dict[str, Any]:
         """Resolve all names in assignment to IDs/ARNs."""
 
@@ -207,19 +207,19 @@ class ResourceResolver:
 ```python
 class AssignmentValidator:
     """Validates individual assignments against AWS resources."""
-    
+
     def __init__(self, identity_store_client, sso_admin_client, instance_arn: str, identity_store_id: str):
         self.identity_store_client = identity_store_client
         self.sso_admin_client = sso_admin_client
         self.instance_arn = instance_arn
         self.identity_store_id = identity_store_id
-    
+
     def validate_assignment(self, assignment: Dict[str, Any]) -> List[str]:
         """Validate a single assignment and return list of validation errors."""
-    
+
     def validate_principal(self, principal_id: str, principal_type: str) -> bool:
         """Validate that principal exists in Identity Store."""
-    
+
     def validate_permission_set(self, permission_set_arn: str) -> bool:
         """Validate that permission set exists."""
 ```
@@ -231,18 +231,18 @@ class AssignmentValidator:
 ```python
 class ProgressTracker:
     """Manages progress display for bulk operations."""
-    
+
     def __init__(self, console: Console):
         self.console = console
         self.progress = None
         self.task_id = None
-    
+
     def start_progress(self, total: int, description: str):
         """Start progress tracking."""
-    
+
     def update_progress(self, completed: int):
         """Update progress counter."""
-    
+
     def finish_progress(self):
         """Complete progress tracking."""
 ```
@@ -252,13 +252,13 @@ class ProgressTracker:
 ```python
 class ReportGenerator:
     """Generates summary reports for bulk operations."""
-    
+
     def __init__(self, console: Console):
         self.console = console
-    
+
     def generate_summary_report(self, results: Dict[str, List], operation: str):
         """Generate and display summary report."""
-    
+
     def generate_detailed_report(self, results: Dict[str, List], output_file: Optional[Path] = None):
         """Generate detailed report with individual assignment results."""
 ```

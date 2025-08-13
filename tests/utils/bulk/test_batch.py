@@ -692,6 +692,11 @@ class TestBatchProcessor:
         """Test successful assign operation."""
         processor = BatchProcessor(mock_aws_client_manager)
 
+        # Mock the list_account_assignments response (no existing assignments)
+        processor.sso_admin_client.list_account_assignments.return_value = {
+            "AccountAssignments": []
+        }
+
         # Mock the SSO admin client response
         mock_response = {"AccountAssignmentCreationStatus": {"Status": "SUCCEEDED"}}
         processor.sso_admin_client.create_account_assignment.return_value = mock_response
@@ -706,7 +711,7 @@ class TestBatchProcessor:
 
         assert result["status"] == "success"
         assert result["retry_count"] == 0
-        assert "response" in result
+        assert result["message"] == "Assignment created successfully"
 
         processor.sso_admin_client.create_account_assignment.assert_called_once_with(
             InstanceArn="arn:aws:sso:::instance/ins-123",
@@ -721,14 +726,17 @@ class TestBatchProcessor:
         """Test assign operation with conflict (assignment already exists)."""
         processor = BatchProcessor(mock_aws_client_manager)
 
-        # Mock the SSO admin client to raise ConflictException
-        conflict_error = ClientError(
-            error_response={
-                "Error": {"Code": "ConflictException", "Message": "Assignment already exists"}
-            },
-            operation_name="CreateAccountAssignment",
-        )
-        processor.sso_admin_client.create_account_assignment.side_effect = conflict_error
+        # Mock the list_account_assignments response (existing assignment found)
+        processor.sso_admin_client.list_account_assignments.return_value = {
+            "AccountAssignments": [
+                {
+                    "PrincipalId": "user-123",
+                    "PrincipalType": "USER",
+                    "PermissionSetArn": "arn:aws:sso:::permissionSet/ins-123/ps-456",
+                    "AccountId": "123456789012",
+                }
+            ]
+        }
 
         result = processor._execute_assign_operation(
             principal_id="user-123",
@@ -738,12 +746,24 @@ class TestBatchProcessor:
             instance_arn="arn:aws:sso:::instance/ins-123",
         )
 
-        assert result["status"] == "success"
-        assert "response" in result
+        assert result["status"] == "skipped"
+        assert result["message"] == "Assignment already exists"
 
     def test_execute_revoke_operation_success(self, mock_aws_client_manager):
         """Test successful revoke operation."""
         processor = BatchProcessor(mock_aws_client_manager)
+
+        # Mock the list_account_assignments response (existing assignment found)
+        processor.sso_admin_client.list_account_assignments.return_value = {
+            "AccountAssignments": [
+                {
+                    "PrincipalId": "user-123",
+                    "PrincipalType": "USER",
+                    "PermissionSetArn": "arn:aws:sso:::permissionSet/ins-123/ps-456",
+                    "AccountId": "123456789012",
+                }
+            ]
+        }
 
         # Mock the SSO admin client response
         mock_response = {"AccountAssignmentDeletionStatus": {"Status": "SUCCEEDED"}}
@@ -759,7 +779,6 @@ class TestBatchProcessor:
 
         assert result["status"] == "success"
         assert result["retry_count"] == 0
-        assert "response" in result
 
         processor.sso_admin_client.delete_account_assignment.assert_called_once_with(
             InstanceArn="arn:aws:sso:::instance/ins-123",
@@ -774,14 +793,10 @@ class TestBatchProcessor:
         """Test revoke operation with not found (assignment doesn't exist)."""
         processor = BatchProcessor(mock_aws_client_manager)
 
-        # Mock the SSO admin client to raise ResourceNotFoundException
-        not_found_error = ClientError(
-            error_response={
-                "Error": {"Code": "ResourceNotFoundException", "Message": "Assignment not found"}
-            },
-            operation_name="DeleteAccountAssignment",
-        )
-        processor.sso_admin_client.delete_account_assignment.side_effect = not_found_error
+        # Mock the list_account_assignments response (no existing assignments)
+        processor.sso_admin_client.list_account_assignments.return_value = {
+            "AccountAssignments": []
+        }
 
         result = processor._execute_revoke_operation(
             principal_id="user-123",
@@ -791,8 +806,8 @@ class TestBatchProcessor:
             instance_arn="arn:aws:sso:::instance/ins-123",
         )
 
-        assert result["status"] == "success"
-        assert "response" in result
+        assert result["status"] == "skipped"
+        assert result["message"] == "Assignment does not exist (already revoked)"
 
     def test_create_error_result(self, mock_aws_client_manager):
         """Test creating an error result."""
@@ -916,6 +931,11 @@ class TestBatchProcessor:
             "account_id": "123456789012",
             "resolution_success": True,
             "resolution_errors": [],
+        }
+
+        # Mock the list_account_assignments response (no existing assignments)
+        processor.sso_admin_client.list_account_assignments.return_value = {
+            "AccountAssignments": []
         }
 
         # Mock successful response

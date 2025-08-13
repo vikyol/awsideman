@@ -26,7 +26,7 @@ profiles:
     region: "us-east-1"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-1234567890abcdef"
     sso_display_name: "Production SSO"
-  
+
   development:
     region: "us-west-2"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-abcdef1234567890"
@@ -40,25 +40,25 @@ cache:
   enabled: true
   default_ttl: 3600
   max_size_mb: 100
-  
+
   # Backend configuration
   backend_type: "file"  # Options: "file", "dynamodb", "hybrid"
-  
+
   # Encryption settings
   encryption_enabled: false
   encryption_type: "aes256"  # Options: "none", "aes256"
-  
+
   # DynamoDB backend settings
   dynamodb_table_name: "awsideman-cache"
   dynamodb_region: "us-east-1"
   dynamodb_profile: "production"
-  
+
   # File backend settings
   file_cache_dir: "~/.awsideman/cache"
-  
+
   # Hybrid backend settings
   hybrid_local_ttl: 300
-  
+
   # Operation-specific TTLs
   operation_ttls:
     list_users: 3600
@@ -562,7 +562,7 @@ profiles:
     region: "us-east-1"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-prod789012"
     sso_display_name: "Production"
-  
+
   staging:
     region: "us-east-1"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-stage345678"
@@ -589,7 +589,7 @@ profiles:
     region: "us-east-1"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-prod123"
     sso_display_name: "Production"
-  
+
   development:
     region: "us-west-2"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-dev456"

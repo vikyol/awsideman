@@ -15,14 +15,14 @@ cache:
   backend_type: "file"
   default_ttl: 1800  # 30 minutes - shorter for faster development
   max_size_mb: 50    # Smaller cache size for development
-  
+
   # File backend settings
   file_cache_dir: "~/.awsideman/cache"
-  
+
   # Encryption disabled for development (faster operations)
   encryption_enabled: false
   encryption_type: "none"
-  
+
   # Operation-specific TTLs optimized for development
   operation_ttls:
     list_users: 900           # 15 minutes

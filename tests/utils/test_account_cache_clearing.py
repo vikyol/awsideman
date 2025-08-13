@@ -56,7 +56,8 @@ class TestAccountCacheClearing:
 
         # Should have attempted to clear many entries
         assert cleared_count > 0
-        assert mock_cache_manager.invalidate.call_count > 10
+        # The method calls invalidate exactly 10 times (5 patterns × 2 variations each)
+        assert mock_cache_manager.invalidate.call_count == 10
 
     def test_cache_key_patterns(self, optimizer):
         """Test that cache keys are properly formatted with profile."""

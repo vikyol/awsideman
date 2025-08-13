@@ -161,11 +161,11 @@ class TestAccountCacheOptimizer:
         """Test cache invalidation."""
         optimizer.invalidate_cache()
 
-        # Verify both cache keys were deleted
+        # Verify both cache keys were invalidated
         expected_calls = [((optimizer.org_snapshot_key,), {}), ((optimizer.account_count_key,), {})]
 
-        assert optimizer.cache_manager.delete.call_count == 2
-        actual_calls = optimizer.cache_manager.delete.call_args_list
+        assert optimizer.cache_manager.invalidate.call_count == 2
+        actual_calls = optimizer.cache_manager.invalidate.call_args_list
 
         for expected_call in expected_calls:
             assert expected_call in actual_calls

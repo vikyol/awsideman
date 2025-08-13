@@ -8,7 +8,7 @@ profiles:
     region: "us-east-1"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-team456789"
     sso_display_name: "Team Environment"
-  
+
   personal:
     region: "us-west-2"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-personal123"
@@ -20,22 +20,22 @@ cache:
   backend_type: "hybrid"
   default_ttl: 3600  # 1 hour default
   max_size_mb: 200   # Moderate cache size
-  
+
   # Hybrid backend configuration
   hybrid_local_ttl: 300  # 5 minutes local cache for frequently accessed data
-  
+
   # DynamoDB settings for shared remote cache
   dynamodb_table_name: "awsideman-cache-team"
   dynamodb_region: "us-east-1"
   dynamodb_profile: "team"
-  
+
   # File backend settings for local cache
   file_cache_dir: "~/.awsideman/cache"
-  
+
   # Encryption enabled for team security
   encryption_enabled: true
   encryption_type: "aes256"
-  
+
   # Team-optimized operation TTLs
   operation_ttls:
     # Frequently accessed operations - benefit from local caching
@@ -43,12 +43,12 @@ cache:
     describe_user: 1800       # 30 minutes
     list_groups: 3600         # 1 hour
     describe_group: 1800      # 30 minutes
-    
+
     # Less frequently accessed - primarily remote cached
     list_permission_sets: 7200 # 2 hours
     describe_permission_set: 3600 # 1 hour
     list_accounts: 14400      # 4 hours
     describe_account: 7200    # 2 hours
-    
+
     # Dynamic data - shorter TTL
     list_account_assignments: 1800 # 30 minutes

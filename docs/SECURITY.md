@@ -106,13 +106,13 @@ awsideman cache encryption key-status
 cache:
   # Enable/disable encryption
   encryption_enabled: true
-  
+
   # Encryption algorithm (currently only aes256 supported)
   encryption_type: "aes256"
-  
+
   # Key rotation settings
   key_rotation_days: 90  # Rotate keys every 90 days
-  
+
   # Security settings
   secure_memory: true    # Use secure memory for keys
   timing_protection: true # Protection against timing attacks
@@ -123,20 +123,20 @@ cache:
 cache:
   encryption_enabled: true
   encryption_type: "aes256"
-  
+
   # Advanced security options
   security:
     # Key derivation settings
     key_derivation_iterations: 100000
-    
+
     # Memory protection
     secure_memory_enabled: true
     memory_lock_enabled: true
-    
+
     # Audit settings
     audit_encryption_operations: true
     log_key_operations: false  # Never log actual keys
-    
+
     # Backup settings
     automatic_key_backup: true
     backup_encryption: true
@@ -149,7 +149,7 @@ cache:
 cache:
   backend_type: "file"
   encryption_enabled: true
-  
+
   # File-specific security
   file_permissions: "600"  # Owner read/write only
   directory_permissions: "700"  # Owner access only
@@ -160,11 +160,11 @@ cache:
 cache:
   backend_type: "dynamodb"
   encryption_enabled: true
-  
+
   # DynamoDB-specific security
   dynamodb_encryption_at_rest: true
   dynamodb_encryption_in_transit: true
-  
+
   # Additional DynamoDB security
   dynamodb_vpc_endpoint: true
   dynamodb_iam_role: "arn:aws:iam::123456789012:role/awsideman-cache-role"
@@ -306,7 +306,7 @@ awsideman cache encryption emergency-recovery \
 cache:
   encryption_enabled: true
   encryption_type: "aes256"
-  
+
   # Production security settings
   security:
     secure_memory_enabled: true
@@ -329,10 +329,10 @@ cache:
   security:
     # Never log encryption keys
     log_key_operations: false
-    
+
     # Use secure memory for key operations
     secure_memory_enabled: true
-    
+
     # Clear keys from memory after use
     clear_memory_after_use: true
 ```
@@ -379,7 +379,7 @@ ls -la ~/.awsideman/cache/
 # Use dedicated AWS profile for cache operations
 cache:
   dynamodb_profile: "awsideman-cache-only"
-  
+
 # Limit cache table access
 dynamodb_iam_role: "arn:aws:iam::123456789012:role/awsideman-cache-readonly"
 ```
@@ -390,7 +390,7 @@ dynamodb_iam_role: "arn:aws:iam::123456789012:role/awsideman-cache-readonly"
 ```yaml
 cache:
   backend_type: "dynamodb"
-  
+
   # Network security
   dynamodb_vpc_endpoint: true
   dynamodb_endpoint_url: "https://vpce-12345-abcdef.dynamodb.us-east-1.vpce.amazonaws.com"
@@ -400,7 +400,7 @@ cache:
 ```yaml
 cache:
   backend_type: "dynamodb"
-  
+
   # Always use HTTPS
   dynamodb_use_ssl: true
   dynamodb_verify_ssl: true
@@ -414,7 +414,7 @@ cache:
 cache:
   encryption_enabled: false  # Optional for development
   backend_type: "file"
-  
+
   security:
     audit_operations: true
     debug_mode: true
@@ -426,7 +426,7 @@ cache:
 cache:
   encryption_enabled: true
   backend_type: "dynamodb"
-  
+
   security:
     audit_encryption_operations: true
     key_rotation_days: 30  # More frequent rotation
@@ -438,7 +438,7 @@ cache:
 cache:
   encryption_enabled: true
   backend_type: "dynamodb"
-  
+
   security:
     secure_memory_enabled: true
     audit_encryption_operations: true
@@ -619,7 +619,7 @@ cache:
     audit_encryption_operations: true
     audit_key_operations: true
     audit_access_operations: true
-    
+
     # Log destinations
     audit_log_file: "~/.awsideman/logs/security-audit.log"
     audit_log_syslog: true
@@ -708,13 +708,13 @@ awsideman cache audit show \
 cache:
   compliance:
     soc2_mode: true
-    
+
     # Required for SOC 2
     encryption_enabled: true
     audit_all_operations: true
     secure_key_management: true
     access_logging: true
-    
+
     # Data retention
     audit_log_retention_days: 365
     cache_data_retention_days: 90
@@ -725,12 +725,12 @@ cache:
 cache:
   compliance:
     gdpr_mode: true
-    
+
     # GDPR requirements
     data_encryption: true
     right_to_erasure: true
     data_portability: true
-    
+
     # Privacy settings
     anonymize_logs: true
     data_minimization: true
@@ -742,13 +742,13 @@ cache:
 cache:
   compliance:
     hipaa_mode: true
-    
+
     # HIPAA requirements
     encryption_at_rest: true
     encryption_in_transit: true
     access_controls: true
     audit_trails: true
-    
+
     # Additional security
     minimum_key_length: 256
     key_rotation_max_days: 30

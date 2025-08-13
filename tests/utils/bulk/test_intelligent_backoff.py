@@ -4,7 +4,7 @@ This module tests the adaptive backoff strategies, per-service rate limit tracki
 circuit breaker patterns, and jitter functionality for multi-account operations.
 """
 import time
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from botocore.exceptions import ClientError
@@ -24,6 +24,15 @@ from src.awsideman.utils.bulk.intelligent_backoff import (
     calculate_retry_delay,
     should_retry_error,
 )
+
+
+# Mock asyncio.sleep to make tests run instantly
+@pytest.fixture(autouse=True)
+def mock_asyncio_sleep():
+    """Mock asyncio.sleep to make tests run instantly."""
+    with patch("asyncio.sleep") as mock_sleep:
+        mock_sleep.return_value = None
+        yield mock_sleep
 
 
 class TestBackoffContext:

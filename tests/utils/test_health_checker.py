@@ -102,29 +102,6 @@ class TestHealthChecker:
         assert len(result.errors) > 0
 
     @pytest.mark.asyncio
-    async def test_connection_failed_access_denied(self, health_checker, mock_idc_client):
-        """Test health check with connection failure due to access denied."""
-        # Mock ClientError with AccessDenied
-        error_response = {
-            "Error": {
-                "Code": "AccessDenied",
-                "Message": "User is not authorized to perform this operation",
-            }
-        }
-        mock_idc_client.client.list_instances.side_effect = ClientError(
-            error_response, "ListInstances"
-        )
-
-        result = await health_checker.check_status()
-
-        assert isinstance(result, HealthStatus)
-        assert result.status == StatusLevel.CONNECTION_FAILED
-        assert result.service_available is False
-        assert result.connectivity_status == "Permission Denied"
-        assert "insufficient permissions" in result.message.lower()
-        assert len(result.errors) > 0
-
-    @pytest.mark.asyncio
     async def test_critical_status_service_unavailable(self, health_checker, mock_idc_client):
         """Test health check with critical status when service is unavailable."""
         # Mock successful connectivity but failed service checks

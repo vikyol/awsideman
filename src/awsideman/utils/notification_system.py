@@ -136,8 +136,8 @@ class NotificationSystem:
                 "provisioning_failed": len(status_report.provisioning_status.failed_operations)
                 if status_report.provisioning_status
                 else 0,
-                "orphaned_assignments": len(status_report.orphaned_assignments)
-                if status_report.orphaned_assignments
+                "orphaned_assignments": len(status_report.orphaned_assignment_status)
+                if status_report.orphaned_assignment_status
                 else 0,
                 "sync_issues": len(
                     [s for s in status_report.sync_status if s.status != StatusLevel.HEALTHY]
@@ -294,13 +294,17 @@ class NotificationSystem:
 
             # Prepare payload
             if webhook_config.payload_template:
-                # Use custom payload template
-                payload = webhook_config.payload_template.format(**notification_data)
+                # Use custom payload template - flatten data for template formatting
+                template_data = {**notification_data, **notification_data.get("status_report", {})}
                 try:
-                    payload = json.loads(payload)
-                except json.JSONDecodeError:
-                    # If template is not valid JSON, send as text
-                    payload = {"message": payload}
+                    payload_str = webhook_config.payload_template.format(**template_data)
+                    payload = json.loads(payload_str)
+                except (KeyError, json.JSONDecodeError):
+                    # If template formatting fails, use a simple message payload
+                    payload = {
+                        "message": notification_data["message"],
+                        "level": notification_data["threshold_level"],
+                    }
             else:
                 # Use default payload structure
                 payload = {

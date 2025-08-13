@@ -29,19 +29,19 @@ cache:
   # Core security settings
   encryption_enabled: true
   encryption_type: "aes256"
-  
+
   # Backend security
   backend_type: "dynamodb"  # More secure than file for production
   dynamodb_table_name: "awsideman-cache-prod"
   dynamodb_region: "us-east-1"
-  
+
   # Security hardening
   security:
     secure_memory_enabled: true
     audit_encryption_operations: true
     automatic_key_backup: true
     key_rotation_days: 90
-    
+
   # Access control
   max_cache_age_hours: 24  # Force refresh daily
   audit_log_enabled: true
@@ -76,11 +76,11 @@ awsideman cache audit show --last 1h
 cache:
   encryption_enabled: false  # Optional for dev
   backend_type: "file"
-  
+
   # Basic security
   file_permissions: "600"
   directory_permissions: "700"
-  
+
   # Development-friendly settings
   default_ttl: 1800  # 30 minutes
   debug_mode: true
@@ -105,13 +105,13 @@ cache:
   encryption_enabled: true
   backend_type: "dynamodb"
   dynamodb_table_name: "awsideman-cache-staging"
-  
+
   # Production-like security
   security:
     secure_memory_enabled: true
     audit_encryption_operations: true
     key_rotation_days: 30  # More frequent for testing
-    
+
   # Staging-specific
   audit_log_level: "debug"
   security_testing_mode: true
@@ -136,7 +136,7 @@ cache:
   encryption_enabled: true
   backend_type: "dynamodb"
   dynamodb_table_name: "awsideman-cache-prod"
-  
+
   # Maximum security
   security:
     secure_memory_enabled: true
@@ -146,12 +146,12 @@ cache:
     automatic_key_backup: true
     key_rotation_days: 90
     timing_protection: true
-    
+
   # Production hardening
   max_cache_age_hours: 12
   force_encryption_verification: true
   strict_permission_checking: true
-  
+
   # Compliance
   compliance_mode: "soc2"  # or "gdpr", "hipaa"
   audit_log_retention_days: 365
@@ -175,14 +175,14 @@ cache:
 cache:
   # Always encrypt in production
   encryption_enabled: true
-  
+
   # Use secure backend
   backend_type: "dynamodb"
-  
+
   # Conservative TTLs
   default_ttl: 3600  # 1 hour
   max_cache_age_hours: 24
-  
+
   # Enable all security features
   security:
     secure_memory_enabled: true
@@ -199,21 +199,21 @@ cache:
   # Layer 1: Encryption
   encryption_enabled: true
   encryption_type: "aes256"
-  
+
   # Layer 2: Access Control
   backend_type: "dynamodb"
   dynamodb_iam_role: "arn:aws:iam::123456789012:role/cache-access"
-  
+
   # Layer 3: Network Security
   dynamodb_vpc_endpoint: true
   dynamodb_use_ssl: true
-  
+
   # Layer 4: Monitoring
   security:
     audit_all_operations: true
     intrusion_detection: true
     anomaly_detection: true
-    
+
   # Layer 5: Data Protection
   data_classification: "sensitive"
   automatic_data_expiry: true
@@ -228,18 +228,18 @@ cache:
   # Never trust, always verify
   encryption_enabled: true
   force_encryption_verification: true
-  
+
   # Strict access control
   backend_type: "dynamodb"
   require_mfa_for_admin: true
   session_timeout_minutes: 30
-  
+
   # Continuous verification
   security:
     continuous_integrity_checking: true
     real_time_threat_detection: true
     automatic_threat_response: true
-    
+
   # Minimal privilege
   principle_of_least_privilege: true
   just_in_time_access: true
@@ -384,7 +384,7 @@ cache:
   monitoring:
     cloudwatch_enabled: true
     cloudwatch_namespace: "awsideman/cache"
-    
+
     # Metrics to track
     metrics:
       - encryption_operations
@@ -392,7 +392,7 @@ cache:
       - key_rotations
       - cache_access_patterns
       - security_events
-    
+
     # Alarms
     alarms:
       failed_decryption_threshold: 5
@@ -409,7 +409,7 @@ cache:
     prometheus_enabled: true
     prometheus_port: 9090
     prometheus_endpoint: "/metrics"
-    
+
     # Security metrics
     security_metrics:
       - cache_encryption_status
@@ -433,21 +433,21 @@ while true; do
         # Trigger incident response
         ./emergency-security-response.sh
     fi
-    
+
     # Check for unusual access patterns
     if awsideman cache audit analyze --detect-anomalies --last 5m --quiet; then
         echo "ALERT: Unusual access pattern detected"
         # Log and investigate
         awsideman cache audit analyze --detect-anomalies --last 5m --detailed >> /var/log/security-anomalies.log
     fi
-    
+
     # Check encryption key status
     if ! awsideman cache encryption key-status --quiet; then
         echo "ALERT: Encryption key issue detected"
         # Attempt automatic recovery
         awsideman cache encryption restore-key --auto-recover
     fi
-    
+
     # Sleep for 5 minutes
     sleep 300
 done
@@ -462,28 +462,28 @@ done
 cache:
   compliance:
     framework: "soc2"
-    
+
   # Security controls
   encryption_enabled: true
   access_controls: true
   audit_logging: true
-  
+
   # Availability controls
   backup_enabled: true
   disaster_recovery: true
-  
+
   # Processing integrity
   data_validation: true
   integrity_checking: true
-  
+
   # Confidentiality
   data_classification: true
   secure_transmission: true
-  
+
   # Privacy (if applicable)
   data_minimization: true
   consent_management: true
-  
+
   # Audit requirements
   audit_log_retention_days: 365
   audit_trail_immutability: true
@@ -497,23 +497,23 @@ cache:
 cache:
   compliance:
     framework: "gdpr"
-    
+
   # Data protection by design
   encryption_enabled: true
   pseudonymization: true
   data_minimization: true
-  
+
   # Individual rights
   right_to_access: true
   right_to_rectification: true
   right_to_erasure: true
   right_to_portability: true
-  
+
   # Accountability
   data_protection_impact_assessment: true
   records_of_processing: true
   privacy_by_default: true
-  
+
   # Security measures
   appropriate_technical_measures: true
   appropriate_organizational_measures: true

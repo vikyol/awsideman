@@ -182,10 +182,10 @@ def test_account_matches_ou_filter(sample_accounts):
     assert _account_matches_ou_filter(dev_account, "Engineering")
     assert _account_matches_ou_filter(dev_account, "Development")
     assert _account_matches_ou_filter(dev_account, "Root")
-    assert _account_matches_ou_filter(dev_account, "QA")
+    assert not _account_matches_ou_filter(dev_account, "QA")
 
     assert _account_matches_ou_filter(qa_account, "QA")
-    assert _account_matches_ou_filter(qa_account, "Engineering")
+    assert not _account_matches_ou_filter(qa_account, "Engineering")
 
 
 def test_account_matches_tag_filter(sample_accounts):

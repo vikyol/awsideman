@@ -270,7 +270,7 @@ class TestCacheManagerConfigurationInit:
         # Test with default settings (should use basic config)
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch(
-                "src.awsideman.utils.advanced_cache_config.AdvancedCacheConfig.from_config_and_environment"
+                "src.awsideman.cache.config.AdvancedCacheConfig.from_config_and_environment"
             ) as mock_load:
                 default_config = AdvancedCacheConfig()  # All defaults
                 mock_load.return_value = default_config
@@ -290,7 +290,7 @@ class TestCacheManagerConfigurationInit:
         # Test with meaningful settings (should use advanced config)
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch(
-                "src.awsideman.utils.advanced_cache_config.AdvancedCacheConfig.from_config_and_environment"
+                "src.awsideman.cache.config.AdvancedCacheConfig.from_config_and_environment"
             ) as mock_load:
                 advanced_config = AdvancedCacheConfig(encryption_enabled=True)  # Meaningful setting
                 mock_load.return_value = advanced_config

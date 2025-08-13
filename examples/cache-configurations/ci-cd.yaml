@@ -15,16 +15,16 @@ cache:
   backend_type: "dynamodb"
   default_ttl: 7200  # 2 hours - longer TTL for CI/CD efficiency
   max_size_mb: 1000  # Large cache for CI/CD workloads
-  
+
   # DynamoDB configuration optimized for CI/CD
   dynamodb_table_name: "awsideman-cache-cicd"
   dynamodb_region: "us-east-1"
   dynamodb_profile: "cicd"
-  
+
   # Encryption enabled for security
   encryption_enabled: true
   encryption_type: "aes256"
-  
+
   # CI/CD optimized TTLs - longer caching for stability
   operation_ttls:
     # User and group data - stable in CI/CD
@@ -32,14 +32,14 @@ cache:
     describe_user: 7200       # 2 hours
     list_groups: 14400        # 4 hours
     describe_group: 7200      # 2 hours
-    
+
     # Permission sets - very stable
     list_permission_sets: 28800 # 8 hours
     describe_permission_set: 14400 # 4 hours
-    
+
     # Account data - extremely stable
     list_accounts: 86400      # 24 hours
     describe_account: 43200   # 12 hours
-    
+
     # Assignments - moderate stability in CI/CD
     list_account_assignments: 7200 # 2 hours

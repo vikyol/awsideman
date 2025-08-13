@@ -193,12 +193,13 @@ class TestEncryptionProviderFactory:
         assert exc_info.value.encryption_type == "unknown"
 
     def test_create_aes_provider_missing_key_manager(self):
-        """Test creating AES provider without key_manager raises proper error."""
-        with pytest.raises(EncryptionError) as exc_info:
-            EncryptionProviderFactory.create_provider("aes256")
+        """Test creating AES provider without key_manager works automatically."""
+        # Now creates a KeyManager automatically instead of raising an error
+        provider = EncryptionProviderFactory.create_provider("aes256")
 
-        assert "missing 1 required positional argument: 'key_manager'" in str(exc_info.value)
-        assert exc_info.value.encryption_type == "aes256"
+        assert provider.get_encryption_type() == "aes256"
+        # Should have created a key manager automatically
+        assert hasattr(provider, "key_manager")
 
     def test_create_aes_provider_with_key_manager(self):
         """Test creating AES provider with key manager."""

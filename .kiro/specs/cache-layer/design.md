@@ -35,13 +35,13 @@ The core component responsible for managing cache operations:
 class CacheManager:
     def get(self, key: str) -> Optional[Dict]:
         """Retrieve data from cache if it exists and is not expired"""
-        
+
     def set(self, key: str, data: Dict, ttl: Optional[int] = None) -> None:
         """Store data in cache with optional TTL override"""
-        
+
     def invalidate(self, key: str = None) -> None:
         """Invalidate specific cache entry or all entries if key is None"""
-        
+
     def _is_expired(self, entry: Dict) -> bool:
         """Check if cache entry has expired based on TTL"""
 ```
@@ -63,23 +63,23 @@ class CachedAwsClient:
     def __init__(self, cache_manager: CacheManager):
         self.cache_manager = cache_manager
         self.aws_client = AwsClient()  # Original AWS client
-        
+
     def execute(self, operation: str, params: Dict) -> Dict:
         """Execute AWS operation with caching"""
         cache_key = self._generate_cache_key(operation, params)
-        
+
         # Try to get from cache
         cached_result = self.cache_manager.get(cache_key)
         if cached_result:
             return cached_result
-            
+
         # If not in cache, call AWS API
         result = self.aws_client.execute(operation, params)
-        
+
         # Cache the result if it's a read operation
         if self._is_cacheable_operation(operation):
             self.cache_manager.set(cache_key, result)
-            
+
         return result
 ```
 

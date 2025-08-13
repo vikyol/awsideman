@@ -8,12 +8,12 @@ profiles:
     region: "us-east-1"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-east123456"
     sso_display_name: "US East (N. Virginia)"
-  
+
   us-west-2:
     region: "us-west-2"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-west789012"
     sso_display_name: "US West (Oregon)"
-  
+
   eu-west-1:
     region: "eu-west-1"
     sso_instance_arn: "arn:aws:sso:::instance/ssoins-eu345678"
@@ -25,19 +25,19 @@ cache:
   backend_type: "hybrid"
   default_ttl: 3600  # 1 hour
   max_size_mb: 300
-  
+
   # Local cache for frequently accessed data
   hybrid_local_ttl: 600  # 10 minutes for multi-region scenarios
-  
+
   # Primary DynamoDB table in us-east-1 for global access
   dynamodb_table_name: "awsideman-cache-global"
   dynamodb_region: "us-east-1"  # Central region for cache
   dynamodb_profile: "us-east-1"
-  
+
   # Encryption for global security
   encryption_enabled: true
   encryption_type: "aes256"
-  
+
   # Multi-region optimized TTLs
   operation_ttls:
     # Regional data - shorter TTL due to regional differences
@@ -45,14 +45,14 @@ cache:
     describe_user: 900        # 15 minutes
     list_groups: 1800         # 30 minutes
     describe_group: 900       # 15 minutes
-    
+
     # Global data - longer TTL as it's consistent across regions
     list_permission_sets: 7200 # 2 hours
     describe_permission_set: 3600 # 1 hour
-    
+
     # Account data - global and stable
     list_accounts: 14400      # 4 hours
     describe_account: 7200    # 2 hours
-    
+
     # Assignments - regional and dynamic
     list_account_assignments: 900 # 15 minutes
