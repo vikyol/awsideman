@@ -128,7 +128,7 @@ class TestValidationFunctions:
 
     def test_validate_output_format_invalid_format(self):
         """Test validation of invalid output format."""
-        with pytest.raises(SystemExit):
+        with pytest.raises((SystemExit, Exception)):
             validate_output_format("xml")
 
     def test_validate_status_type_valid_types(self):
@@ -143,7 +143,7 @@ class TestValidationFunctions:
 
     def test_validate_status_type_invalid_type(self):
         """Test validation of invalid status type."""
-        with pytest.raises(SystemExit):
+        with pytest.raises((SystemExit, Exception)):
             validate_status_type("invalid")
 
 

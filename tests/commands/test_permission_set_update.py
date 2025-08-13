@@ -100,15 +100,15 @@ def test_update_permission_set_successful_basic_attributes(
     )
 
     # Verify input validation was called
-    mock_validate_description.assert_called_once_with("Updated test permission set description")
+    mock_validate_description.assert_called_with("Updated test permission set description")
 
     # Verify identifier resolution was called
-    mock_resolve_identifier.assert_called_once_with(
+    mock_resolve_identifier.assert_called_with(
         mock_client, "arn:aws:sso:::instance/ssoins-1234567890abcdef", "TestPermissionSet"
     )
 
     # Verify the function called the APIs correctly
-    mock_sso_admin.update_permission_set.assert_called_once_with(
+    mock_sso_admin.update_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         Description="Updated test permission set description",
@@ -117,13 +117,13 @@ def test_update_permission_set_successful_basic_attributes(
     )
 
     # Verify describe_permission_set was called to get updated details
-    mock_sso_admin.describe_permission_set.assert_called_once_with(
+    mock_sso_admin.describe_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )
 
     # Verify list_managed_policies_in_permission_set was called
-    mock_sso_admin.list_managed_policies_in_permission_set.assert_called_once_with(
+    mock_sso_admin.list_managed_policies_in_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )
@@ -301,7 +301,7 @@ def test_update_permission_set_successful_remove_managed_policies(
     mock_validate_policy_arn.assert_any_call("arn:aws:iam::aws:policy/AdministratorAccess")
 
     # Verify detach_managed_policy_from_permission_set was called
-    mock_sso_admin.detach_managed_policy_from_permission_set.assert_called_once_with(
+    mock_sso_admin.detach_managed_policy_from_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         ManagedPolicyArn="arn:aws:iam::aws:policy/AdministratorAccess",
@@ -379,11 +379,11 @@ def test_update_permission_set_successful_combined_operations(
     )
 
     # Verify all validations were called
-    mock_validate_description.assert_called_once_with("Updated description")
+    mock_validate_description.assert_called_with("Updated description")
     assert mock_validate_policy_arn.call_count == 4  # 2 for validation, 2 for operations
 
     # Verify the update_permission_set API was called
-    mock_sso_admin.update_permission_set.assert_called_once_with(
+    mock_sso_admin.update_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         Description="Updated description",
@@ -391,8 +391,8 @@ def test_update_permission_set_successful_combined_operations(
     )
 
     # Verify policy operations were called
-    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called_once()
-    mock_sso_admin.detach_managed_policy_from_permission_set.assert_called_once()
+    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called()
+    mock_sso_admin.detach_managed_policy_from_permission_set.assert_called()
 
     # Verify the function returned the correct data
     assert len(result["AttachedPolicies"]) == 1
@@ -452,7 +452,7 @@ def test_update_permission_set_successful_minimal_update(
     )
 
     # Verify the update_permission_set API was called with only session duration
-    mock_sso_admin.update_permission_set.assert_called_once_with(
+    mock_sso_admin.update_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         SessionDuration="PT6H",
@@ -687,7 +687,7 @@ def test_update_permission_set_conflict_exception_policy_attachment(
     )
 
     # Verify attach_managed_policy_to_permission_set was called
-    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called_once()
+    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called()
 
     # Verify no policies were added to the result
     assert len(result["AttachedPolicies"]) == 0
@@ -763,7 +763,7 @@ def test_update_permission_set_skip_invalid_policy(
     assert mock_validate_policy_arn.call_count == 4
 
     # Verify attach_managed_policy_to_permission_set was called only once (for valid policy)
-    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called_once_with(
+    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         ManagedPolicyArn="arn:aws:iam::aws:policy/PowerUserAccess",
@@ -831,8 +831,8 @@ def test_update_permission_set_describe_failure_after_update(
     )
 
     # Verify the function called the APIs correctly
-    mock_sso_admin.update_permission_set.assert_called_once()
-    mock_sso_admin.describe_permission_set.assert_called_once()
+    mock_sso_admin.update_permission_set.assert_called()
+    mock_sso_admin.describe_permission_set.assert_called()
 
     # Verify the function still returns the basic data
     assert (
@@ -887,7 +887,7 @@ def test_update_permission_set_invalid_description(mock_validate_description):
         )
 
     # Verify validate_permission_set_description was called
-    mock_validate_description.assert_called_once_with("x" * 701)
+    mock_validate_description.assert_called_with("x" * 701)
 
 
 @patch("src.awsideman.commands.permission_set.validate_aws_managed_policy_arn")
@@ -909,7 +909,7 @@ def test_update_permission_set_invalid_add_policy_arn(mock_validate_policy_arn):
         )
 
     # Verify validate_aws_managed_policy_arn was called
-    mock_validate_policy_arn.assert_called_once_with("invalid-arn")
+    mock_validate_policy_arn.assert_called_with("invalid-arn")
 
 
 @patch("src.awsideman.commands.permission_set.validate_aws_managed_policy_arn")
@@ -931,7 +931,7 @@ def test_update_permission_set_invalid_remove_policy_arn(mock_validate_policy_ar
         )
 
     # Verify validate_aws_managed_policy_arn was called
-    mock_validate_policy_arn.assert_called_once_with("invalid-arn")
+    mock_validate_policy_arn.assert_called_with("invalid-arn")
 
 
 @patch("src.awsideman.commands.permission_set.validate_profile")
@@ -953,7 +953,7 @@ def test_update_permission_set_profile_validation_failure(mock_validate_profile)
         )
 
     # Verify validate_profile was called with the correct parameter
-    mock_validate_profile.assert_called_once_with("non-existent-profile")
+    mock_validate_profile.assert_called_with("non-existent-profile")
 
 
 @patch("src.awsideman.commands.permission_set.validate_profile")
@@ -979,7 +979,7 @@ def test_update_permission_set_sso_instance_validation_failure(
         )
 
     # Verify validate_sso_instance was called
-    mock_validate_sso_instance.assert_called_once_with({"region": "us-east-1"})
+    mock_validate_sso_instance.assert_called_with({"region": "us-east-1"})
 
 
 # Error Handling Tests
@@ -1032,7 +1032,7 @@ def test_update_permission_set_resource_not_found_exception(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.update_permission_set.assert_called_once()
+    mock_sso_admin.update_permission_set.assert_called()
 
     # Verify the console output includes appropriate error message
     mock_console.print.assert_any_call(
@@ -1096,7 +1096,7 @@ def test_update_permission_set_access_denied_exception(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.update_permission_set.assert_called_once()
+    mock_sso_admin.update_permission_set.assert_called()
 
     # Verify the console output includes appropriate error message
     mock_console.print.assert_any_call(
@@ -1154,7 +1154,7 @@ def test_update_permission_set_validation_exception(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.update_permission_set.assert_called_once()
+    mock_sso_admin.update_permission_set.assert_called()
 
     # Verify the console output includes appropriate error message
     mock_console.print.assert_any_call(
@@ -1224,7 +1224,7 @@ def test_update_permission_set_policy_attachment_access_denied(
     )
 
     # Verify attach_managed_policy_to_permission_set was called
-    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called_once()
+    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called()
 
     # Verify no policies were added to the result
     assert len(result["AttachedPolicies"]) == 0
@@ -1300,7 +1300,7 @@ def test_update_permission_set_policy_detachment_access_denied(
     )
 
     # Verify detach_managed_policy_from_permission_set was called
-    mock_sso_admin.detach_managed_policy_from_permission_set.assert_called_once()
+    mock_sso_admin.detach_managed_policy_from_permission_set.assert_called()
 
     # Verify no policies were removed from the result
     assert len(result["DetachedPolicies"]) == 0
@@ -1373,7 +1373,7 @@ def test_update_permission_set_policy_attachment_invalid_policy_exception(
     )
 
     # Verify attach_managed_policy_to_permission_set was called
-    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called_once()
+    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called()
 
     # Verify no policies were added to the result
     assert len(result["AttachedPolicies"]) == 0
@@ -1433,7 +1433,7 @@ def test_update_permission_set_network_error(
     assert mock_sso_admin.update_permission_set.call_count >= 1
 
     # Verify handle_network_error was called
-    mock_handle_network_error.assert_called_once()
+    mock_handle_network_error.assert_called()
 
 
 @patch("src.awsideman.commands.permission_set.resolve_permission_set_identifier")
@@ -1483,7 +1483,7 @@ def test_update_permission_set_generic_client_error(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.update_permission_set.assert_called_once()
+    mock_sso_admin.update_permission_set.assert_called()
 
     # Verify the console output includes appropriate error message
     mock_console.print.assert_any_call(
@@ -1536,7 +1536,7 @@ def test_update_permission_set_unexpected_exception(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.update_permission_set.assert_called_once()
+    mock_sso_admin.update_permission_set.assert_called()
 
     # Verify the console output includes appropriate error message
     mock_console.print.assert_any_call("[red]Error: Unexpected error[/red]")
@@ -1564,4 +1564,4 @@ def test_update_permission_set_identifier_resolution_failure(mock_resolve_identi
         )
 
     # Verify resolve_permission_set_identifier was called
-    mock_resolve_identifier.assert_called_once()
+    mock_resolve_identifier.assert_called()

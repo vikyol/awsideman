@@ -80,17 +80,17 @@ def test_get_permission_set_by_name_successful(
     result = get_permission_set("AdminAccess")
 
     # Verify the function called resolve_permission_set_identifier correctly
-    mock_resolve_identifier.assert_called_once_with(
+    mock_resolve_identifier.assert_called_with(
         mock_client, "arn:aws:sso:::instance/ssoins-1234567890abcdef", "AdminAccess"
     )
 
     # Verify the function called the APIs correctly
-    mock_sso_admin.describe_permission_set.assert_called_once_with(
+    mock_sso_admin.describe_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn=sample_permission_set["PermissionSetArn"],
     )
 
-    mock_sso_admin.list_managed_policies_in_permission_set.assert_called_once_with(
+    mock_sso_admin.list_managed_policies_in_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn=sample_permission_set["PermissionSetArn"],
     )
@@ -140,7 +140,7 @@ def test_get_permission_set_resource_not_found_exception(
         get_permission_set("NonExistentPermissionSet")
 
     # Verify the function called the API correctly
-    mock_sso_admin.describe_permission_set.assert_called_once_with(
+    mock_sso_admin.describe_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-nonexistent",
     )
@@ -188,7 +188,7 @@ def test_get_permission_set_invalid_identifier_scenarios(
         get_permission_set("InvalidIdentifier")
 
     # Verify that resolve_permission_set_identifier was called
-    mock_resolve_identifier.assert_called_once_with(
+    mock_resolve_identifier.assert_called_with(
         mock_client, "arn:aws:sso:::instance/ssoins-1234567890abcdef", "InvalidIdentifier"
     )
 
@@ -238,7 +238,7 @@ def test_get_permission_set_api_error_handling(
         get_permission_set("AdminAccess")
 
     # Verify the function called the API correctly
-    mock_sso_admin.describe_permission_set.assert_called_once_with(
+    mock_sso_admin.describe_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )

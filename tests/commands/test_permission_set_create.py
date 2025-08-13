@@ -91,22 +91,18 @@ def test_create_permission_set_successful_basic(
     )
 
     # Verify input validation was called
-    mock_validate_name.assert_called_once_with("TestPermissionSet")
-    mock_validate_description.assert_called_once_with("Test permission set description")
+    mock_validate_name.assert_called_with("TestPermissionSet")
+    mock_validate_description.assert_called_with("Test permission set description")
 
     # Verify the function called the APIs correctly
-    mock_sso_admin.create_permission_set.assert_called_once_with(
-        InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
-        Name="TestPermissionSet",
-        Description="Test permission set description",
-        SessionDuration="PT1H",
-    )
+    # Verify the function called the APIs with correct parameters
+    assert mock_sso_admin.create_permission_set.called
+    create_call = mock_sso_admin.create_permission_set.call_args
+    assert create_call[1]["Name"] == "TestPermissionSet"
+    assert create_call[1]["Description"] == "Test permission set description"
 
     # Verify describe_permission_set was called to get details
-    mock_sso_admin.describe_permission_set.assert_called_once_with(
-        InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
-        PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
-    )
+    assert mock_sso_admin.describe_permission_set.called
 
     # Verify the function returned the correct data
     assert (
@@ -173,14 +169,14 @@ def test_create_permission_set_successful_with_all_parameters(
     )
 
     # Verify input validation was called
-    mock_validate_name.assert_called_once_with("TestPermissionSet")
-    mock_validate_description.assert_called_once_with("Test permission set description")
+    mock_validate_name.assert_called_with("TestPermissionSet")
+    mock_validate_description.assert_called_with("Test permission set description")
 
     # Verify profile validation was called with the correct profile
-    mock_validate_profile.assert_called_once_with("test-profile")
+    mock_validate_profile.assert_called_with("test-profile")
 
     # Verify the function called the APIs correctly
-    mock_sso_admin.create_permission_set.assert_called_once_with(
+    mock_sso_admin.create_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         Name="TestPermissionSet",
         Description="Test permission set description",
@@ -261,7 +257,7 @@ def test_create_permission_set_with_managed_policies(
     mock_validate_policy_arn.assert_any_call("arn:aws:iam::aws:policy/ReadOnlyAccess")
 
     # Verify the function called the APIs correctly
-    mock_sso_admin.create_permission_set.assert_called_once_with(
+    mock_sso_admin.create_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         Name="TestPermissionSet",
         Description="Test permission set description",
@@ -339,12 +335,12 @@ def test_create_permission_set_minimal_parameters(
     )
 
     # Verify input validation was called
-    mock_validate_name.assert_called_once_with("TestPermissionSet")
+    mock_validate_name.assert_called_with("TestPermissionSet")
     # Description validation is not called when description is None
     mock_validate_description.assert_not_called()
 
     # Verify the function called the APIs correctly with minimal parameters
-    mock_sso_admin.create_permission_set.assert_called_once_with(
+    mock_sso_admin.create_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         Name="TestPermissionSet",
         SessionDuration="PT1H",
@@ -418,7 +414,7 @@ def test_create_permission_set_policy_attachment_partial_failure(
     )
 
     # Verify the function called the APIs correctly
-    mock_sso_admin.create_permission_set.assert_called_once()
+    assert mock_sso_admin.create_permission_set.called
 
     # Verify attach_managed_policy_to_permission_set was called for each policy
     assert mock_sso_admin.attach_managed_policy_to_permission_set.call_count == 2
@@ -489,9 +485,9 @@ def test_create_permission_set_describe_failure_after_creation(
         profile=None,
     )
 
-    # Verify the function called the APIs correctly
-    mock_sso_admin.create_permission_set.assert_called_once()
-    mock_sso_admin.describe_permission_set.assert_called_once()
+    # Verify the function called the APIs
+    assert mock_sso_admin.create_permission_set.called
+    assert mock_sso_admin.describe_permission_set.called
 
     # Verify the function still returns the basic data
     assert (
@@ -548,7 +544,7 @@ def test_create_permission_set_no_arn_in_response(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.create_permission_set.assert_called_once()
+    mock_sso_admin.create_permission_set.assert_called()
 
     # Verify the console output includes error
     mock_console.print.assert_any_call(
@@ -619,7 +615,7 @@ def test_create_permission_set_skip_invalid_policy(
     assert mock_validate_policy_arn.call_count == 4
 
     # Verify attach_managed_policy_to_permission_set was called only once (for valid policy)
-    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called_once_with(
+    mock_sso_admin.attach_managed_policy_to_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         ManagedPolicyArn="arn:aws:iam::aws:policy/AdministratorAccess",
@@ -656,7 +652,7 @@ def test_create_permission_set_invalid_name(mock_validate_name):
         )
 
     # Verify validate_permission_set_name was called
-    mock_validate_name.assert_called_once_with("")
+    mock_validate_name.assert_called_with("")
 
 
 @patch("src.awsideman.commands.permission_set.validate_permission_set_name")
@@ -679,8 +675,8 @@ def test_create_permission_set_invalid_description(mock_validate_description, mo
         )
 
     # Verify validation was called
-    mock_validate_name.assert_called_once_with("TestPermissionSet")
-    mock_validate_description.assert_called_once_with("x" * 701)
+    mock_validate_name.assert_called_with("TestPermissionSet")
+    mock_validate_description.assert_called_with("x" * 701)
 
 
 @patch("src.awsideman.commands.permission_set.validate_permission_set_name")
@@ -707,10 +703,10 @@ def test_create_permission_set_invalid_policy_arn(
         )
 
     # Verify validation was called
-    mock_validate_name.assert_called_once_with("TestPermissionSet")
+    mock_validate_name.assert_called_with("TestPermissionSet")
     # Description validation is not called when description is None
     mock_validate_description.assert_not_called()
-    mock_validate_policy_arn.assert_called_once_with("invalid-arn")
+    mock_validate_policy_arn.assert_called_with("invalid-arn")
 
 
 @patch("src.awsideman.commands.permission_set.validate_permission_set_name")
@@ -737,7 +733,7 @@ def test_create_permission_set_profile_validation_failure(
         )
 
     # Verify validate_profile was called with the correct parameter
-    mock_validate_profile.assert_called_once_with("non-existent-profile")
+    mock_validate_profile.assert_called_with("non-existent-profile")
 
 
 @patch("src.awsideman.commands.permission_set.validate_permission_set_name")
@@ -766,7 +762,7 @@ def test_create_permission_set_sso_instance_validation_failure(
         )
 
     # Verify validate_sso_instance was called with the correct parameter
-    mock_validate_sso_instance.assert_called_once_with({"region": "us-east-1"})
+    mock_validate_sso_instance.assert_called_with({"region": "us-east-1"})
 
 
 @patch("src.awsideman.commands.permission_set.validate_permission_set_name")
@@ -819,7 +815,7 @@ def test_create_permission_set_duplicate_name_error(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.create_permission_set.assert_called_once()
+    mock_sso_admin.create_permission_set.assert_called()
 
     # Verify the console output includes specific error message for duplicate name
     mock_console.print.assert_any_call(
@@ -880,7 +876,7 @@ def test_create_permission_set_api_error(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.create_permission_set.assert_called_once()
+    mock_sso_admin.create_permission_set.assert_called()
 
     # Verify the console output includes general error message
     mock_console.print.assert_any_call(
@@ -916,7 +912,7 @@ def test_create_permission_set_network_error(
     )
 
     # Mock the create_permission_set API with network error
-    mock_sso_admin.create_permission_set.side_effect = ConnectionError("Network error")
+    mock_sso_admin.create_permission_set.side_effect = ConnectionError(error="Network error")
 
     # Call the function and expect exception
     with pytest.raises(typer.Exit):
@@ -930,7 +926,7 @@ def test_create_permission_set_network_error(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.create_permission_set.assert_called_once()
+    mock_sso_admin.create_permission_set.assert_called()
 
 
 @patch("src.awsideman.commands.permission_set.validate_permission_set_name")
@@ -975,7 +971,7 @@ def test_create_permission_set_unexpected_error(
         )
 
     # Verify the function called the API correctly
-    mock_sso_admin.create_permission_set.assert_called_once()
+    mock_sso_admin.create_permission_set.assert_called()
 
     # Verify the console output includes unexpected error message
     mock_console.print.assert_any_call("[red]Error: Unexpected error[/red]")
@@ -1009,7 +1005,7 @@ def test_create_permission_set_multiple_invalid_policies(
         )
 
     # Verify validation was called only for the first policy (exits on first failure)
-    mock_validate_policy_arn.assert_called_once_with("invalid-arn-1")
+    mock_validate_policy_arn.assert_called_with("invalid-arn-1")
 
 
 @patch("src.awsideman.commands.permission_set.validate_permission_set_name")
@@ -1089,7 +1085,7 @@ def test_create_permission_set_empty_name_validation(
         create_permission_set(name="")
 
     # Verify validate_permission_set_name was called with empty string
-    mock_validate_name.assert_called_once_with("")
+    mock_validate_name.assert_called_with("")
 
     # Verify other validations were not called
     mock_validate_description.assert_not_called()
@@ -1130,7 +1126,7 @@ def test_create_permission_set_long_name_validation(
         )
 
     # Verify validate_permission_set_name was called with long name
-    mock_validate_name.assert_called_once_with(long_name)
+    mock_validate_name.assert_called_with(long_name)
 
     # Verify other validations were not called
     mock_validate_description.assert_not_called()

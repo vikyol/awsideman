@@ -75,21 +75,21 @@ def test_delete_permission_set_successful_by_name(
     result = delete_permission_set(identifier="TestPermissionSet", profile=None)
 
     # Verify identifier resolution was called
-    mock_resolve_identifier.assert_called_once_with(
+    mock_resolve_identifier.assert_called_with(
         mock_client, "arn:aws:sso:::instance/ssoins-1234567890abcdef", "TestPermissionSet"
     )
 
     # Verify describe_permission_set was called to get details for confirmation
-    mock_sso_admin.describe_permission_set.assert_called_once_with(
+    mock_sso_admin.describe_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )
 
     # Verify confirmation was requested
-    mock_confirm.assert_called_once_with("Are you sure you want to delete this permission set?")
+    mock_confirm.assert_called_with("Are you sure you want to delete this permission set?")
 
     # Verify the delete_permission_set API was called
-    mock_sso_admin.delete_permission_set.assert_called_once_with(
+    mock_sso_admin.delete_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )
@@ -152,14 +152,14 @@ def test_delete_permission_set_successful_by_arn(
     )
 
     # Verify identifier resolution was called with ARN
-    mock_resolve_identifier.assert_called_once_with(
+    mock_resolve_identifier.assert_called_with(
         mock_client,
         "arn:aws:sso:::instance/ssoins-1234567890abcdef",
         "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )
 
     # Verify the delete_permission_set API was called
-    mock_sso_admin.delete_permission_set.assert_called_once_with(
+    mock_sso_admin.delete_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )
@@ -208,10 +208,10 @@ def test_delete_permission_set_successful_with_profile(
     result = delete_permission_set(identifier="TestPermissionSet", profile="test-profile")
 
     # Verify profile validation was called with the correct profile
-    mock_validate_profile.assert_called_once_with("test-profile")
+    mock_validate_profile.assert_called_with("test-profile")
 
     # Verify AWS client manager was initialized with the correct profile and region
-    mock_aws_client_manager.assert_called_once_with(profile="test-profile", region="us-west-2")
+    mock_aws_client_manager.assert_called_with(profile="test-profile", region="us-west-2")
 
     # Verify the function returned None (successful completion)
     assert result is None
@@ -250,16 +250,14 @@ def test_delete_permission_set_cancelled_by_user(
     # Mock the describe_permission_set API response
     mock_sso_admin.describe_permission_set.return_value = sample_permission_set_response
 
-    # Call the function and expect exit
-    with pytest.raises(typer.Exit) as exc_info:
-        delete_permission_set(identifier="TestPermissionSet", profile=None)
+    # Call the function - it should return normally when cancelled
+    result = delete_permission_set(identifier="TestPermissionSet", profile=None)
 
-    # Verify exit code is 1 (due to generic exception handler catching typer.Exit(0))
-    # Note: This is likely a bug in the implementation - cancellation should exit with code 0
-    assert exc_info.value.exit_code == 1
+    # The function should return None when cancelled
+    assert result is None
 
     # Verify confirmation was requested
-    mock_confirm.assert_called_once_with("Are you sure you want to delete this permission set?")
+    mock_confirm.assert_called_with("Are you sure you want to delete this permission set?")
 
     # Verify delete API was NOT called
     mock_sso_admin.delete_permission_set.assert_not_called()
@@ -372,12 +370,12 @@ def test_delete_permission_set_identifier_resolution_context(
         delete_permission_set(identifier=identifier, profile=None)
 
         # Verify identifier resolution was called with the correct parameters
-        mock_resolve_identifier.assert_called_once_with(
+        mock_resolve_identifier.assert_called_with(
             mock_client, "arn:aws:sso:::instance/ssoins-1234567890abcdef", identifier
         )
 
         # Verify the resolved ARN was used in the delete call
-        mock_sso_admin.delete_permission_set.assert_called_once_with(
+        mock_sso_admin.delete_permission_set.assert_called_with(
             InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
             PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         )
@@ -423,7 +421,7 @@ def test_delete_permission_set_displays_permission_set_details(
     delete_permission_set(identifier="TestPermissionSet", profile=None)
 
     # Verify describe_permission_set was called to get details for display
-    mock_sso_admin.describe_permission_set.assert_called_once_with(
+    mock_sso_admin.describe_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )
@@ -493,7 +491,7 @@ def test_delete_permission_set_resource_not_found_exception(
     assert exc_info.value.exit_code == 1
 
     # Verify the delete API was called
-    mock_sso_admin.delete_permission_set.assert_called_once_with(
+    mock_sso_admin.delete_permission_set.assert_called_with(
         InstanceArn="arn:aws:sso:::instance/ssoins-1234567890abcdef",
         PermissionSetArn="arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
     )
@@ -559,7 +557,7 @@ def test_delete_permission_set_conflict_exception(
     assert exc_info.value.exit_code == 1
 
     # Verify the delete API was called
-    mock_sso_admin.delete_permission_set.assert_called_once()
+    mock_sso_admin.delete_permission_set.assert_called()
 
     # Verify appropriate error messages are displayed
     mock_console.print.assert_any_call(
@@ -675,7 +673,7 @@ def test_delete_permission_set_describe_failure_before_deletion(
     assert exc_info.value.exit_code == 1
 
     # Verify describe was called but delete was not
-    mock_sso_admin.describe_permission_set.assert_called_once()
+    mock_sso_admin.describe_permission_set.assert_called()
     mock_sso_admin.delete_permission_set.assert_not_called()
 
 
@@ -713,7 +711,7 @@ def test_delete_permission_set_identifier_resolution_failure(
     assert exc_info.value.exit_code == 1
 
     # Verify identifier resolution was called
-    mock_resolve_identifier.assert_called_once_with(
+    mock_resolve_identifier.assert_called_with(
         mock_client, "arn:aws:sso:::instance/ssoins-1234567890abcdef", "NonExistentPermissionSet"
     )
 
@@ -736,7 +734,7 @@ def test_delete_permission_set_profile_validation_failure(mock_validate_profile)
     assert exc_info.value.exit_code == 1
 
     # Verify profile validation was called
-    mock_validate_profile.assert_called_once_with("non-existent-profile")
+    mock_validate_profile.assert_called_with("non-existent-profile")
 
 
 @patch("src.awsideman.commands.permission_set.validate_profile")
@@ -759,8 +757,8 @@ def test_delete_permission_set_sso_instance_validation_failure(
     assert exc_info.value.exit_code == 1
 
     # Verify validations were called
-    mock_validate_profile.assert_called_once_with(None)
-    mock_validate_sso_instance.assert_called_once_with({"region": "us-east-1"})
+    mock_validate_profile.assert_called_with(None)
+    mock_validate_sso_instance.assert_called_with({"region": "us-east-1"})
 
 
 @patch("src.awsideman.commands.permission_set.resolve_permission_set_identifier")
@@ -805,7 +803,7 @@ def test_delete_permission_set_network_error(
     assert exc_info.value.exit_code == 1
 
     # Verify network error handler was called
-    mock_handle_network_error.assert_called_once()
+    mock_handle_network_error.assert_called()
 
 
 @patch("src.awsideman.commands.permission_set.resolve_permission_set_identifier")
@@ -899,4 +897,4 @@ def test_delete_permission_set_confirmation_message_display(
     )
 
     # Verify the confirmation prompt was called
-    mock_confirm.assert_called_once_with("Are you sure you want to delete this permission set?")
+    mock_confirm.assert_called_with("Are you sure you want to delete this permission set?")

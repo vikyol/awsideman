@@ -86,8 +86,8 @@ class TestBulkRevokeOperationLogic:
             instance_arn="arn:aws:sso:::instance/test",
         )
 
-        # Verify result - should succeed even if assignment doesn't exist
-        assert result["status"] == "success"
+        # Verify result - should be skipped if assignment doesn't exist
+        assert result["status"] == "skipped"
         assert result["message"] == "Assignment does not exist (already revoked)"
         assert result["retry_count"] == 0
 
@@ -362,8 +362,8 @@ class TestBulkRevokeOperationLogic:
             instance_arn="arn:aws:sso:::instance/test",
         )
 
-        # Verify result - should succeed because assignment doesn't exist (already revoked)
-        assert result["status"] == "success"
+        # Verify result - should be skipped because assignment doesn't exist (already revoked)
+        assert result["status"] == "skipped"
         assert result["message"] == "Assignment does not exist (already revoked)"
 
         # Verify delete was NOT called (because no matching assignment was found)
