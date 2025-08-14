@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from botocore.exceptions import ClientError
@@ -50,7 +50,7 @@ class ProvisioningMonitor(BaseStatusChecker):
             ProvisioningStatus: Provisioning status results with operations and estimates
         """
         start_time = time.time()
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         try:
             # Get all active and recent provisioning operations
@@ -262,7 +262,7 @@ class ProvisioningMonitor(BaseStatusChecker):
 
         try:
             # Check cached operations for completed ones
-            cutoff_time = datetime.utcnow() - timedelta(hours=24)  # Last 24 hours
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)  # Last 24 hours
 
             for operation_id, cached_op in self._operation_cache.items():
                 if (
@@ -330,7 +330,7 @@ class ProvisioningMonitor(BaseStatusChecker):
 
             # For now, simulate status checking
             # If operation is older than 10 minutes, consider it completed or failed
-            age_minutes = (datetime.utcnow() - operation.created_date).total_seconds() / 60
+            age_minutes = (datetime.now(timezone.utc) - operation.created_date).total_seconds() / 60
 
             if age_minutes > 10:
                 # Simulate completion or failure
@@ -338,7 +338,7 @@ class ProvisioningMonitor(BaseStatusChecker):
                     operation.status = ProvisioningOperationStatus.FAILED
                 else:
                     operation.status = ProvisioningOperationStatus.SUCCEEDED
-                    operation.estimated_completion = datetime.utcnow()
+                    operation.estimated_completion = datetime.now(timezone.utc)
 
             return operation
 
@@ -380,13 +380,13 @@ class ProvisioningMonitor(BaseStatusChecker):
             # Find the oldest active operation
             oldest_operation = min(active_operations, key=lambda op: op.created_date)
             elapsed_minutes = (
-                datetime.utcnow() - oldest_operation.created_date
+                datetime.now(timezone.utc) - oldest_operation.created_date
             ).total_seconds() / 60
 
             # Estimate remaining time
             remaining_minutes = max(0, avg_duration_minutes - elapsed_minutes)
 
-            return datetime.utcnow() + timedelta(minutes=remaining_minutes)
+            return datetime.now(timezone.utc) + timedelta(minutes=remaining_minutes)
 
         except Exception as e:
             self.logger.warning(f"Error estimating completion time: {str(e)}")
@@ -441,7 +441,7 @@ class ProvisioningMonitor(BaseStatusChecker):
         # Check for long-running operations
         long_running_ops = []
         for op in active_operations:
-            age_minutes = (datetime.utcnow() - op.created_date).total_seconds() / 60
+            age_minutes = (datetime.now(timezone.utc) - op.created_date).total_seconds() / 60
             if age_minutes > 30:  # Operations running longer than 30 minutes
                 long_running_ops.append(op)
 
@@ -498,7 +498,7 @@ class ProvisioningMonitor(BaseStatusChecker):
                 self._operation_cache[operation.operation_id] = operation
 
             # Clean up old operations (older than 7 days)
-            cutoff_time = datetime.utcnow() - timedelta(days=7)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=7)
             operations_to_remove = []
 
             for operation_id, operation in self._operation_cache.items():
@@ -559,7 +559,9 @@ class ProvisioningMonitor(BaseStatusChecker):
                         "target_type": operation.target_type,
                         "failure_reason": operation.failure_reason,
                         "created_date": operation.created_date.isoformat(),
-                        "age_minutes": (datetime.utcnow() - operation.created_date).total_seconds()
+                        "age_minutes": (
+                            datetime.now(timezone.utc) - operation.created_date
+                        ).total_seconds()
                         / 60,
                     }
                 )
@@ -589,7 +591,7 @@ class ProvisioningMonitor(BaseStatusChecker):
 
         if provisioning_status.estimated_completion:
             eta_minutes = (
-                provisioning_status.estimated_completion - datetime.utcnow()
+                provisioning_status.estimated_completion - datetime.now(timezone.utc)
             ).total_seconds() / 60
             if eta_minutes > 0:
                 summary_parts.append(f"ETA: {eta_minutes:.0f}min")

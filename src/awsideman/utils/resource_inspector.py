@@ -1,7 +1,8 @@
 """Resource inspection component for AWS Identity Center status monitoring."""
+
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional
 
@@ -50,7 +51,7 @@ class ResourceInspector(BaseStatusChecker):
         Returns:
             ResourceInspectionStatus: Basic inspection status
         """
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         return ResourceInspectionStatus(
             timestamp=timestamp,
@@ -69,7 +70,7 @@ class ResourceInspector(BaseStatusChecker):
         Returns:
             ResourceInspectionStatus: User inspection results with suggestions if not found
         """
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         try:
             self.logger.info(f"Inspecting user: {user_identifier}")
@@ -121,7 +122,7 @@ class ResourceInspector(BaseStatusChecker):
         Returns:
             ResourceInspectionStatus: Group inspection results with suggestions if not found
         """
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         try:
             self.logger.info(f"Inspecting group: {group_identifier}")
@@ -175,7 +176,7 @@ class ResourceInspector(BaseStatusChecker):
         Returns:
             ResourceInspectionStatus: Permission set inspection results with suggestions if not found
         """
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         try:
             self.logger.info(f"Inspecting permission set: {permission_set_identifier}")
@@ -768,7 +769,7 @@ class ResourceInspector(BaseStatusChecker):
         if (
             self._user_cache is not None
             and self._cache_timestamp is not None
-            and (datetime.utcnow() - self._cache_timestamp).total_seconds()
+            and (datetime.now(timezone.utc) - self._cache_timestamp).total_seconds()
             < self._cache_ttl_minutes * 60
         ):
             return self._user_cache
@@ -794,7 +795,7 @@ class ResourceInspector(BaseStatusChecker):
 
             # Update cache
             self._user_cache = users
-            self._cache_timestamp = datetime.utcnow()
+            self._cache_timestamp = datetime.now(timezone.utc)
 
             return users
 
@@ -813,7 +814,7 @@ class ResourceInspector(BaseStatusChecker):
         if (
             self._group_cache is not None
             and self._cache_timestamp is not None
-            and (datetime.utcnow() - self._cache_timestamp).total_seconds()
+            and (datetime.now(timezone.utc) - self._cache_timestamp).total_seconds()
             < self._cache_ttl_minutes * 60
         ):
             return self._group_cache
@@ -839,7 +840,7 @@ class ResourceInspector(BaseStatusChecker):
 
             # Update cache
             self._group_cache = groups
-            self._cache_timestamp = datetime.utcnow()
+            self._cache_timestamp = datetime.now(timezone.utc)
 
             return groups
 
@@ -858,7 +859,7 @@ class ResourceInspector(BaseStatusChecker):
         if (
             self._permission_set_cache is not None
             and self._cache_timestamp is not None
-            and (datetime.utcnow() - self._cache_timestamp).total_seconds()
+            and (datetime.now(timezone.utc) - self._cache_timestamp).total_seconds()
             < self._cache_ttl_minutes * 60
         ):
             return self._permission_set_cache
@@ -894,7 +895,7 @@ class ResourceInspector(BaseStatusChecker):
 
             # Update cache
             self._permission_set_cache = permission_sets
-            self._cache_timestamp = datetime.utcnow()
+            self._cache_timestamp = datetime.now(timezone.utc)
 
             return permission_sets
 

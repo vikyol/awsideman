@@ -3,12 +3,13 @@
 This module contains simplified integration tests that test the complete multi-account
 workflows by mocking at a higher level to avoid complex AWS client mocking.
 """
+
 from typing import List
 from unittest.mock import Mock, patch
 
 import pytest
 
-from src.awsideman.utils.bulk.multi_account_batch import MultiAccountBatchProcessor
+from src.awsideman.bulk.multi_account_batch import MultiAccountBatchProcessor
 from src.awsideman.utils.models import (
     AccountInfo,
     AccountResult,

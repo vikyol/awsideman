@@ -69,9 +69,10 @@ class Config:
     def _ensure_config_dir(self):
         """Ensure the configuration directory exists."""
         if not self._config_dir_ensured:
-            if not CONFIG_DIR.exists():
-                CONFIG_DIR.mkdir(parents=True)
-                console.print(f"Created configuration directory: {CONFIG_DIR}")
+            config_dir = getattr(self, "_config_dir", CONFIG_DIR)
+            if not config_dir.exists():
+                config_dir.mkdir(parents=True)
+                console.print(f"Created configuration directory: {config_dir}")
             self._config_dir_ensured = True
 
     def _ensure_config_loaded(self):
@@ -81,13 +82,21 @@ class Config:
             self._load_config()
             self._config_loaded = True
 
+    def reload_config(self):
+        """Force reload configuration from file."""
+        self._config_loaded = False
+        self._ensure_config_loaded()
+
     def _load_config(self):
         """Load the configuration from file, with automatic migration from JSON to YAML."""
+        config_file_yaml = getattr(self, "_config_file_yaml", CONFIG_FILE_YAML)
+        config_file_json = getattr(self, "_config_file_json", CONFIG_FILE_JSON)
+
         # Try to load YAML config first
-        if CONFIG_FILE_YAML.exists():
+        if config_file_yaml.exists():
             self._load_yaml_config()
         # If no YAML config, try to load and migrate JSON config
-        elif CONFIG_FILE_JSON.exists():
+        elif config_file_json.exists():
             self._load_and_migrate_json_config()
         else:
             self.config_data = {}
@@ -101,22 +110,24 @@ class Config:
             self.config_data = {}
             return
 
+        config_file_yaml = getattr(self, "_config_file_yaml", CONFIG_FILE_YAML)
         try:
-            with open(CONFIG_FILE_YAML, "r", encoding="utf-8") as f:
+            with open(config_file_yaml, "r", encoding="utf-8") as f:
                 self.config_data = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
             console.print(
-                f"[red]Error: Configuration file {CONFIG_FILE_YAML} is not valid YAML: {e}[/red]"
+                f"[red]Error: Configuration file {config_file_yaml} is not valid YAML: {e}[/red]"
             )
             self.config_data = {}
         except Exception as e:
-            console.print(f"[red]Error reading configuration file {CONFIG_FILE_YAML}: {e}[/red]")
+            console.print(f"[red]Error reading configuration file {config_file_yaml}: {e}[/red]")
             self.config_data = {}
 
     def _load_and_migrate_json_config(self):
         """Load JSON config and migrate to YAML format."""
+        config_file_json = getattr(self, "_config_file_json", CONFIG_FILE_JSON)
         try:
-            with open(CONFIG_FILE_JSON, "r") as f:
+            with open(config_file_json, "r") as f:
                 json_data = json.load(f)
 
             console.print("[blue]Migrating configuration from JSON to YAML format...[/blue]")
@@ -128,8 +139,8 @@ class Config:
             self.save_config()
 
             # Create backup of old JSON file
-            backup_file = CONFIG_FILE_JSON.with_suffix(".json.backup")
-            CONFIG_FILE_JSON.rename(backup_file)
+            backup_file = config_file_json.with_suffix(".json.backup")
+            config_file_json.rename(backup_file)
             console.print(
                 f"[green]Configuration migrated to YAML format. JSON backup saved as {backup_file}[/green]"
             )
@@ -192,8 +203,9 @@ class Config:
             )
             return
 
+        config_file_yaml = getattr(self, "_config_file_yaml", CONFIG_FILE_YAML)
         try:
-            with open(CONFIG_FILE_YAML, "w", encoding="utf-8") as f:
+            with open(config_file_yaml, "w", encoding="utf-8") as f:
                 yaml.dump(self.config_data, f, default_flow_style=False, indent=2, sort_keys=False)
             # Don't print save message for every operation to reduce noise
         except Exception as e:

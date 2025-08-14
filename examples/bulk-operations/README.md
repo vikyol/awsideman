@@ -198,7 +198,7 @@ If you encounter name resolution errors:
 
 ```python
 from pathlib import Path
-from awsideman.utils.bulk import FileFormatDetector, CSVProcessor, JSONProcessor
+from awsideman.bulk import FileFormatDetector, CSVProcessor, JSONProcessor
 
 # Detect file format and get appropriate processor
 file_path = Path("sample-user-assignments.csv")
@@ -218,7 +218,7 @@ else:
 ### Using Resource Resolver
 
 ```python
-from awsideman.utils.bulk import ResourceResolver
+from awsideman.bulk import ResourceResolver
 from awsideman.aws_clients.manager import AWSClientManager
 
 # Initialize AWS client manager

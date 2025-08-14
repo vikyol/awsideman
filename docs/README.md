@@ -7,6 +7,9 @@ This directory contains comprehensive documentation for awsideman's features and
 ### Core Features
 - **[Multi-Account Operations](MULTI_ACCOUNT_OPERATIONS.md)** - Complete guide to managing permissions across multiple AWS accounts
 - **[Bulk Operations](BULK_OPERATIONS.md)** - CSV/JSON-based bulk assignment and revocation operations
+- **[Rollback Operations](ROLLBACK_OPERATIONS.md)** - Operation tracking and rollback capabilities for safe permission management
+- **[Rollback Developer Guide](ROLLBACK_DEVELOPER_GUIDE.md)** - Technical documentation for rollback system architecture and APIs
+- **[Rollback API Reference](ROLLBACK_API_REFERENCE.md)** - Complete API documentation for rollback system classes and methods
 - **[Security Implementation](SECURITY.md)** - Security features, encryption, and best practices
 - **[Security Best Practices](SECURITY_BEST_PRACTICES.md)** - Enterprise security guidelines and recommendations
 
@@ -34,6 +37,10 @@ This directory contains comprehensive documentation for awsideman's features and
    - [Bulk Operations Guide](BULK_OPERATIONS.md)
    - [CSV/JSON Examples](../examples/bulk-operations/)
 
+4. **Safe Permission Management**
+   - [Rollback Operations Guide](ROLLBACK_OPERATIONS.md)
+   - [Operation Tracking and Audit](ROLLBACK_OPERATIONS.md#auditing-permission-changes)
+
 4. **Enterprise Workflows**
    - [Enterprise Examples](../examples/multi-account-operations/sample-data/enterprise-accounts.json)
    - [Complex Filtering](../examples/multi-account-operations/README.md#filtering-scenarios)
@@ -54,18 +61,20 @@ This directory contains comprehensive documentation for awsideman's features and
 
 ## Feature Matrix
 
-| Feature | Single Account | Multi-Account | Bulk Operations | Notes |
-|---------|---------------|---------------|-----------------|-------|
-| User Assignment | ✅ | ✅ | ✅ | Full support across all modes |
-| Group Assignment | ✅ | ✅ | ✅ | Full support across all modes |
-| Permission Set Assignment | ✅ | ✅ | ✅ | Full support across all modes |
-| Account Filtering | ❌ | ✅ | ✅ | Wildcard and tag-based filtering |
-| Dry-Run Mode | ✅ | ✅ | ✅ | Preview changes before execution |
-| Progress Tracking | ✅ | ✅ | ✅ | Real-time progress indicators |
-| Error Handling | ✅ | ✅ | ✅ | Comprehensive error reporting |
-| Name Resolution | ✅ | ✅ | ✅ | Human-readable names to AWS IDs |
-| Batch Processing | ❌ | ✅ | ✅ | Configurable batch sizes |
-| Rate Limiting | ✅ | ✅ | ✅ | Automatic throttling and retry |
+| Feature | Single Account | Multi-Account | Bulk Operations | Rollback | Notes |
+|---------|---------------|---------------|-----------------|----------|-------|
+| User Assignment | ✅ | ✅ | ✅ | ✅ | Full support across all modes |
+| Group Assignment | ✅ | ✅ | ✅ | ✅ | Full support across all modes |
+| Permission Set Assignment | ✅ | ✅ | ✅ | ✅ | Full support across all modes |
+| Account Filtering | ❌ | ✅ | ✅ | ✅ | Wildcard and tag-based filtering |
+| Dry-Run Mode | ✅ | ✅ | ✅ | ✅ | Preview changes before execution |
+| Progress Tracking | ✅ | ✅ | ✅ | ✅ | Real-time progress indicators |
+| Error Handling | ✅ | ✅ | ✅ | ✅ | Comprehensive error reporting |
+| Name Resolution | ✅ | ✅ | ✅ | ✅ | Human-readable names to AWS IDs |
+| Batch Processing | ❌ | ✅ | ✅ | ✅ | Configurable batch sizes |
+| Rate Limiting | ✅ | ✅ | ✅ | ✅ | Automatic throttling and retry |
+| Operation Tracking | ❌ | ❌ | ❌ | ✅ | Automatic logging of all operations |
+| Operation Rollback | ❌ | ❌ | ❌ | ✅ | Undo operations safely |
 
 ## Command Reference
 
@@ -102,6 +111,11 @@ awsideman cache status
 awsideman cache clear
 awsideman cache health check
 awsideman cache warm --resource-type <type>
+
+# Rollback operations
+awsideman rollback list
+awsideman rollback apply <operation-id>
+awsideman rollback status
 ```
 
 ## Examples by Organization Size

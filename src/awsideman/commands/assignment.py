@@ -35,17 +35,17 @@ from rich.console import Console
 from rich.table import Table
 
 from ..aws_clients.manager import AWSClientManager
-from ..commands.permission_set import resolve_permission_set_identifier
-from ..utils.account_filter import AccountFilter
-from ..utils.bulk.performance_optimizer import (
+from ..bulk.performance_optimizer import (
     create_performance_optimized_processor,
     display_performance_recommendations,
 )
-from ..utils.bulk.resolver import ResourceResolver
+from ..bulk.resolver import ResourceResolver
+from ..commands.permission_set import resolve_permission_set_identifier
+from ..rollback.logger import OperationLogger
+from ..utils.account_filter import AccountFilter
 from ..utils.config import Config
 from ..utils.error_handler import handle_aws_error, handle_network_error
 from ..utils.models import MultiAccountAssignment
-from ..utils.rollback.logger import OperationLogger
 from ..utils.validators import validate_profile, validate_sso_instance
 
 app = typer.Typer(

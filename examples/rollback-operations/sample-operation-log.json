@@ -1,0 +1,214 @@
+{
+  "operations": [
+    {
+      "operation_id": "abc123-def456-ghi789",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "operation_type": "assign",
+      "principal_id": "user-123456789",
+      "principal_type": "USER",
+      "principal_name": "john.doe",
+      "permission_set_arn": "arn:aws:sso:::permissionSet/ins-123456789/ps-123456789",
+      "permission_set_name": "ReadOnlyAccess",
+      "account_ids": ["123456789012", "234567890123", "345678901234"],
+      "account_names": ["Production", "Staging", "Development"],
+      "results": [
+        {
+          "account_id": "123456789012",
+          "success": true,
+          "error": null,
+          "duration_ms": 1500
+        },
+        {
+          "account_id": "234567890123",
+          "success": true,
+          "error": null,
+          "duration_ms": 1200
+        },
+        {
+          "account_id": "345678901234",
+          "success": true,
+          "error": null,
+          "duration_ms": 1800
+        }
+      ],
+      "metadata": {
+        "source": "bulk_assign",
+        "input_file": "assignments.csv",
+        "batch_size": 10,
+        "profile": "default",
+        "user": "admin@company.com"
+      },
+      "rolled_back": false,
+      "rollback_operation_id": null
+    },
+    {
+      "operation_id": "def456-ghi789-jkl012",
+      "timestamp": "2024-01-15T09:15:00Z",
+      "operation_type": "revoke",
+      "principal_id": "group-987654321",
+      "principal_type": "GROUP",
+      "principal_name": "DevTeam",
+      "permission_set_arn": "arn:aws:sso:::permissionSet/ins-123456789/ps-987654321",
+      "permission_set_name": "PowerUserAccess",
+      "account_ids": ["123456789012", "234567890123", "345678901234", "456789012345", "567890123456"],
+      "account_names": ["Production", "Staging", "Development", "Testing", "Sandbox"],
+      "results": [
+        {
+          "account_id": "123456789012",
+          "success": true,
+          "error": null,
+          "duration_ms": 2100
+        },
+        {
+          "account_id": "234567890123",
+          "success": true,
+          "error": null,
+          "duration_ms": 1900
+        },
+        {
+          "account_id": "345678901234",
+          "success": false,
+          "error": "Assignment not found",
+          "duration_ms": 800
+        },
+        {
+          "account_id": "456789012345",
+          "success": true,
+          "error": null,
+          "duration_ms": 2300
+        },
+        {
+          "account_id": "567890123456",
+          "success": true,
+          "error": null,
+          "duration_ms": 1700
+        }
+      ],
+      "metadata": {
+        "source": "individual_revoke",
+        "batch_size": 1,
+        "profile": "production",
+        "user": "admin@company.com"
+      },
+      "rolled_back": false,
+      "rollback_operation_id": null
+    },
+    {
+      "operation_id": "ghi789-jkl012-mno345",
+      "timestamp": "2024-01-14T16:45:00Z",
+      "operation_type": "assign",
+      "principal_id": "user-555666777",
+      "principal_type": "USER",
+      "principal_name": "jane.smith",
+      "permission_set_arn": "arn:aws:sso:::permissionSet/ins-123456789/ps-111222333",
+      "permission_set_name": "AdminAccess",
+      "account_ids": ["123456789012"],
+      "account_names": ["Production"],
+      "results": [
+        {
+          "account_id": "123456789012",
+          "success": true,
+          "error": null,
+          "duration_ms": 2500
+        }
+      ],
+      "metadata": {
+        "source": "individual_assign",
+        "batch_size": 1,
+        "profile": "default",
+        "user": "manager@company.com"
+      },
+      "rolled_back": true,
+      "rollback_operation_id": "jkl012-mno345-pqr678"
+    },
+    {
+      "operation_id": "jkl012-mno345-pqr678",
+      "timestamp": "2024-01-14T17:30:00Z",
+      "operation_type": "rollback",
+      "principal_id": "user-555666777",
+      "principal_type": "USER",
+      "principal_name": "jane.smith",
+      "permission_set_arn": "arn:aws:sso:::permissionSet/ins-123456789/ps-111222333",
+      "permission_set_name": "AdminAccess",
+      "account_ids": ["123456789012"],
+      "account_names": ["Production"],
+      "results": [
+        {
+          "account_id": "123456789012",
+          "success": true,
+          "error": null,
+          "duration_ms": 1800
+        }
+      ],
+      "metadata": {
+        "source": "rollback_apply",
+        "original_operation_id": "ghi789-jkl012-mno345",
+        "rollback_type": "revoke",
+        "batch_size": 10,
+        "profile": "default",
+        "user": "admin@company.com"
+      },
+      "rolled_back": false,
+      "rollback_operation_id": null
+    },
+    {
+      "operation_id": "mno345-pqr678-stu901",
+      "timestamp": "2024-01-13T14:20:00Z",
+      "operation_type": "assign",
+      "principal_id": "group-111222333",
+      "principal_type": "GROUP",
+      "principal_name": "SecurityTeam",
+      "permission_set_arn": "arn:aws:sso:::permissionSet/ins-123456789/ps-444555666",
+      "permission_set_name": "SecurityAuditAccess",
+      "account_ids": ["123456789012", "234567890123", "345678901234", "456789012345", "567890123456", "678901234567"],
+      "account_names": ["Production", "Staging", "Development", "Testing", "Sandbox", "Security"],
+      "results": [
+        {
+          "account_id": "123456789012",
+          "success": true,
+          "error": null,
+          "duration_ms": 1600
+        },
+        {
+          "account_id": "234567890123",
+          "success": true,
+          "error": null,
+          "duration_ms": 1400
+        },
+        {
+          "account_id": "345678901234",
+          "success": true,
+          "error": null,
+          "duration_ms": 1700
+        },
+        {
+          "account_id": "456789012345",
+          "success": false,
+          "error": "Rate limit exceeded",
+          "duration_ms": 500
+        },
+        {
+          "account_id": "567890123456",
+          "success": true,
+          "error": null,
+          "duration_ms": 2100
+        },
+        {
+          "account_id": "678901234567",
+          "success": true,
+          "error": null,
+          "duration_ms": 1900
+        }
+      ],
+      "metadata": {
+        "source": "bulk_assign",
+        "input_file": "security-team-assignments.json",
+        "batch_size": 8,
+        "profile": "security",
+        "user": "security-admin@company.com"
+      },
+      "rolled_back": false,
+      "rollback_operation_id": null
+    }
+  ]
+}

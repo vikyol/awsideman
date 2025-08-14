@@ -49,6 +49,7 @@ Troubleshooting:
     - Use smaller batch sizes if encountering AWS API rate limits
     - Check profile configuration if name resolution fails
 """
+
 import asyncio
 from pathlib import Path
 from typing import Optional
@@ -170,7 +171,7 @@ def bulk_assign(
     """
     try:
         # Import bulk utilities
-        from ..utils.bulk import (
+        from ..bulk import (
             BatchProcessor,
             FileFormatDetector,
             PreviewGenerator,
@@ -488,7 +489,7 @@ def bulk_revoke(
     """
     try:
         # Import bulk utilities
-        from ..utils.bulk import (
+        from ..bulk import (
             BatchProcessor,
             FileFormatDetector,
             PreviewGenerator,

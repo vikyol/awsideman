@@ -3,12 +3,13 @@
 This module contains performance tests to ensure bulk operations
 can handle large datasets efficiently.
 """
+
 import time
 from unittest.mock import Mock
 
 import pytest
 
-from src.awsideman.utils.bulk import BatchProcessor, FileFormatDetector, ResourceResolver
+from src.awsideman.bulk import BatchProcessor, FileFormatDetector, ResourceResolver
 from tests.fixtures.bulk_test_data import BulkTestDataFixtures
 
 

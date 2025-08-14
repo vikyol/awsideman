@@ -35,7 +35,7 @@ Smart time estimation based on:
 
 ```python
 from rich.console import Console
-from src.awsideman.utils.bulk.multi_account_progress import MultiAccountProgressTracker
+from src.awsideman.bulk.multi_account_progress import MultiAccountProgressTracker
 
 console = Console()
 tracker = MultiAccountProgressTracker(

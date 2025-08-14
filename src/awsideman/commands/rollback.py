@@ -31,6 +31,7 @@ Examples:
     # Apply rollback with custom batch size
     $ awsideman rollback apply abc123-def456-ghi789 --batch-size 5
 """
+
 import json
 from typing import Optional
 
@@ -39,8 +40,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from ..rollback.logger import OperationLogger
 from ..utils.config import Config
-from ..utils.rollback.logger import OperationLogger
 from ..utils.validators import validate_profile
 
 app = typer.Typer(

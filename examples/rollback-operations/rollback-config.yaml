@@ -1,0 +1,86 @@
+# Example rollback configuration for awsideman
+# Place this in ~/.awsideman/config.yaml
+
+rollback:
+  # Enable/disable rollback tracking
+  # When disabled, operations will not be logged for rollback
+  enabled: true
+
+  # Directory for storing operation logs
+  # Can be absolute path or relative to home directory
+  storage_directory: "~/.awsideman/operations"
+
+  # Number of days to retain operation logs
+  # Operations older than this will be automatically cleaned up
+  retention_days: 90
+
+  # Automatically clean up old operations
+  # When enabled, cleanup runs during each operation
+  auto_cleanup: true
+
+  # Maximum number of operations to store
+  # Oldest operations are removed when this limit is reached
+  max_operations: 10000
+
+  # Require confirmation for rollback operations
+  # When true, user must confirm before rollback is applied
+  confirmation_required: true
+
+  # Default to dry-run mode for rollback operations
+  # When true, rollback commands default to --dry-run
+  dry_run_default: false
+
+  # Batch size for rollback operations
+  # Number of rollback actions to process in parallel
+  default_batch_size: 10
+
+  # Enable compression for operation logs
+  # Reduces storage space but increases CPU usage
+  compress_logs: false
+
+  # Log level for rollback operations
+  # Options: DEBUG, INFO, WARNING, ERROR
+  log_level: "INFO"
+
+# Environment-specific configurations
+# These can be overridden using environment variables
+
+# Development environment example
+# rollback:
+#   enabled: true
+#   retention_days: 30
+#   confirmation_required: false
+#   dry_run_default: true
+#   default_batch_size: 5
+
+# Production environment example
+# rollback:
+#   enabled: true
+#   retention_days: 365
+#   confirmation_required: true
+#   dry_run_default: false
+#   default_batch_size: 8
+#   auto_cleanup: true
+#   compress_logs: true
+
+# High-security environment example
+# rollback:
+#   enabled: true
+#   retention_days: 2555  # 7 years
+#   confirmation_required: true
+#   dry_run_default: false
+#   default_batch_size: 3
+#   auto_cleanup: false
+#   compress_logs: true
+#   log_level: "DEBUG"
+
+# Environment variable overrides:
+# AWSIDEMAN_ROLLBACK_ENABLED=true
+# AWSIDEMAN_ROLLBACK_STORAGE_DIR="/custom/path"
+# AWSIDEMAN_ROLLBACK_RETENTION_DAYS=60
+# AWSIDEMAN_ROLLBACK_CONFIRMATION_REQUIRED=false
+# AWSIDEMAN_ROLLBACK_DRY_RUN_DEFAULT=true
+# AWSIDEMAN_ROLLBACK_DEFAULT_BATCH_SIZE=15
+# AWSIDEMAN_ROLLBACK_AUTO_CLEANUP=true
+# AWSIDEMAN_ROLLBACK_COMPRESS_LOGS=true
+# AWSIDEMAN_ROLLBACK_LOG_LEVEL=DEBUG

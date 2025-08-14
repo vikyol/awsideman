@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from botocore.exceptions import ClientError
@@ -49,7 +49,7 @@ class SyncMonitor(BaseStatusChecker):
             SyncMonitorStatus: Sync monitoring results with provider status and health
         """
         start_time = time.time()
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         try:
             # Get all configured identity providers
@@ -507,7 +507,7 @@ class SyncMonitor(BaseStatusChecker):
             # Check if sync appears overdue
             if last_sync_time:
                 # Ensure both datetimes are naive for comparison
-                current_time = datetime.utcnow()
+                current_time = datetime.now(timezone.utc)
                 if last_sync_time.tzinfo is not None:
                     last_sync_time = last_sync_time.replace(tzinfo=None)
                 age_hours = (current_time - last_sync_time).total_seconds() / 3600
@@ -785,7 +785,7 @@ class SyncMonitor(BaseStatusChecker):
                 self._sync_cache[provider_status.provider_name] = provider_status
 
             # Clean up old entries (older than 7 days)
-            cutoff_time = datetime.utcnow() - timedelta(days=7)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=7)
             providers_to_remove = []
 
             for provider_name, status in self._sync_cache.items():
