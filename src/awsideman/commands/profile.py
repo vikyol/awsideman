@@ -1,4 +1,5 @@
 """Profile management commands for awsideman."""
+
 from typing import Optional
 
 import typer

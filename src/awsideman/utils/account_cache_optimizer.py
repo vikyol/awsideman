@@ -717,9 +717,9 @@ class AccountCacheOptimizer:
 
             else:
                 inspection["enumeration_failed"] = True
-                inspection[
-                    "message"
-                ] = "Could not enumerate cache keys - may need different approach"
+                inspection["message"] = (
+                    "Could not enumerate cache keys - may need different approach"
+                )
 
         except Exception as e:
             inspection["error"] = str(e)

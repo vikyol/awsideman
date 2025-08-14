@@ -1,4 +1,5 @@
 """Data models for AWS Organizations structure and metadata."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum

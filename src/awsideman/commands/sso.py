@@ -1,4 +1,5 @@
 """SSO instance commands for awsideman."""
+
 from typing import Optional
 
 import typer

@@ -173,39 +173,59 @@ class AdvancedCacheConfig(CacheConfig):
 
         # Merge configurations (environment takes precedence)
         merged_data = {
-            "enabled": env_config.enabled
-            if os.getenv("AWSIDEMAN_CACHE_ENABLED")
-            else config.enabled,
-            "default_ttl": env_config.default_ttl
-            if os.getenv("AWSIDEMAN_CACHE_TTL_DEFAULT")
-            else config.default_ttl,
-            "max_size_mb": env_config.max_size_mb
-            if os.getenv("AWSIDEMAN_CACHE_MAX_SIZE_MB")
-            else config.max_size_mb,
-            "backend_type": env_config.backend_type
-            if os.getenv("AWSIDEMAN_CACHE_BACKEND")
-            else config.backend_type,
-            "encryption_enabled": env_config.encryption_enabled
-            if os.getenv("AWSIDEMAN_CACHE_ENCRYPTION")
-            else config.encryption_enabled,
-            "encryption_type": env_config.encryption_type
-            if os.getenv("AWSIDEMAN_CACHE_ENCRYPTION_TYPE")
-            else config.encryption_type,
-            "dynamodb_table_name": env_config.dynamodb_table_name
-            if os.getenv("AWSIDEMAN_CACHE_DYNAMODB_TABLE")
-            else config.dynamodb_table_name,
-            "dynamodb_region": env_config.dynamodb_region
-            if os.getenv("AWSIDEMAN_CACHE_DYNAMODB_REGION")
-            else config.dynamodb_region,
-            "dynamodb_profile": env_config.dynamodb_profile
-            if os.getenv("AWSIDEMAN_CACHE_DYNAMODB_PROFILE")
-            else config.dynamodb_profile,
-            "hybrid_local_ttl": env_config.hybrid_local_ttl
-            if os.getenv("AWSIDEMAN_CACHE_HYBRID_LOCAL_TTL")
-            else config.hybrid_local_ttl,
-            "file_cache_dir": env_config.file_cache_dir
-            if os.getenv("AWSIDEMAN_CACHE_FILE_DIR")
-            else config.file_cache_dir,
+            "enabled": (
+                env_config.enabled if os.getenv("AWSIDEMAN_CACHE_ENABLED") else config.enabled
+            ),
+            "default_ttl": (
+                env_config.default_ttl
+                if os.getenv("AWSIDEMAN_CACHE_TTL_DEFAULT")
+                else config.default_ttl
+            ),
+            "max_size_mb": (
+                env_config.max_size_mb
+                if os.getenv("AWSIDEMAN_CACHE_MAX_SIZE_MB")
+                else config.max_size_mb
+            ),
+            "backend_type": (
+                env_config.backend_type
+                if os.getenv("AWSIDEMAN_CACHE_BACKEND")
+                else config.backend_type
+            ),
+            "encryption_enabled": (
+                env_config.encryption_enabled
+                if os.getenv("AWSIDEMAN_CACHE_ENCRYPTION")
+                else config.encryption_enabled
+            ),
+            "encryption_type": (
+                env_config.encryption_type
+                if os.getenv("AWSIDEMAN_CACHE_ENCRYPTION_TYPE")
+                else config.encryption_type
+            ),
+            "dynamodb_table_name": (
+                env_config.dynamodb_table_name
+                if os.getenv("AWSIDEMAN_CACHE_DYNAMODB_TABLE")
+                else config.dynamodb_table_name
+            ),
+            "dynamodb_region": (
+                env_config.dynamodb_region
+                if os.getenv("AWSIDEMAN_CACHE_DYNAMODB_REGION")
+                else config.dynamodb_region
+            ),
+            "dynamodb_profile": (
+                env_config.dynamodb_profile
+                if os.getenv("AWSIDEMAN_CACHE_DYNAMODB_PROFILE")
+                else config.dynamodb_profile
+            ),
+            "hybrid_local_ttl": (
+                env_config.hybrid_local_ttl
+                if os.getenv("AWSIDEMAN_CACHE_HYBRID_LOCAL_TTL")
+                else config.hybrid_local_ttl
+            ),
+            "file_cache_dir": (
+                env_config.file_cache_dir
+                if os.getenv("AWSIDEMAN_CACHE_FILE_DIR")
+                else config.file_cache_dir
+            ),
         }
 
         # Merge operation TTLs
@@ -229,16 +249,16 @@ class AdvancedCacheConfig(CacheConfig):
         # Validate backend type
         valid_backends = ["file", "dynamodb", "hybrid"]
         if self.backend_type not in valid_backends:
-            errors[
-                "backend_type"
-            ] = f"Invalid backend type '{self.backend_type}'. Must be one of: {valid_backends}"
+            errors["backend_type"] = (
+                f"Invalid backend type '{self.backend_type}'. Must be one of: {valid_backends}"
+            )
 
         # Validate encryption type
         valid_encryption_types = ["none", "aes256"]
         if self.encryption_type not in valid_encryption_types:
-            errors[
-                "encryption_type"
-            ] = f"Invalid encryption type '{self.encryption_type}'. Must be one of: {valid_encryption_types}"
+            errors["encryption_type"] = (
+                f"Invalid encryption type '{self.encryption_type}'. Must be one of: {valid_encryption_types}"
+            )
 
         # Validate TTL values
         if self.default_ttl <= 0:
@@ -254,21 +274,21 @@ class AdvancedCacheConfig(CacheConfig):
         # Validate DynamoDB configuration if using DynamoDB backend
         if self.backend_type in ["dynamodb", "hybrid"]:
             if not self.dynamodb_table_name:
-                errors[
-                    "dynamodb_table_name"
-                ] = "DynamoDB table name is required for DynamoDB backend"
+                errors["dynamodb_table_name"] = (
+                    "DynamoDB table name is required for DynamoDB backend"
+                )
             elif not self.dynamodb_table_name.replace("-", "").replace("_", "").isalnum():
-                errors[
-                    "dynamodb_table_name"
-                ] = "DynamoDB table name must contain only alphanumeric characters, hyphens, and underscores"
+                errors["dynamodb_table_name"] = (
+                    "DynamoDB table name must contain only alphanumeric characters, hyphens, and underscores"
+                )
 
         # Validate file cache directory if specified
         if self.file_cache_dir:
             cache_dir = Path(self.file_cache_dir)
             if cache_dir.exists() and not cache_dir.is_dir():
-                errors[
-                    "file_cache_dir"
-                ] = f"File cache directory path exists but is not a directory: {self.file_cache_dir}"
+                errors["file_cache_dir"] = (
+                    f"File cache directory path exists but is not a directory: {self.file_cache_dir}"
+                )
 
         return errors
 

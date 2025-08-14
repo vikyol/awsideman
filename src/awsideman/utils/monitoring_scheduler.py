@@ -1,4 +1,5 @@
 """Scheduler for automated monitoring checks."""
+
 import asyncio
 import logging
 import signal

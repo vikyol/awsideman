@@ -1,4 +1,5 @@
 """Input validation utilities for awsideman."""
+
 import re
 from typing import Optional
 

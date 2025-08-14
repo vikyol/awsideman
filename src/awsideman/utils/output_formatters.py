@@ -1,4 +1,5 @@
 """Output formatters for AWS Identity Center status monitoring."""
+
 import csv
 import json
 from datetime import datetime
@@ -258,9 +259,9 @@ class JSONFormatter(BaseFormatter):
         result = {
             "status": self._serialize_status_level(inspection.status),
             "message": inspection.message,
-            "inspection_type": inspection.inspection_type.value
-            if inspection.inspection_type
-            else None,
+            "inspection_type": (
+                inspection.inspection_type.value if inspection.inspection_type else None
+            ),
             "resource_found": inspection.resource_found(),
             "has_suggestions": inspection.has_suggestions(),
             "similar_resources": inspection.similar_resources,

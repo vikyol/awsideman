@@ -288,9 +288,11 @@ class HybridBackend(CacheBackend):
             stats["cache_efficiency"] = {
                 "local_entries": local_entries,
                 "remote_entries": remote_entries,
-                "local_hit_potential": f"{(local_entries / max(remote_entries, 1)) * 100:.1f}%"
-                if remote_entries > 0
-                else "0%",
+                "local_hit_potential": (
+                    f"{(local_entries / max(remote_entries, 1)) * 100:.1f}%"
+                    if remote_entries > 0
+                    else "0%"
+                ),
             }
 
             return stats

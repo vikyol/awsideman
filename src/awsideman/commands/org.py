@@ -1,4 +1,5 @@
 """Organization management commands for awsideman."""
+
 import json
 from typing import Any, Dict, List, Optional
 
@@ -364,9 +365,11 @@ def _output_account_json(account_details) -> None:
         "name": account_details.name,
         "email": account_details.email,
         "status": account_details.status,
-        "joined_timestamp": account_details.joined_timestamp.isoformat()
-        if account_details.joined_timestamp
-        else None,
+        "joined_timestamp": (
+            account_details.joined_timestamp.isoformat()
+            if account_details.joined_timestamp
+            else None
+        ),
         "tags": account_details.tags,
         "ou_path": account_details.ou_path,
     }
@@ -448,9 +451,9 @@ def _output_search_results_json(matching_accounts: List) -> None:
             "name": account.name,
             "email": account.email,
             "status": account.status,
-            "joined_timestamp": account.joined_timestamp.isoformat()
-            if account.joined_timestamp
-            else None,
+            "joined_timestamp": (
+                account.joined_timestamp.isoformat() if account.joined_timestamp else None
+            ),
             "tags": account.tags,
             "ou_path": account.ou_path,
         }
@@ -531,9 +534,7 @@ def _output_policies_table(policies: List, account_id: str) -> None:
             status_style = (
                 "green"
                 if policy.effective_status == "ENABLED"
-                else "yellow"
-                if policy.effective_status == "CONDITIONAL"
-                else "red"
+                else "yellow" if policy.effective_status == "CONDITIONAL" else "red"
             )
             scp_table.add_row(
                 policy.name,
@@ -560,9 +561,7 @@ def _output_policies_table(policies: List, account_id: str) -> None:
             status_style = (
                 "green"
                 if policy.effective_status == "ENABLED"
-                else "yellow"
-                if policy.effective_status == "CONDITIONAL"
-                else "red"
+                else "yellow" if policy.effective_status == "CONDITIONAL" else "red"
             )
             rcp_table.add_row(
                 policy.name,

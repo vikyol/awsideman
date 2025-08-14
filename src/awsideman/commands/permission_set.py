@@ -26,6 +26,7 @@ Examples:
     # Delete a permission set
     $ awsideman permission-set delete AdminAccess
 """
+
 import re
 import sys
 from typing import Any, Dict, List, Optional, Tuple

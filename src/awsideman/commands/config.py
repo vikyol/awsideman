@@ -1,4 +1,5 @@
 """Configuration management commands for awsideman."""
+
 import typer
 from rich.console import Console
 from rich.syntax import Syntax

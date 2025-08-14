@@ -1,0 +1,1 @@
+"""Assignment command tests package."""

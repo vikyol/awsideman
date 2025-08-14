@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional
 
 import typer
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -157,6 +157,125 @@ def validate_status_type(status_type: Optional[str]) -> Optional[str]:
     return status_type
 
 
+def validate_aws_credentials(aws_client: AWSClientManager) -> None:
+    """
+    Validate AWS credentials before running status checks.
+
+    This function performs a quick credential validation by making a simple
+    AWS API call to verify that credentials are valid and not expired.
+
+    Args:
+        aws_client: AWS client manager instance
+
+    Raises:
+        typer.Exit: If credentials are invalid, expired, or missing with helpful error message
+    """
+    try:
+        # Use STS get-caller-identity as a lightweight credential validation
+        sts_client = aws_client.get_client("sts")
+        response = sts_client.get_caller_identity()
+
+        # Log successful validation for debugging
+        account_id = response.get("Account", "Unknown")
+        console.print(f"[dim]✓ AWS credentials validated for account {account_id}[/dim]")
+
+    except NoCredentialsError:
+        console.print("[red]❌ Error: AWS credentials not found or not configured.[/red]")
+        console.print("\n[yellow]To fix this issue:[/yellow]")
+        console.print("1. Configure AWS credentials: [cyan]aws configure[/cyan]")
+        console.print(
+            "2. Or set environment variables: [cyan]AWS_ACCESS_KEY_ID[/cyan] and [cyan]AWS_SECRET_ACCESS_KEY[/cyan]"
+        )
+        console.print("3. Or use an AWS profile: [cyan]--profile your-profile-name[/cyan]")
+        console.print("\n[blue]For more information:[/blue]")
+        console.print("https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html")
+        raise typer.Exit(1)
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        error_message = e.response.get("Error", {}).get("Message", str(e))
+
+        if error_code in ["ExpiredToken", "TokenRefreshRequired"]:
+            console.print("[red]❌ Error: AWS credentials have expired.[/red]")
+            console.print("\n[yellow]To fix this issue:[/yellow]")
+            console.print("1. Refresh your AWS credentials")
+            console.print("2. If using SSO: [cyan]aws sso login --profile your-profile[/cyan]")
+            console.print("3. If using temporary credentials, obtain new ones")
+
+        elif error_code in ["AccessDenied", "UnauthorizedOperation"]:
+            console.print("[red]❌ Error: AWS credentials lack required permissions.[/red]")
+            console.print(f"[red]Details: {error_message}[/red]")
+            console.print("\n[yellow]To fix this issue:[/yellow]")
+            console.print("1. Ensure your AWS user/role has Identity Center permissions")
+            console.print(
+                "2. Required permissions: [cyan]sso:*[/cyan], [cyan]identitystore:*[/cyan], [cyan]organizations:*[/cyan]"
+            )
+            console.print("3. Contact your AWS administrator if you need additional permissions")
+
+        elif error_code == "InvalidUserType":
+            console.print("[red]❌ Error: Invalid AWS credentials or user type.[/red]")
+            console.print(f"[red]Details: {error_message}[/red]")
+            console.print("\n[yellow]To fix this issue:[/yellow]")
+            console.print("1. Verify you're using the correct AWS credentials")
+            console.print("2. Ensure credentials are for the correct AWS account")
+
+        else:
+            console.print(f"[red]❌ Error: AWS credential validation failed ({error_code}).[/red]")
+            console.print(f"[red]Details: {error_message}[/red]")
+            console.print("\n[yellow]To fix this issue:[/yellow]")
+            console.print(
+                "1. Verify your AWS credentials: [cyan]aws sts get-caller-identity[/cyan]"
+            )
+            console.print("2. Check your AWS profile configuration")
+            console.print("3. Ensure you have network connectivity to AWS")
+
+        raise typer.Exit(1)
+
+    except EndpointConnectionError:
+        console.print("[red]❌ Error: Cannot connect to AWS services.[/red]")
+        console.print("\n[yellow]To fix this issue:[/yellow]")
+        console.print("1. Check your internet connection")
+        console.print("2. Verify AWS region is accessible")
+        console.print("3. Check if you're behind a firewall or proxy")
+        console.print("4. Try a different AWS region if the current one is experiencing issues")
+        raise typer.Exit(1)
+
+    except Exception as e:
+        error_str = str(e).lower()
+
+        # Handle SSO token expiration specifically
+        if "token has expired" in error_str or "refresh failed" in error_str:
+            console.print("[red]❌ Error: AWS SSO token has expired.[/red]")
+            console.print("\n[yellow]To fix this issue:[/yellow]")
+            console.print(
+                "1. Refresh your SSO login: [cyan]aws sso login --profile your-profile[/cyan]"
+            )
+            console.print("2. Or use a different profile: [cyan]--profile other-profile[/cyan]")
+            console.print("3. Verify your SSO configuration is correct")
+
+        # Handle SSO configuration issues
+        elif "sso" in error_str and ("not configured" in error_str or "invalid" in error_str):
+            console.print("[red]❌ Error: AWS SSO configuration issue.[/red]")
+            console.print(f"[red]Details: {str(e)}[/red]")
+            console.print("\n[yellow]To fix this issue:[/yellow]")
+            console.print("1. Configure AWS SSO: [cyan]aws configure sso[/cyan]")
+            console.print("2. Or use regular AWS credentials instead of SSO")
+            console.print("3. Verify your SSO settings in AWS config")
+
+        else:
+            console.print(
+                f"[red]❌ Error: Unexpected error during credential validation: {str(e)}[/red]"
+            )
+            console.print("\n[yellow]To fix this issue:[/yellow]")
+            console.print(
+                "1. Verify your AWS credentials: [cyan]aws sts get-caller-identity[/cyan]"
+            )
+            console.print("2. Check your AWS configuration")
+            console.print("3. Try running the command again")
+
+        raise typer.Exit(1)
+
+
 @app.command("check")
 def check_status(
     output_format: Optional[str] = typer.Option(
@@ -204,6 +323,9 @@ def check_status(
         # Initialize the AWS client manager with the profile and region
         region = profile_data.get("region")
         aws_client = AWSClientManager(profile=profile_name, region=region)
+
+        # Validate AWS credentials before proceeding with status checks
+        validate_aws_credentials(aws_client)
 
         # Create status check configuration
         status_config = StatusCheckConfig(
@@ -297,6 +419,9 @@ def inspect_resource(
         region = profile_data.get("region")
         aws_client = AWSClientManager(profile=profile_name, region=region)
 
+        # Validate AWS credentials before proceeding
+        validate_aws_credentials(aws_client)
+
         # Initialize the resource inspector
         inspector = ResourceInspector(aws_client)
 
@@ -367,6 +492,9 @@ def cleanup_orphaned(
         # Initialize the AWS client manager with the profile and region
         region = profile_data.get("region")
         aws_client = AWSClientManager(profile=profile_name, region=region)
+
+        # Validate AWS credentials before proceeding
+        validate_aws_credentials(aws_client)
 
         # Initialize the orphaned assignment detector
         detector = OrphanedAssignmentDetector(aws_client)
