@@ -255,7 +255,14 @@ class OrphanedAssignment:
 
     def get_age_days(self) -> int:
         """Get the age of the assignment in days."""
-        delta = datetime.now(timezone.utc) - self.created_date
+        now = datetime.now(timezone.utc)
+        created = self.created_date
+
+        # Handle timezone-naive created_date by assuming UTC
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+
+        delta = now - created
         return delta.days
 
 
@@ -672,7 +679,7 @@ class FormattedOutput:
     format_type: OutputFormat
     content: str
     metadata: Dict[str, Any] = field(default_factory=dict)
-    generated_at: datetime = field(default_factory=datetime.utcnow)
+    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self) -> None:
         """Ensure metadata is properly initialized."""

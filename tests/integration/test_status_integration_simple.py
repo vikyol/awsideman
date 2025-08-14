@@ -9,11 +9,12 @@ workflows without depending on the full application imports, focusing on:
 
 These tests verify the core integration between status components.
 """
+
 import asyncio
 import csv
 import io
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -323,9 +324,9 @@ class TestStatusOrchestratorIntegration:
         )
 
         parallel_orchestrator = StatusOrchestrator(mock_aws_client_manager, parallel_config)
-        parallel_start = datetime.utcnow()
+        parallel_start = datetime.now(timezone.utc)
         parallel_report = await parallel_orchestrator.get_comprehensive_status()
-        parallel_duration = (datetime.utcnow() - parallel_start).total_seconds()
+        parallel_duration = (datetime.now(timezone.utc) - parallel_start).total_seconds()
 
         # Test sequential execution
         sequential_config = StatusCheckConfig(
@@ -333,9 +334,9 @@ class TestStatusOrchestratorIntegration:
         )
 
         sequential_orchestrator = StatusOrchestrator(mock_aws_client_manager, sequential_config)
-        sequential_start = datetime.utcnow()
+        sequential_start = datetime.now(timezone.utc)
         sequential_report = await sequential_orchestrator.get_comprehensive_status()
-        sequential_duration = (datetime.utcnow() - sequential_start).total_seconds()
+        sequential_duration = (datetime.now(timezone.utc) - sequential_start).total_seconds()
 
         # Verify both reports have similar structure
         assert isinstance(parallel_report, StatusReport)
@@ -437,7 +438,7 @@ class TestOutputFormatValidation:
     def test_json_formatter_integration(self):
         """Test JSON formatter with real status data."""
         # Create sample status report
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
         health_status = HealthStatus(
             timestamp=timestamp,
             status=StatusLevel.HEALTHY,
@@ -507,7 +508,7 @@ class TestOutputFormatValidation:
     def test_csv_formatter_integration(self):
         """Test CSV formatter with real status data."""
         # Create sample status report
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
         health_status = HealthStatus(
             timestamp=timestamp,
             status=StatusLevel.WARNING,
@@ -543,7 +544,7 @@ class TestOutputFormatValidation:
                         principal_name=None,
                         principal_type=PrincipalType.USER,
                         error_message="User not found",
-                        created_date=datetime(2023, 1, 1, 0, 0, 0),
+                        created_date=datetime(2023, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
                     )
                 ],
                 cleanup_available=True,
@@ -591,7 +592,7 @@ class TestOutputFormatValidation:
     def test_table_formatter_integration(self):
         """Test table formatter with real status data."""
         # Create sample status report with various status levels
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         status_report = StatusReport(
             timestamp=timestamp,
@@ -613,8 +614,8 @@ class TestOutputFormatValidation:
                         status=ProvisioningOperationStatus.IN_PROGRESS,
                         target_id="111111111111",
                         target_type="AWS_ACCOUNT",
-                        created_date=datetime.utcnow() - timedelta(minutes=5),
-                        estimated_completion=datetime.utcnow() + timedelta(minutes=2),
+                        created_date=datetime.now(timezone.utc) - timedelta(minutes=5),
+                        estimated_completion=datetime.now(timezone.utc) + timedelta(minutes=2),
                     )
                 ],
                 failed_operations=[],
@@ -797,11 +798,11 @@ class TestEndToEndStatusWorkflows:
         orchestrator = StatusOrchestrator(mock_aws_client_manager, config)
 
         # Test performance with large dataset
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         status_report = await orchestrator.get_comprehensive_status()
 
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
 
         # Verify reasonable performance (should complete within reasonable time)

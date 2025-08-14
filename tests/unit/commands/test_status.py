@@ -387,7 +387,7 @@ class TestInspectResourceCommand:
         mock_inspector.return_value = mock_inspector_instance
 
         inspection_result = BaseStatusResult(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.HEALTHY,
             message="User found and healthy",
         )
@@ -415,7 +415,7 @@ class TestInspectResourceCommand:
         mock_inspector.return_value = mock_inspector_instance
 
         inspection_result = BaseStatusResult(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.HEALTHY,
             message="Group found and healthy",
         )
@@ -443,7 +443,7 @@ class TestInspectResourceCommand:
         mock_inspector.return_value = mock_inspector_instance
 
         inspection_result = BaseStatusResult(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.HEALTHY,
             message="Permission set found and healthy",
         )
@@ -477,7 +477,9 @@ class TestInspectResourceCommand:
         mock_inspector.return_value = mock_inspector_instance
 
         inspection_result = BaseStatusResult(
-            timestamp=datetime.utcnow(), status=StatusLevel.CRITICAL, message="Resource not found"
+            timestamp=datetime.now(timezone.utc),
+            status=StatusLevel.CRITICAL,
+            message="Resource not found",
         )
         inspection_result.resource_found = Mock(return_value=False)
         inspection_result.has_suggestions = Mock(return_value=True)
@@ -503,7 +505,7 @@ class TestInspectResourceCommand:
         mock_inspector.return_value = mock_inspector_instance
 
         inspection_result = BaseStatusResult(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.HEALTHY,
             message="User found and healthy",
         )
@@ -535,7 +537,7 @@ class TestCleanupOrphanedCommand:
         mock_detector.return_value = mock_detector_instance
 
         detection_result = OrphanedAssignmentStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.HEALTHY,
             message="No orphaned assignments",
             orphaned_assignments=[],
@@ -573,12 +575,12 @@ class TestCleanupOrphanedCommand:
             principal_type=PrincipalType.USER,
             principal_name="deleted-user",
             error_message="User not found",
-            created_date=datetime.utcnow(),
+            created_date=datetime.now(timezone.utc),
         )
         orphaned_assignment.get_age_days = Mock(return_value=30)
 
         detection_result = OrphanedAssignmentStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.WARNING,
             message="Found orphaned assignments",
             orphaned_assignments=[orphaned_assignment],
@@ -624,7 +626,7 @@ class TestCleanupOrphanedCommand:
         orphaned_assignment.get_age_days = Mock(return_value=30)
 
         detection_result = OrphanedAssignmentStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.WARNING,
             message="Found orphaned assignments",
             orphaned_assignments=[orphaned_assignment],
@@ -671,12 +673,12 @@ class TestCleanupOrphanedCommand:
             principal_type=PrincipalType.USER,
             principal_name="deleted-user",
             error_message="User not found",
-            created_date=datetime.utcnow(),
+            created_date=datetime.now(timezone.utc),
         )
         orphaned_assignment.get_age_days = Mock(return_value=30)
 
         detection_result = OrphanedAssignmentStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.WARNING,
             message="Found orphaned assignments",
             orphaned_assignments=[orphaned_assignment],
@@ -715,12 +717,12 @@ class TestCleanupOrphanedCommand:
             principal_type=PrincipalType.USER,
             principal_name="deleted-user",
             error_message="User not found",
-            created_date=datetime.utcnow(),
+            created_date=datetime.now(timezone.utc),
         )
         orphaned_assignment.get_age_days = Mock(return_value=30)
 
         detection_result = OrphanedAssignmentStatus(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             status=StatusLevel.WARNING,
             message="Found orphaned assignments",
             orphaned_assignments=[orphaned_assignment],

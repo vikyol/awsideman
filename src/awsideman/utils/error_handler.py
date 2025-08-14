@@ -4,7 +4,7 @@ import asyncio
 import logging
 import traceback
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Type
 
@@ -40,7 +40,7 @@ class ErrorContext:
 
     component: str
     operation: str
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     request_id: Optional[str] = None
     user_id: Optional[str] = None
     resource_id: Optional[str] = None
