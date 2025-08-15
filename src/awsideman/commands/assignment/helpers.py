@@ -251,23 +251,35 @@ def log_individual_operation(
         # Create operation logger instance
         logger = OperationLogger()
 
-        # Log the operation with all relevant details
-        logger.log_operation(
+        # Create result for this single account operation
+        result = {
+            "account_id": account_id,
+            "success": success,
+            "error": error,
+        }
+
+        # Create metadata with request ID
+        metadata = {"source": "individual_assignment"}
+        if request_id:
+            metadata["request_id"] = request_id
+
+        # Log the operation with the correct interface
+        operation_id = logger.log_operation(
             operation_type=operation_type,
-            resource_type="assignment",
-            resource_id=f"{permission_set_arn}:{principal_id}:{account_id}",
-            details={
-                "permission_set_arn": permission_set_arn,
-                "permission_set_name": permission_set_name,
-                "principal_id": principal_id,
-                "principal_type": principal_type,
-                "principal_name": principal_name,
-                "account_id": account_id,
-                "success": success,
-                "error": error,
-                "request_id": request_id,
-            },
+            principal_id=principal_id,
+            principal_type=principal_type,
+            principal_name=principal_name,
+            permission_set_arn=permission_set_arn,
+            permission_set_name=permission_set_name,
+            account_ids=[account_id],
+            account_names=[account_id],  # Use account ID as name if name not available
+            results=[result],
+            metadata=metadata,
         )
+
+        # Print success message
+        console.print(f"[green]Logged {operation_type} operation: {operation_id}[/green]")
+
     except Exception as e:
         # Don't fail the main operation if logging fails
         console.print(f"[yellow]Warning: Failed to log operation: {str(e)}[/yellow]")

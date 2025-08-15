@@ -95,7 +95,7 @@ def sample_updated_managed_policies_response():
 @patch("src.awsideman.commands.permission_set.validate_profile")
 @patch("src.awsideman.commands.permission_set.validate_sso_instance")
 @patch("src.awsideman.commands.permission_set.AWSClientManager")
-@patch("src.awsideman.commands.permission_set.console")
+@patch("src.awsideman.commands.permission_set.helpers.console")
 @patch("typer.confirm")
 def test_permission_set_lifecycle(
     mock_confirm,
@@ -254,7 +254,7 @@ def test_permission_set_lifecycle(
 @patch("src.awsideman.commands.permission_set.validate_profile")
 @patch("src.awsideman.commands.permission_set.validate_sso_instance")
 @patch("src.awsideman.commands.permission_set.AWSClientManager")
-@patch("src.awsideman.commands.permission_set.console")
+@patch("src.awsideman.commands.permission_set.helpers.console")
 def test_command_chaining_and_data_consistency(
     mock_console,
     mock_aws_client_manager,
@@ -321,7 +321,7 @@ def test_command_chaining_and_data_consistency(
 @patch("src.awsideman.commands.permission_set.validate_profile")
 @patch("src.awsideman.commands.permission_set.validate_sso_instance")
 @patch("src.awsideman.commands.permission_set.AWSClientManager")
-@patch("src.awsideman.commands.permission_set.console")
+@patch("src.awsideman.commands.permission_set.helpers.console")
 def test_error_recovery_scenarios(
     mock_console,
     mock_aws_client_manager,

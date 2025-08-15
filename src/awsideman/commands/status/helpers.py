@@ -1,29 +1,27 @@
-"""Status monitoring commands for awsideman."""
+"""Shared utility functions for status monitoring commands."""
 
 import asyncio
+import json
+from dataclasses import asdict
 from typing import Optional
 
 import typer
 from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
 
-from ..aws_clients.manager import AWSClientManager
-from ..utils.config import Config
-from ..utils.monitoring_config import MonitoringConfig, MonitoringConfigManager
-from ..utils.notification_system import NotificationSystem
-from ..utils.orphaned_assignment_detector import OrphanedAssignmentDetector
-from ..utils.output_formatters import CSVFormatter, JSONFormatter, OutputFormatError, TableFormatter
-from ..utils.resource_inspector import ResourceInspector
-from ..utils.status_infrastructure import StatusCheckConfig
-from ..utils.status_models import OutputFormat, StatusLevel
-from ..utils.status_orchestrator import StatusOrchestrator
-
-app = typer.Typer(
-    help="Monitor AWS Identity Center status and health. Check overall system health, provisioning operations, orphaned assignments, and sync status."
+from ...aws_clients.manager import AWSClientManager
+from ...utils.config import Config
+from ...utils.monitoring_config import MonitoringConfig, MonitoringConfigManager
+from ...utils.notification_system import NotificationSystem
+from ...utils.output_formatters import (
+    CSVFormatter,
+    JSONFormatter,
+    OutputFormatError,
+    TableFormatter,
 )
+from ...utils.status_models import OutputFormat, StatusLevel
+
 console = Console()
 config = Config()
 
@@ -276,330 +274,7 @@ def validate_aws_credentials(aws_client: AWSClientManager) -> None:
         raise typer.Exit(1)
 
 
-@app.command("check")
-def check_status(
-    output_format: Optional[str] = typer.Option(
-        None, "--format", "-f", help="Output format: json, csv, table (default: table)"
-    ),
-    status_type: Optional[str] = typer.Option(
-        None,
-        "--type",
-        "-t",
-        help="Specific status type to check: health, provisioning, orphaned, sync, resource, summary",
-    ),
-    timeout: Optional[int] = typer.Option(
-        30, "--timeout", help="Timeout for status checks in seconds (default: 30)"
-    ),
-    parallel: bool = typer.Option(
-        True, "--parallel/--sequential", help="Run checks in parallel (default: parallel)"
-    ),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
-):
-    """Check AWS Identity Center status and health.
-
-    Performs comprehensive status monitoring including:
-    - Overall health and connectivity
-    - Active provisioning operations
-    - Orphaned permission set assignments
-    - External identity provider synchronization
-    - Summary statistics
-
-    Use --type to check specific status components or omit for comprehensive check.
-    Output can be formatted as JSON, CSV, or human-readable table.
-    """
-    try:
-        # Validate inputs
-        output_fmt = validate_output_format(output_format)
-        check_type = validate_status_type(status_type)
-
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
-
-        # Validate the SSO instance and get instance ARN and identity store ID
-        instance_arn, identity_store_id = validate_sso_instance(profile_data)
-
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-
-        # Validate AWS credentials before proceeding with status checks
-        validate_aws_credentials(aws_client)
-
-        # Create status check configuration
-        status_config = StatusCheckConfig(
-            timeout_seconds=timeout,
-            enable_parallel_checks=parallel,
-            max_concurrent_checks=5,
-            retry_attempts=2,
-            retry_delay_seconds=1.0,
-        )
-
-        # Initialize the status orchestrator
-        orchestrator = StatusOrchestrator(aws_client, status_config)
-
-        # Show progress indicator for long-running operations
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            if check_type:
-                task = progress.add_task(f"Checking {check_type} status...", total=None)
-                # Run specific status check
-                result = asyncio.run(orchestrator.get_specific_status(check_type))
-                progress.remove_task(task)
-
-                # Format and display specific result
-                _display_specific_status_result(result, output_fmt, check_type)
-            else:
-                task = progress.add_task("Performing comprehensive status check...", total=None)
-                # Run comprehensive status check
-                status_report = asyncio.run(orchestrator.get_comprehensive_status())
-                progress.remove_task(task)
-
-                # Format and display comprehensive result
-                _display_comprehensive_status_report(status_report, output_fmt)
-
-    except ClientError as e:
-        # Handle AWS API errors
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_message = e.response.get("Error", {}).get("Message", str(e))
-        console.print(f"[red]AWS Error ({error_code}): {error_message}[/red]")
-        raise typer.Exit(1)
-    except Exception as e:
-        # Handle other unexpected errors
-        console.print(f"[red]Error: {str(e)}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command("inspect")
-def inspect_resource(
-    resource_type: str = typer.Argument(
-        ..., help="Resource type to inspect: user, group, permission-set"
-    ),
-    resource_id: str = typer.Argument(..., help="Resource identifier (ID, name, or ARN)"),
-    output_format: Optional[str] = typer.Option(
-        None, "--format", "-f", help="Output format: json, csv, table (default: table)"
-    ),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
-):
-    """Inspect detailed status of a specific resource.
-
-    Provides detailed status information for individual users, groups, or permission sets.
-    Shows resource health, configuration, and suggests similar resources if not found.
-
-    Examples:
-        awsideman status inspect user john.doe@example.com
-        awsideman status inspect group Administrators
-        awsideman status inspect permission-set ReadOnlyAccess
-    """
-    try:
-        # Validate inputs
-        output_fmt = validate_output_format(output_format)
-
-        # Validate resource type
-        valid_resource_types = ["user", "group", "permission-set"]
-        if resource_type not in valid_resource_types:
-            console.print(f"[red]Error: Invalid resource type '{resource_type}'.[/red]")
-            console.print(f"Valid types: {', '.join(valid_resource_types)}")
-            raise typer.Exit(1)
-
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
-
-        # Validate the SSO instance and get instance ARN and identity store ID
-        instance_arn, identity_store_id = validate_sso_instance(profile_data)
-
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-
-        # Validate AWS credentials before proceeding
-        validate_aws_credentials(aws_client)
-
-        # Initialize the resource inspector
-        inspector = ResourceInspector(aws_client)
-
-        # Show progress indicator
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            task = progress.add_task(f"Inspecting {resource_type} '{resource_id}'...", total=None)
-
-            # Perform resource inspection based on type
-            if resource_type == "user":
-                result = asyncio.run(inspector.inspect_user(resource_id))
-            elif resource_type == "group":
-                result = asyncio.run(inspector.inspect_group(resource_id))
-            elif resource_type == "permission-set":
-                result = asyncio.run(inspector.inspect_permission_set(resource_id))
-
-            progress.remove_task(task)
-
-        # Format and display result
-        _display_resource_inspection_result(result, output_fmt, resource_type, resource_id)
-
-    except ClientError as e:
-        # Handle AWS API errors
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_message = e.response.get("Error", {}).get("Message", str(e))
-        console.print(f"[red]AWS Error ({error_code}): {error_message}[/red]")
-        raise typer.Exit(1)
-    except Exception as e:
-        # Handle other unexpected errors
-        console.print(f"[red]Error: {str(e)}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command("cleanup")
-def cleanup_orphaned(
-    dry_run: bool = typer.Option(
-        True,
-        "--dry-run/--execute",
-        help="Show what would be cleaned up without making changes (default: dry-run)",
-    ),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompts"),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
-):
-    """Clean up orphaned permission set assignments.
-
-    Identifies and optionally removes permission set assignments for principals
-    that no longer exist in the identity provider. Use --dry-run to preview
-    changes before executing.
-
-    Examples:
-        awsideman status cleanup --dry-run    # Preview cleanup
-        awsideman status cleanup --execute    # Perform cleanup with confirmation
-        awsideman status cleanup --execute --force  # Perform cleanup without confirmation
-    """
-    try:
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
-
-        # Validate the SSO instance and get instance ARN and identity store ID
-        instance_arn, identity_store_id = validate_sso_instance(profile_data)
-
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-
-        # Validate AWS credentials before proceeding
-        validate_aws_credentials(aws_client)
-
-        # Initialize the orphaned assignment detector
-        detector = OrphanedAssignmentDetector(aws_client)
-
-        # Show progress indicator
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            task = progress.add_task("Detecting orphaned assignments...", total=None)
-
-            # Detect orphaned assignments
-            result = asyncio.run(detector.check_status())
-
-            progress.remove_task(task)
-
-        # Check if any orphaned assignments were found
-        if not hasattr(result, "orphaned_assignments") or not result.orphaned_assignments:
-            console.print("[green]✅ No orphaned assignments found.[/green]")
-            return
-
-        orphaned_count = len(result.orphaned_assignments)
-        console.print(f"[yellow]Found {orphaned_count} orphaned assignments.[/yellow]")
-
-        # Display orphaned assignments
-        table = Table(title="Orphaned Assignments")
-        table.add_column("Permission Set", style="cyan")
-        table.add_column("Account", style="blue")
-        table.add_column("Principal", style="magenta")
-        table.add_column("Type", style="green")
-        table.add_column("Age (days)", style="yellow")
-
-        for assignment in result.orphaned_assignments:
-            table.add_row(
-                assignment.permission_set_name,
-                assignment.account_name or assignment.account_id,
-                assignment.principal_name or assignment.principal_id,
-                assignment.principal_type.value,
-                str(assignment.get_age_days()),
-            )
-
-        console.print(table)
-
-        if dry_run:
-            console.print("\n[blue]This is a dry run. Use --execute to perform the cleanup.[/blue]")
-            return
-
-        # Confirm cleanup unless --force is used
-        if not force:
-            console.print(
-                f"\n[yellow]This will permanently remove {orphaned_count} orphaned assignments.[/yellow]"
-            )
-            confirm = typer.confirm("Are you sure you want to proceed?")
-            if not confirm:
-                console.print("[blue]Cleanup cancelled.[/blue]")
-                return
-
-        # Perform cleanup
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            task = progress.add_task("Cleaning up orphaned assignments...", total=None)
-
-            cleanup_result = asyncio.run(
-                detector.cleanup_orphaned_assignments(result.orphaned_assignments)
-            )
-
-            progress.remove_task(task)
-
-        # Display cleanup results
-        if cleanup_result and hasattr(cleanup_result, "cleaned_count"):
-            console.print(
-                f"[green]✅ Successfully cleaned up {cleanup_result.cleaned_count} orphaned assignments.[/green]"
-            )
-
-            if hasattr(cleanup_result, "failed_count") and cleanup_result.failed_count > 0:
-                console.print(
-                    f"[yellow]⚠️  Failed to clean up {cleanup_result.failed_count} assignments.[/yellow]"
-                )
-
-                if hasattr(cleanup_result, "errors") and cleanup_result.errors:
-                    console.print("\nErrors encountered:")
-                    for error in cleanup_result.errors[:5]:  # Show first 5 errors
-                        console.print(f"  • {error}")
-        else:
-            console.print("[red]❌ Cleanup operation failed.[/red]")
-
-    except ClientError as e:
-        # Handle AWS API errors
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_message = e.response.get("Error", {}).get("Message", str(e))
-        console.print(f"[red]AWS Error ({error_code}): {error_message}[/red]")
-        raise typer.Exit(1)
-    except Exception as e:
-        # Handle other unexpected errors
-        console.print(f"[red]Error: {str(e)}[/red]")
-        raise typer.Exit(1)
-
-
-def _display_comprehensive_status_report(status_report, output_fmt: OutputFormat) -> None:
+def display_comprehensive_status_report(status_report, output_fmt: OutputFormat) -> None:
     """Display comprehensive status report in the specified format."""
     try:
         # Select appropriate formatter
@@ -628,13 +303,10 @@ def _display_comprehensive_status_report(status_report, output_fmt: OutputFormat
         raise typer.Exit(1)
 
 
-def _display_specific_status_result(result, output_fmt: OutputFormat, check_type: str) -> None:
+def display_specific_status_result(result, output_fmt: OutputFormat, check_type: str) -> None:
     """Display specific status check result."""
     if output_fmt == OutputFormat.JSON:
         # Convert result to JSON
-        import json
-        from dataclasses import asdict
-
         try:
             result_dict = asdict(result)
             # Handle datetime serialization
@@ -655,10 +327,10 @@ def _display_specific_status_result(result, output_fmt: OutputFormat, check_type
 
     else:
         # Table format (default)
-        _display_specific_status_table(result, check_type)
+        display_specific_status_table(result, check_type)
 
 
-def _display_specific_status_table(result, check_type: str) -> None:
+def display_specific_status_table(result, check_type: str) -> None:
     """Display specific status result as a table."""
     # Create status indicator
     status_indicators = {
@@ -699,15 +371,12 @@ def _display_specific_status_table(result, check_type: str) -> None:
     console.print(panel)
 
 
-def _display_resource_inspection_result(
+def display_resource_inspection_result(
     result, output_fmt: OutputFormat, resource_type: str, resource_id: str
 ) -> None:
     """Display resource inspection result."""
     if output_fmt == OutputFormat.JSON:
         # Convert result to JSON
-        import json
-        from dataclasses import asdict
-
         try:
             result_dict = asdict(result)
             console.print(json.dumps(result_dict, indent=2, default=str))
@@ -725,10 +394,10 @@ def _display_resource_inspection_result(
 
     else:
         # Table format (default)
-        _display_resource_inspection_table(result, resource_type, resource_id)
+        display_resource_inspection_table(result, resource_type, resource_id)
 
 
-def _display_resource_inspection_table(result, resource_type: str, resource_id: str) -> None:
+def display_resource_inspection_table(result, resource_type: str, resource_id: str) -> None:
     """Display resource inspection result as a table."""
     # Create status indicator
     status_indicators = {
@@ -748,102 +417,31 @@ def _display_resource_inspection_table(result, resource_type: str, resource_id: 
     lines.append(f"Message: {result.message}")
 
     if result.timestamp:
-        lines.append(f"Inspected: {result.timestamp.isoformat()}")
+        lines.append(f"Timestamp: {result.timestamp.isoformat()}")
 
-    # Add resource details if found
-    if hasattr(result, "target_resource") and result.target_resource:
-        resource = result.target_resource
-        lines.append("\nResource Details:")
-        lines.append(f"  Name: {resource.resource_name or 'N/A'}")
-        lines.append(f"  Status: {resource.status.value}")
-
-        if resource.last_updated:
-            lines.append(f"  Last Updated: {resource.last_updated.isoformat()}")
-
-        if resource.configuration:
-            lines.append("  Configuration:")
-            for key, value in resource.configuration.items():
-                lines.append(f"    {key}: {value}")
+    # Add resource-specific details
+    if hasattr(result, "details") and result.details:
+        lines.append("\nDetails:")
+        for key, value in result.details.items():
+            lines.append(f"  {key.replace('_', ' ').title()}: {value}")
 
     # Add suggestions if resource not found
-    if result.has_suggestions():
-        lines.append("\nSimilar Resources:")
-        for suggestion in result.similar_resources[:5]:  # Show up to 5 suggestions
+    if hasattr(result, "suggestions") and result.suggestions:
+        lines.append("\nSuggestions:")
+        for suggestion in result.suggestions:
             lines.append(f"  • {suggestion}")
-
-    # Add errors if present
-    if hasattr(result, "errors") and result.errors:
-        lines.append("\nErrors:")
-        for error in result.errors:
-            lines.append(f"  • {error}")
 
     # Create panel
     panel = Panel(
         "\n".join(lines),
-        title=f"[bold blue]Resource Inspection: {resource_type}[/bold blue]",
+        title=f"[bold blue]{resource_type.title()} Inspection[/bold blue]",
         border_style="blue",
     )
 
     console.print(panel)
 
 
-@app.command("monitor")
-def monitor_config(
-    action: str = typer.Argument(
-        ..., help="Action to perform: show, enable, disable, test, schedule"
-    ),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
-):
-    """Configure and manage automated monitoring.
-
-    Actions:
-        show     - Display current monitoring configuration
-        enable   - Enable monitoring with default settings
-        disable  - Disable monitoring
-        test     - Test notification systems
-        schedule - Show scheduler status
-
-    Examples:
-        awsideman status monitor show
-        awsideman status monitor enable
-        awsideman status monitor test
-    """
-    try:
-        # Initialize configuration manager
-        try:
-            config_manager = MonitoringConfigManager(config)
-            monitoring_config = config_manager.get_monitoring_config()
-        except Exception as e:
-            console.print(f"[red]Error initializing monitoring config: {str(e)}[/red]")
-            console.print(f"[red]Error type: {type(e).__name__}[/red]")
-            import traceback
-
-            console.print(f"[red]Traceback: {traceback.format_exc()}[/red]")
-            raise typer.Exit(1)
-
-        if action == "show":
-            _show_monitoring_config(monitoring_config)
-        elif action == "enable":
-            _enable_monitoring(config_manager, monitoring_config, profile)
-        elif action == "disable":
-            _disable_monitoring(config_manager, monitoring_config)
-        elif action == "test":
-            _test_notifications(monitoring_config)
-        elif action == "schedule":
-            _show_scheduler_status(monitoring_config)
-        else:
-            console.print(f"[red]Error: Unknown action '{action}'.[/red]")
-            console.print("Valid actions: show, enable, disable, test, schedule")
-            raise typer.Exit(1)
-
-    except Exception as e:
-        console.print(f"[red]Error: {str(e)}[/red]")
-        raise typer.Exit(1)
-
-
-def _show_monitoring_config(monitoring_config: MonitoringConfig):
+def show_monitoring_config(monitoring_config: MonitoringConfig):
     """Display current monitoring configuration."""
     # Main status
     status_color = "green" if monitoring_config.enabled else "red"
@@ -923,7 +521,7 @@ def _show_monitoring_config(monitoring_config: MonitoringConfig):
             )
 
 
-def _enable_monitoring(
+def enable_monitoring(
     config_manager: MonitoringConfigManager,
     monitoring_config: MonitoringConfig,
     profile: Optional[str],
@@ -942,7 +540,7 @@ def _enable_monitoring(
 
     # Enable basic log notifications by default
     if not monitoring_config.log_notifications:
-        from ..utils.monitoring_config import LogNotificationConfig
+        from ...utils.monitoring_config import LogNotificationConfig
 
         monitoring_config.log_notifications = LogNotificationConfig(enabled=True)
 
@@ -957,7 +555,7 @@ def _enable_monitoring(
     console.print("4. View configuration: awsideman status monitor show")
 
 
-def _disable_monitoring(
+def disable_monitoring(
     config_manager: MonitoringConfigManager, monitoring_config: MonitoringConfig
 ):
     """Disable monitoring."""
@@ -978,7 +576,7 @@ def _disable_monitoring(
     console.print("[green]✅ Monitoring disabled successfully.[/green]")
 
 
-def _test_notifications(monitoring_config: MonitoringConfig):
+def test_notifications(monitoring_config: MonitoringConfig):
     """Test notification systems."""
     if not monitoring_config.enabled:
         console.print("[red]Error: Monitoring is disabled. Enable monitoring first.[/red]")
@@ -1035,7 +633,7 @@ def _test_notifications(monitoring_config: MonitoringConfig):
         console.print("\n[yellow]Some notification tests failed. Check logs for details.[/yellow]")
 
 
-def _show_scheduler_status(monitoring_config: MonitoringConfig):
+def show_scheduler_status(monitoring_config: MonitoringConfig):
     """Show scheduler status."""
     if not monitoring_config.enabled:
         console.print("[red]Monitoring is disabled.[/red]")

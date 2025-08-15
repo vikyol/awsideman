@@ -246,32 +246,32 @@ This document outlines the complete implementation plan for modularizing large c
 
 ### Status Module
 
-- [ ] 17. Set up status module structure and extract shared utilities
+- [x] 17. Set up status module structure and extract shared utilities
   - Create src/awsideman/commands/status/ directory structure
   - Create status/__init__.py with proper imports and app registration
   - Extract shared utility functions into status/helpers.py
   - _Requirements: 6.1, 6.4_
 
-- [ ] 18. Extract status command functions into focused modules
-- [ ] 18.1 Create status/check.py with check command
+- [x] 18. Extract status command functions into focused modules
+- [x] 18.1 Create status/check.py with check command
   - Move check_status function from status.py to status/check.py
   - Update imports to use shared helpers and maintain functionality
   - Register check command with the status app
   - _Requirements: 6.2, 6.3_
 
-- [ ] 18.2 Create status/inspect.py with inspect command
+- [x] 18.2 Create status/inspect.py with inspect command
   - Move inspect_resource function from status.py to status/inspect.py
   - Update imports to use shared helpers and maintain functionality
   - Register inspect command with the status app
   - _Requirements: 6.2, 6.3_
 
-- [ ] 18.3 Create status/cleanup.py with cleanup command
+- [x] 18.3 Create status/cleanup.py with cleanup command
   - Move cleanup_orphaned function from status.py to status/cleanup.py
   - Update imports to use shared helpers and maintain functionality
   - Register cleanup command with the status app
   - _Requirements: 6.2, 6.3_
 
-- [ ] 18.4 Create status/monitor.py with monitor command
+- [x] 18.4 Create status/monitor.py with monitor command
   - Move monitor_config function from status.py to status/monitor.py
   - Update imports to use shared helpers and maintain functionality
   - Register monitor command with the status app
@@ -291,25 +291,26 @@ This document outlines the complete implementation plan for modularizing large c
   - Ensure all group-related tests pass with new imports
   - _Requirements: 7.1, 7.2, 7.3_
 
-- [ ] 21. Update test imports and structure for status module
+- [x] 21. Update test imports and structure for status module
+  - Avoid complicated mock operations. Focus on testing the actual functionality.
   - Update all test files that import from status.py to use new module paths
   - Split existing status tests into focused test modules matching the new structure
   - Ensure all status-related tests pass with new imports
   - _Requirements: 7.1, 7.2, 7.3_
 
-- [ ] 22. Remove Phase 2 original monolithic command files
+- [x] 22. Remove Phase 2 original monolithic command files
   - Delete src/awsideman/commands/permission_set.py after verifying all functionality is preserved
   - Delete src/awsideman/commands/group.py after verifying all functionality is preserved
   - Delete src/awsideman/commands/status.py after verifying all functionality is preserved
   - _Requirements: 4.3, 5.3, 6.3_
 
-- [ ] 23. Validate Phase 2 CLI interface compatibility
+- [x] 23. Validate Phase 2 CLI interface compatibility
   - Run comprehensive CLI tests to ensure all Phase 2 commands work identically to before refactoring
   - Verify command signatures, help text, and output formats remain unchanged
   - Test error conditions and ensure error messages and exit codes are preserved
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-- [ ] 24. Final comprehensive test suite validation
+- [x] 24. Final comprehensive test suite validation
   - Execute complete test suite to ensure no regressions were introduced in Phase 2
   - Verify test coverage is maintained across all modularized components
   - Confirm all tests pass without import errors or functionality issues
