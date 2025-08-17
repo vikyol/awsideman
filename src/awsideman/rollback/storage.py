@@ -77,7 +77,23 @@ class OperationStore:
         data = self._read_operations_file()
         for op_data in data["operations"]:
             if op_data["operation_id"] == operation_id:
-                return OperationRecord.from_dict(op_data)
+                # Determine the operation type and create the appropriate record
+                if "source_entity_id" in op_data and "target_entity_id" in op_data:
+                    # This is a permission cloning operation
+                    from .models import PermissionCloningOperationRecord
+
+                    return PermissionCloningOperationRecord.from_dict(op_data)
+                elif (
+                    "source_permission_set_name" in op_data
+                    and "target_permission_set_name" in op_data
+                ):
+                    # This is a permission set cloning operation
+                    from .models import PermissionSetCloningOperationRecord
+
+                    return PermissionSetCloningOperationRecord.from_dict(op_data)
+                else:
+                    # This is a standard operation
+                    return OperationRecord.from_dict(op_data)
         return None
 
     def get_operations(

@@ -561,6 +561,86 @@ def _create_operation_details_panel(operation) -> Panel:
     )
 
 
+@app.command()
+def rollback_operation(
+    operation_id: str = typer.Argument(..., help="Operation ID to rollback"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+):
+    """Rollback a copy or clone operation by operation ID."""
+    try:
+        # Try to determine operation type and delegate to appropriate rollback handler
+        from ..aws_clients.manager import AWSClientManager
+        from ..permission_cloning.rollback_integration import PermissionCloningRollbackIntegration
+        from ..rollback.processor import RollbackProcessor
+
+        client_manager = AWSClientManager()
+        rollback_processor = RollbackProcessor()
+        rollback_integration = PermissionCloningRollbackIntegration(
+            client_manager, rollback_processor
+        )
+
+        # Try to get operation details to determine type
+        operations = rollback_integration.get_rollbackable_operations()
+        target_operation = None
+
+        for op in operations:
+            if op["operation_id"] == operation_id:
+                target_operation = op
+                break
+
+        if not target_operation:
+            typer.echo(f"❌ Operation {operation_id} not found or cannot be rolled back")
+            raise typer.Exit(1)
+
+        # Determine operation type and rollback accordingly
+        if "source_entity_id" in target_operation:
+            # Assignment copy operation
+            typer.echo(f"🔄 Rolling back assignment copy operation: {operation_id}")
+            result = rollback_integration.rollback_assignment_copy_operation(operation_id)
+
+            if result["success"]:
+                typer.echo(f"✅ Successfully rolled back operation {operation_id}")
+                typer.echo(f"  - Successful actions: {result['success_count']}")
+                typer.echo(f"  - Failed actions: {result['failure_count']}")
+                typer.echo(f"  - Total actions: {result['total_actions']}")
+
+                if result["errors"]:
+                    typer.echo("\nErrors encountered:")
+                    for error in result["errors"]:
+                        typer.echo(f"  ❌ {error}")
+            else:
+                typer.echo(f"❌ Failed to rollback operation {operation_id}")
+                if result["errors"]:
+                    for error in result["errors"]:
+                        typer.echo(f"  ❌ {error}")
+                raise typer.Exit(1)
+
+        elif "source_permission_set_name" in target_operation:
+            # Permission set clone operation
+            typer.echo(f"🔄 Rolling back permission set clone operation: {operation_id}")
+            result = rollback_integration.rollback_permission_set_clone_operation(operation_id)
+
+            if result["success"]:
+                typer.echo(f"✅ Successfully rolled back operation {operation_id}")
+                typer.echo(f"  - Deleted permission set: {result['permission_set_deleted']}")
+                typer.echo(f"  - Permission set ARN: {result['permission_set_arn']}")
+            else:
+                typer.echo(f"❌ Failed to rollback operation {operation_id}")
+                typer.echo(f"  - Error: {result['error']}")
+                raise typer.Exit(1)
+        else:
+            typer.echo(f"❌ Unknown operation type for {operation_id}")
+            raise typer.Exit(1)
+
+    except Exception as e:
+        typer.echo(f"❌ Error: {str(e)}")
+        if verbose:
+            import traceback
+
+            traceback.print_exc()
+        raise typer.Exit(1)
+
+
 @app.command("status")
 def show_status(
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),

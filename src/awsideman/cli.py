@@ -17,7 +17,9 @@ try:
         assignment,
         bulk,
         cache,
+        clone,
         config,
+        copy,
         group,
         org,
         permission_set,
@@ -27,6 +29,8 @@ try:
         status,
         user,
     )
+    from .commands.backup import app as backup_app
+    from .commands.restore import app as restore_app
 except ImportError:
     # Handle direct script execution
     import sys
@@ -39,7 +43,9 @@ except ImportError:
         assignment,
         bulk,
         cache,
+        clone,
         config,
+        copy,
         group,
         org,
         permission_set,
@@ -49,6 +55,8 @@ except ImportError:
         status,
         user,
     )
+    from awsideman.commands.backup import app as backup_app
+    from awsideman.commands.restore import app as restore_app
 
 app = typer.Typer(
     help="AWS Identity Center Manager - A CLI tool for managing AWS Identity Center operations including users, groups, and permission sets."
@@ -62,6 +70,8 @@ app.add_typer(sso.app, name="sso")
 app.add_typer(user.app, name="user")
 app.add_typer(group.app, name="group")
 app.add_typer(permission_set.app, name="permission-set")
+app.add_typer(copy.app, name="copy")
+app.add_typer(clone.app, name="clone")
 app.add_typer(assignment.app, name="assignment")
 app.add_typer(org.app, name="org")
 app.add_typer(cache.app, name="cache")
@@ -69,6 +79,8 @@ app.add_typer(bulk.app, name="bulk")
 app.add_typer(status.app, name="status")
 app.add_typer(access_review.app, name="access-review")
 app.add_typer(rollback.app, name="rollback")
+app.add_typer(backup_app, name="backup")
+app.add_typer(restore_app, name="restore")
 
 
 @app.callback()
