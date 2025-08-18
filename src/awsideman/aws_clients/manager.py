@@ -294,12 +294,33 @@ class OrganizationsClientWrapper:
             return []
 
     @with_retry(max_retries=3)
-    def describe_account(self, account_id: str) -> Dict[str, Any]:
+    def list_accounts(self) -> Dict[str, Any]:
+        """
+        List all accounts in the organization.
+
+        Returns:
+            Dictionary with 'Accounts' key containing list of account dictionaries
+
+        Raises:
+            ClientError: If the API call fails
+        """
+        try:
+            # Use the basic AWS Organizations API to list all accounts
+            response = self.client.list_accounts()
+            return response
+        except ClientError as e:
+            handle_aws_error(e, "ListAccounts")
+            # This should never be reached, but mypy needs it
+            return {"Accounts": []}
+
+    @with_retry(max_retries=3)
+    def describe_account(self, account_id: str, **kwargs) -> Dict[str, Any]:
         """
         Get detailed information about an account.
 
         Args:
             account_id: The unique identifier of the account
+            **kwargs: Additional keyword arguments (for compatibility)
 
         Returns:
             Account dictionary containing Id, Name, Email, Arn, Status, and JoinedTimestamp

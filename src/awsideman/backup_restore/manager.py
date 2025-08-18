@@ -28,6 +28,7 @@ from .models import (
     ValidationResult,
 )
 from .monitoring import BackupMonitor, OperationType
+from .performance import PerformanceOptimizer
 from .validation import BackupValidator
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ class BackupManager(BackupManagerInterface):
         validator: Optional[BackupValidator] = None,
         progress_reporter: Optional[ProgressReporterInterface] = None,
         backup_monitor: Optional[BackupMonitor] = None,
+        performance_optimizer: Optional[PerformanceOptimizer] = None,
         instance_arn: str = "",
         source_account: str = "",
         source_region: str = "",
@@ -69,6 +71,7 @@ class BackupManager(BackupManagerInterface):
         self.validator = validator or BackupValidator()
         self.progress_reporter = progress_reporter
         self.backup_monitor = backup_monitor
+        self.performance_optimizer = performance_optimizer or PerformanceOptimizer()
         self.instance_arn = instance_arn
         self.source_account = source_account
         self.source_region = source_region
@@ -188,10 +191,32 @@ class BackupManager(BackupManagerInterface):
                         warnings=validation_result.warnings,
                     )
 
-            # Step 7: Store backup
-            await self._update_progress(operation_id, 7, "Storing backup")
+            # Step 7: Optimize backup data for storage
+            await self._update_progress(operation_id, 7, "Optimizing backup data")
+            self._active_operations[operation_id]["status"] = "optimizing"
+
+            try:
+                optimization_metadata = await self.performance_optimizer.optimize_backup_data(
+                    backup_data
+                )
+                logger.info(
+                    f"Backup optimization completed: {optimization_metadata['original_size']} -> "
+                    f"{optimization_metadata['final_size']} bytes "
+                    f"(ratio: {optimization_metadata['total_reduction_ratio']:.2f}x)"
+                )
+                # Store optimization metadata in backup metadata
+                backup_data.metadata.optimization_info = optimization_metadata
+            except Exception as e:
+                logger.warning(
+                    f"Performance optimization failed, proceeding with unoptimized data: {e}"
+                )
+                optimization_metadata = {}
+
+            # Step 8: Store backup
+            await self._update_progress(operation_id, 8, "Storing backup")
             self._active_operations[operation_id]["status"] = "storing"
 
+            # Store backup data
             stored_backup_id = await self.storage_engine.store_backup(backup_data)
             if not stored_backup_id:
                 return BackupResult(
@@ -200,8 +225,8 @@ class BackupManager(BackupManagerInterface):
                     errors=["Storage operation failed"],
                 )
 
-            # Step 8: Verify stored backup integrity
-            await self._update_progress(operation_id, 8, "Verifying integrity")
+            # Step 9: Verify stored backup integrity
+            await self._update_progress(operation_id, 9, "Verifying integrity")
             integrity_result = await self.storage_engine.verify_integrity(stored_backup_id)
             if not integrity_result.is_valid:
                 logger.error(f"Backup integrity verification failed for {stored_backup_id}")

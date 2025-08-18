@@ -28,6 +28,7 @@ from . import (
     health,
     list,
     monitor,
+    performance,
     schedule,
     status,
     validate,
@@ -73,6 +74,16 @@ schedule_app.command("run")(run_schedule)
 schedule_app.command("status")(get_schedule_status)
 app.add_typer(schedule_app, name="schedule")
 
+# Performance subcommands
+performance_app = typer.Typer(help="Manage backup performance optimizations")
+performance_app.command("enable")(performance.enable_optimizations)
+performance_app.command("disable")(performance.disable_optimizations)
+performance_app.command("status")(performance.show_optimization_status)
+performance_app.command("stats")(performance.show_performance_stats)
+performance_app.command("benchmark")(performance.run_performance_benchmark)
+performance_app.command("clear")(performance.clear_optimization_caches)
+app.add_typer(performance_app, name="performance")
+
 # Export/Import commands
 app.command("export")(export_backup)
 app.command("import")(import_backup)
@@ -97,4 +108,5 @@ __all__ = [
     "status",
     "health",
     "monitor",
+    "performance",
 ]

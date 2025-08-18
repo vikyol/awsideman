@@ -175,8 +175,50 @@ def create_backup(
 
         # Initialize managers
         storage_engine = StorageEngine(backend=storage_backend)
-        backup_manager = BackupManager(storage_engine=storage_engine)
-        collector = IdentityCenterCollector(profile=profile_name, region=profile_data.get("region"))
+
+        # Create AWS client manager for the collector
+        from ...aws_clients.manager import AWSClientManager
+
+        aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Get SSO instance information for the collector
+        try:
+            sso_client = aws_client.get_identity_center_client()
+            instances = sso_client.list_instances()
+            console.print(f"[blue]Found {len(instances.get('Instances', []))} SSO instances[/blue]")
+
+            if not instances.get("Instances"):
+                console.print("[red]Error: No SSO instances found. Cannot create backup.[/red]")
+                raise typer.Exit(1)
+
+            instance_arn = instances["Instances"][0]["InstanceArn"]
+            console.print(f"[blue]Using SSO instance: {instance_arn}[/blue]")
+
+            collector = IdentityCenterCollector(
+                client_manager=aws_client, instance_arn=instance_arn
+            )
+        except Exception as e:
+            console.print(f"[red]Error getting SSO instance: {e}[/red]")
+            raise typer.Exit(1)
+
+        # Get the current AWS account ID
+        try:
+            sts_client = aws_client.get_client("sts")
+            account_info = sts_client.get_caller_identity()
+            source_account = account_info.get("Account", "")
+            console.print(f"[blue]Using AWS account: {source_account}[/blue]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not determine AWS account ID: {e}[/yellow]")
+            source_account = "unknown"
+
+        # Create backup manager with required collector, storage_engine, and instance_arn
+        backup_manager = BackupManager(
+            collector=collector,
+            storage_engine=storage_engine,
+            instance_arn=instance_arn,
+            source_account=source_account,
+            source_region=profile_data.get("region", ""),
+        )
 
         # Start backup process
         console.print(f"[blue]Starting {backup_type} backup...[/blue]")
@@ -187,9 +229,7 @@ def create_backup(
             task = progress.add_task("Creating backup...", total=None)
 
             # Execute backup
-            backup_result = asyncio.run(
-                backup_manager.create_backup(collector=collector, options=backup_options)
-            )
+            backup_result = asyncio.run(backup_manager.create_backup(options=backup_options))
 
             progress.update(task, description="Backup completed successfully!")
 
@@ -199,9 +239,18 @@ def create_backup(
         else:
             display_backup_results(backup_result)
 
-        console.print("[green]Backup completed successfully![/green]")
-        console.print(f"[blue]Backup ID: {backup_result.backup_id}[/blue]")
-        console.print(f"[blue]Storage location: {backup_result.storage_location}[/blue]")
+        if backup_result.success:
+            console.print("[green]Backup completed successfully![/green]")
+            console.print(f"[blue]Backup ID: {backup_result.backup_id}[/blue]")
+            if backup_result.metadata and hasattr(backup_result.metadata, "size_bytes"):
+                console.print(
+                    f"[blue]Size: {backup_result.metadata.size_bytes / 1024 / 1024:.2f} MB[/blue]"
+                )
+        else:
+            console.print("[red]Backup failed![/red]")
+            if backup_result.errors:
+                for error in backup_result.errors:
+                    console.print(f"[red]Error: {error}[/red]")
 
     except Exception as e:
         console.print(f"[red]Error creating backup: {e}[/red]")
@@ -214,12 +263,33 @@ def display_backup_results(backup_result):
     table.add_column("Property", style="cyan")
     table.add_column("Value", style="white")
 
-    table.add_row("Backup ID", backup_result.backup_id)
-    table.add_row("Timestamp", str(backup_result.timestamp))
-    table.add_row("Type", backup_result.backup_type.value)
-    table.add_row("Status", backup_result.status.value)
-    table.add_row("Storage Location", backup_result.storage_location)
-    table.add_row("Size", f"{backup_result.size_bytes / 1024 / 1024:.2f} MB")
-    table.add_row("Resources", str(backup_result.resource_counts))
+    table.add_row("Backup ID", str(backup_result.backup_id or "N/A"))
+
+    if backup_result.metadata and hasattr(backup_result.metadata, "timestamp"):
+        table.add_row("Timestamp", str(backup_result.metadata.timestamp))
+    else:
+        table.add_row("Timestamp", "N/A")
+
+    if backup_result.metadata and hasattr(backup_result.metadata, "backup_type"):
+        table.add_row("Type", str(backup_result.metadata.backup_type.value))
+    else:
+        table.add_row("Type", "N/A")
+
+    table.add_row("Status", "Success" if backup_result.success else "Failed")
+
+    if backup_result.metadata and hasattr(backup_result.metadata, "size_bytes"):
+        table.add_row("Size", f"{backup_result.metadata.size_bytes / 1024 / 1024:.2f} MB")
+    else:
+        table.add_row("Size", "N/A")
+
+    if backup_result.metadata and hasattr(backup_result.metadata, "resource_counts"):
+        table.add_row("Resources", str(backup_result.metadata.resource_counts))
+    else:
+        table.add_row("Resources", "N/A")
+
+    if backup_result.duration:
+        table.add_row("Duration", f"{backup_result.duration.total_seconds():.2f} seconds")
+    else:
+        table.add_row("Duration", "N/A")
 
     console.print(table)

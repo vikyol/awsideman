@@ -133,26 +133,27 @@
   - Write unit tests for error scenarios and recovery mechanisms
   - _Requirements: 1.4, 2.4, 5.4_
 
-- [ ] 18. Write integration tests for end-to-end workflows
-  - Create integration tests for complete backup and restore workflows
-  - Test cross-account and cross-region scenarios
-  - Validate scheduling and automated backup functionality
-  - Test export/import with different formats and storage backends
-  - _Requirements: All requirements validation_
 
-- [ ] 19. Add performance optimizations and testing
+- [x] 18. Add performance optimizations and testing
   - Implement parallel processing for backup and restore operations
   - Add compression and deduplication for storage efficiency
   - Create performance benchmarks and optimization tests
   - Add memory and resource usage monitoring
   - _Requirements: 1.3, 7.3, 8.5_
 
-- [ ] 20. Create documentation and examples
+- [x] 19. Create documentation and examples
   - Write comprehensive API documentation for all components
   - Create usage examples for common backup/restore scenarios
   - Add configuration examples for different storage backends
   - Create troubleshooting guide for common issues
   - _Requirements: Supporting all requirements with proper documentation_
+
+- [ ] 20. Write integration tests for end-to-end workflows
+  - Create integration tests for complete backup and restore workflows
+  - Test cross-account and cross-region scenarios
+  - Validate scheduling and automated backup functionality
+  - Test export/import with different formats and storage backends
+  - _Requirements: All requirements validation_
 
 - [ ] 21. Final integration and system testing
   - Perform end-to-end system testing with real AWS Identity Center data

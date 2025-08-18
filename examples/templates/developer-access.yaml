@@ -1,0 +1,48 @@
+metadata:
+  name: "developer-access-template"
+  description: "Standard developer access across development accounts"
+  version: "1.0"
+  author: "DevOps Team"
+  created_at: "2024-01-15T10:00:00Z"
+  updated_at: "2024-01-15T10:00:00Z"
+  tags:
+    environment: "development"
+    team: "developers"
+    access_level: "standard"
+
+assignments:
+  - entities:
+      - "user:john.doe"
+      - "user:jane.smith"
+      - "group:developers"
+      - "group:frontend-team"
+    permission_sets:
+      - "DeveloperAccess"
+      - "ReadOnlyAccess"
+    targets:
+      account_tags:
+        Environment: "development"
+        Team: "backend"
+      exclude_accounts:
+        - "123456789012"  # Production account
+
+  - entities:
+      - "group:senior-developers"
+      - "user:tech-lead"
+    permission_sets:
+      - "PowerUserAccess"
+      - "DeveloperAccess"
+    targets:
+      account_ids:
+        - "234567890123"  # Staging account
+        - "345678901234"  # Testing account
+
+  - entities:
+      - "group:devops-engineers"
+    permission_sets:
+      - "DevOpsAccess"
+      - "DeveloperAccess"
+    targets:
+      account_tags:
+        Environment: "development"
+        Purpose: "infrastructure"

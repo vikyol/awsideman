@@ -8,6 +8,7 @@ This directory contains comprehensive documentation for awsideman's features and
 - **[Multi-Account Operations](MULTI_ACCOUNT_OPERATIONS.md)** - Complete guide to managing permissions across multiple AWS accounts
 - **[Bulk Operations](BULK_OPERATIONS.md)** - CSV/JSON-based bulk assignment and revocation operations
 - **[Rollback Operations](ROLLBACK_OPERATIONS.md)** - Operation tracking and rollback capabilities for safe permission management
+- **[Backup & Restore System](backup-restore/README.md)** - Comprehensive backup and restore for AWS Identity Center
 - **[Rollback Developer Guide](ROLLBACK_DEVELOPER_GUIDE.md)** - Technical documentation for rollback system architecture and APIs
 - **[Rollback API Reference](ROLLBACK_API_REFERENCE.md)** - Complete API documentation for rollback system classes and methods
 - **[Security Implementation](SECURITY.md)** - Security features, encryption, and best practices

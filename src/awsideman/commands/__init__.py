@@ -16,6 +16,7 @@ from . import (
     rollback,
     sso,
     status,
+    templates,
     user,
 )
 
@@ -36,4 +37,5 @@ __all__ = [
     "clone",
     "config",
     "copy",
+    "templates",
 ]

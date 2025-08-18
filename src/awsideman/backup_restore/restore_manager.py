@@ -33,6 +33,7 @@ from .models import (
     ValidationResult,
 )
 from .monitoring import BackupMonitor
+from .performance import PerformanceOptimizer
 
 logger = logging.getLogger(__name__)
 
@@ -1108,6 +1109,7 @@ class RestoreManager(RestoreManagerInterface):
         identity_store_client: CachedIdentityStoreClient,
         progress_reporter: Optional[ProgressReporterInterface] = None,
         backup_monitor: Optional[BackupMonitor] = None,
+        performance_optimizer: Optional[PerformanceOptimizer] = None,
     ):
         """
         Initialize the restore manager.
@@ -1123,6 +1125,7 @@ class RestoreManager(RestoreManagerInterface):
         self.identity_store_client = identity_store_client
         self.progress_reporter = progress_reporter
         self.backup_monitor = backup_monitor
+        self.performance_optimizer = performance_optimizer or PerformanceOptimizer()
 
         self.compatibility_validator = CompatibilityValidator(
             identity_center_client, identity_store_client
@@ -1150,6 +1153,24 @@ class RestoreManager(RestoreManagerInterface):
                     message=f"Backup {backup_id} not found",
                     errors=[f"Backup {backup_id} not found"],
                 )
+
+            # Check if backup data is optimized and restore if needed
+            if (
+                hasattr(backup_data.metadata, "optimization_info")
+                and backup_data.metadata.optimization_info
+            ):
+                logger.info("Restoring optimized backup data")
+                try:
+                    # The backup data should already be restored by the storage engine
+                    # but we can verify optimization metadata
+                    optimization_info = backup_data.metadata.optimization_info
+                    logger.info(
+                        f"Backup was optimized: {optimization_info.get('original_size', 0)} -> "
+                        f"{optimization_info.get('final_size', 0)} bytes "
+                        f"(ratio: {optimization_info.get('total_reduction_ratio', 1.0):.2f}x)"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to process optimization metadata: {e}")
 
             # Validate backup integrity
             if not backup_data.verify_integrity():

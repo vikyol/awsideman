@@ -677,12 +677,12 @@ class TestPrivateMethods:
         # Test with ALL resources
         options = BackupOptions(resource_types=[ResourceType.ALL])
         steps = backup_manager._calculate_backup_steps(options)
-        assert steps == 10  # 6 base steps + 4 resource types
+        assert steps == 12  # 8 base steps + 4 resource types (including optimization steps)
 
         # Test with specific resources
         options = BackupOptions(resource_types=[ResourceType.USERS, ResourceType.GROUPS])
         steps = backup_manager._calculate_backup_steps(options)
-        assert steps == 8  # 6 base steps + 2 resource types
+        assert steps == 10  # 8 base steps + 2 resource types (including optimization steps)
 
     def test_create_backup_metadata(self, backup_manager, sample_backup_data):
         """Test backup metadata creation."""

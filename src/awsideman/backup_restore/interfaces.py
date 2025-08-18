@@ -660,3 +660,176 @@ class ProgressReporterInterface(ABC):
             Progress information dictionary if found, None otherwise
         """
         pass
+
+
+class CompressionProviderInterface(ABC):
+    """Interface for compression providers."""
+
+    @abstractmethod
+    async def compress(self, data: bytes, algorithm: Optional[str] = None) -> Any:
+        """
+        Compress data using the specified or default algorithm.
+
+        Args:
+            data: Data to compress
+            algorithm: Compression algorithm to use
+
+        Returns:
+            Compression result with compressed data and metadata
+        """
+        pass
+
+    @abstractmethod
+    async def decompress(self, data: bytes, algorithm: str) -> bytes:
+        """
+        Decompress data using the specified algorithm.
+
+        Args:
+            data: Compressed data
+            algorithm: Algorithm used for compression
+
+        Returns:
+            Decompressed data
+        """
+        pass
+
+    @abstractmethod
+    def get_best_algorithm(self, data_sample: bytes) -> str:
+        """
+        Determine the best compression algorithm for given data.
+
+        Args:
+            data_sample: Sample of data to analyze
+
+        Returns:
+            Best algorithm name
+        """
+        pass
+
+    @abstractmethod
+    def get_compression_stats(self) -> Dict[str, Any]:
+        """Get compression statistics."""
+        pass
+
+
+class DeduplicationProviderInterface(ABC):
+    """Interface for deduplication providers."""
+
+    @abstractmethod
+    async def deduplicate(self, data: bytes) -> Any:
+        """
+        Deduplicate data by identifying and removing duplicate blocks.
+
+        Args:
+            data: Data to deduplicate
+
+        Returns:
+            Deduplication result with deduplicated data and metadata
+        """
+        pass
+
+    @abstractmethod
+    async def rehydrate(self, deduplicated_data: bytes) -> bytes:
+        """
+        Rehydrate deduplicated data back to original form.
+
+        Args:
+            deduplicated_data: Deduplicated data to rehydrate
+
+        Returns:
+            Original data
+        """
+        pass
+
+    @abstractmethod
+    def clear_cache(self) -> None:
+        """Clear the deduplication cache."""
+        pass
+
+    @abstractmethod
+    def get_deduplication_stats(self) -> Dict[str, Any]:
+        """Get deduplication statistics."""
+        pass
+
+
+class PerformanceOptimizerInterface(ABC):
+    """Interface for performance optimization coordination."""
+
+    @abstractmethod
+    async def optimize_backup_data(self, backup_data: Any) -> tuple[bytes, Dict[str, Any]]:
+        """
+        Optimize backup data using all enabled optimization techniques.
+
+        Args:
+            backup_data: Backup data to optimize
+
+        Returns:
+            Tuple of (optimized_data, optimization_metadata)
+        """
+        pass
+
+    @abstractmethod
+    async def restore_optimized_data(
+        self, optimized_data: bytes, optimization_metadata: Dict[str, Any]
+    ) -> Any:
+        """
+        Restore optimized data back to original BackupData.
+
+        Args:
+            optimized_data: Optimized data to restore
+            optimization_metadata: Metadata about applied optimizations
+
+        Returns:
+            Original BackupData
+        """
+        pass
+
+    @abstractmethod
+    def get_performance_metrics(self) -> List[Any]:
+        """Get collected performance metrics."""
+        pass
+
+    @abstractmethod
+    async def process_parallel_collection(
+        self, collection_tasks: List[Any], *args, **kwargs
+    ) -> List[Any]:
+        """
+        Process data collection tasks in parallel.
+
+        Args:
+            collection_tasks: List of collection functions to execute
+            *args: Additional arguments for collection functions
+            **kwargs: Additional keyword arguments for collection functions
+
+        Returns:
+            List of collection results
+        """
+        pass
+
+    @abstractmethod
+    def get_resource_usage(self, duration: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        Get resource usage statistics.
+
+        Args:
+            duration: Optional duration to analyze
+
+        Returns:
+            Resource usage statistics
+        """
+        pass
+
+    @abstractmethod
+    def get_optimization_stats(self) -> Dict[str, Any]:
+        """Get optimization statistics from all components."""
+        pass
+
+    @abstractmethod
+    def clear_caches(self) -> None:
+        """Clear all optimization caches."""
+        pass
+
+    @abstractmethod
+    def shutdown(self) -> None:
+        """Shutdown the performance optimizer."""
+        pass

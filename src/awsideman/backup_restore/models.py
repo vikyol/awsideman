@@ -746,3 +746,142 @@ class ScheduleConfig:
                 else None
             ),
         )
+
+
+@dataclass
+class PerformanceConfig:
+    """Configuration for performance optimization during backup and restore."""
+
+    parallel_collection: bool = True
+    compression_enabled: bool = True
+    encryption_enabled: bool = True
+    max_concurrent_requests: int = 10
+    max_concurrent_downloads: int = 5
+    max_concurrent_uploads: int = 5
+    max_concurrent_restores: int = 5
+    max_concurrent_validations: int = 10
+    max_concurrent_exports: int = 5
+    max_concurrent_imports: int = 5
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "parallel_collection": self.parallel_collection,
+            "compression_enabled": self.compression_enabled,
+            "encryption_enabled": self.encryption_enabled,
+            "max_concurrent_requests": self.max_concurrent_requests,
+            "max_concurrent_downloads": self.max_concurrent_downloads,
+            "max_concurrent_uploads": self.max_concurrent_uploads,
+            "max_concurrent_restores": self.max_concurrent_restores,
+            "max_concurrent_validations": self.max_concurrent_validations,
+            "max_concurrent_exports": self.max_concurrent_exports,
+            "max_concurrent_imports": self.max_concurrent_imports,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PerformanceConfig":
+        """Create from dictionary."""
+        return cls(**data)
+
+
+@dataclass
+class PerformanceMetrics:
+    """Metrics for performance monitoring and optimization."""
+
+    operation_id: str
+    operation_type: str
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    duration: Optional[timedelta] = None
+    compression_ratio: Optional[float] = None
+    deduplication_ratio: Optional[float] = None
+    parallel_workers: Optional[int] = None
+    memory_usage_mb: Optional[float] = None
+    cpu_usage_percent: Optional[float] = None
+    storage_size_bytes: Optional[int] = None
+    network_io_bytes: Optional[int] = None
+    error_count: int = 0
+    warning_count: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "operation_id": self.operation_id,
+            "operation_type": self.operation_type,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "duration": self.duration.total_seconds() if self.duration else None,
+            "compression_ratio": self.compression_ratio,
+            "deduplication_ratio": self.deduplication_ratio,
+            "parallel_workers": self.parallel_workers,
+            "memory_usage_mb": self.memory_usage_mb,
+            "cpu_usage_percent": self.cpu_usage_percent,
+            "storage_size_bytes": self.storage_size_bytes,
+            "network_io_bytes": self.network_io_bytes,
+            "error_count": self.error_count,
+            "warning_count": self.warning_count,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PerformanceMetrics":
+        """Create from dictionary."""
+        return cls(
+            operation_id=data["operation_id"],
+            operation_type=data["operation_type"],
+            start_time=datetime.fromisoformat(data["start_time"]),
+            end_time=datetime.fromisoformat(data["end_time"]) if data.get("end_time") else None,
+            duration=timedelta(seconds=data["duration"]) if data.get("duration") else None,
+            compression_ratio=data.get("compression_ratio"),
+            deduplication_ratio=data.get("deduplication_ratio"),
+            parallel_workers=data.get("parallel_workers"),
+            memory_usage_mb=data.get("memory_usage_mb"),
+            cpu_usage_percent=data.get("cpu_usage_percent"),
+            storage_size_bytes=data.get("storage_size_bytes"),
+            network_io_bytes=data.get("network_io_bytes"),
+            error_count=data.get("error_count", 0),
+            warning_count=data.get("warning_count", 0),
+        )
+
+
+@dataclass
+class ResourceUsageMetrics:
+    """Real-time resource usage metrics."""
+
+    timestamp: datetime
+    cpu_percent: float
+    memory_rss_mb: float
+    memory_vms_mb: float
+    memory_percent: float
+    system_cpu_percent: float
+    system_memory_percent: float
+    file_descriptors: int
+    thread_count: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "cpu_percent": self.cpu_percent,
+            "memory_rss_mb": self.memory_rss_mb,
+            "memory_vms_mb": self.memory_vms_mb,
+            "memory_percent": self.memory_percent,
+            "system_cpu_percent": self.system_cpu_percent,
+            "system_memory_percent": self.system_memory_percent,
+            "file_descriptors": self.file_descriptors,
+            "thread_count": self.thread_count,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ResourceUsageMetrics":
+        """Create from dictionary."""
+        return cls(
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+            cpu_percent=data["cpu_percent"],
+            memory_rss_mb=data["memory_rss_mb"],
+            memory_vms_mb=data["memory_vms_mb"],
+            memory_percent=data["memory_percent"],
+            system_cpu_percent=data["system_cpu_percent"],
+            system_memory_percent=data["system_memory_percent"],
+            file_descriptors=data["file_descriptors"],
+            thread_count=data["thread_count"],
+        )

@@ -44,6 +44,7 @@ class CachedAwsClient:
             "list_roots",
             "list_organizational_units_for_parent",
             "list_accounts_for_parent",
+            # "list_accounts",  # Temporarily disable caching for debugging
             "describe_account",
             "list_tags_for_resource",
             "list_policies_for_target",
@@ -258,6 +259,19 @@ class CachedOrganizationsClient:
             lambda: self._organizations_client.list_accounts_for_parent(parent_id),
         )
 
+    def list_accounts(self) -> Dict[str, Any]:
+        """
+        List all accounts in the organization (cached).
+
+        Returns:
+            Dictionary with 'Accounts' key containing list of account dictionaries
+        """
+        return self._cached_aws_client._execute_with_cache(
+            "list_accounts",
+            {},
+            lambda: self._organizations_client.list_accounts(),
+        )
+
     def describe_account(self, account_id: str) -> Dict[str, Any]:
         """
         Get detailed information about an account (cached).
@@ -274,7 +288,7 @@ class CachedOrganizationsClient:
             lambda: self._organizations_client.describe_account(account_id),
         )
 
-    def list_tags_for_resource(self, resource_id: str) -> List[Dict[str, str]]:
+    def list_tags_for_resource(self, resource_id: str) -> Dict[str, Any]:
         """
         List tags for a resource (cached).
 
@@ -282,13 +296,14 @@ class CachedOrganizationsClient:
             resource_id: The unique identifier of the resource
 
         Returns:
-            List of tag dictionaries
+            Dictionary with 'Tags' key containing list of tag dictionaries
         """
-        return self._cached_aws_client._execute_with_cache(
+        tags = self._cached_aws_client._execute_with_cache(
             "list_tags_for_resource",
             {"resource_id": resource_id},
             lambda: self._organizations_client.list_tags_for_resource(resource_id),
         )
+        return {"Tags": tags}
 
     def list_policies_for_target(self, target_id: str, filter_type: str) -> List[Dict[str, Any]]:
         """

@@ -1,0 +1,46 @@
+metadata:
+  name: "readonly-access-template"
+  description: "Read-only access for monitoring and compliance"
+  version: "1.0"
+  author: "Compliance Team"
+  created_at: "2024-01-15T10:00:00Z"
+  updated_at: "2024-01-15T10:00:00Z"
+  tags:
+    environment: "all"
+    team: "compliance"
+    access_level: "readonly"
+    security_level: "low"
+
+assignments:
+  - entities:
+      - "group:compliance-auditors"
+      - "group:monitoring-team"
+      - "user:compliance.user"
+    permission_sets:
+      - "ReadOnlyAccess"
+      - "CloudWatchReadOnly"
+    targets:
+      account_tags:
+        Environment: "production"
+      exclude_accounts:
+        - "999999999999"  # Highly restricted account
+
+  - entities:
+      - "group:business-users"
+      - "group:stakeholders"
+    permission_sets:
+      - "ReadOnlyAccess"
+    targets:
+      account_tags:
+        Environment: "production"
+        BusinessUnit: "core"
+
+  - entities:
+      - "group:security-monitors"
+    permission_sets:
+      - "SecurityReadOnly"
+      - "CloudTrailReadOnly"
+    targets:
+      account_tags:
+        Environment: "production"
+        SecurityLevel: "monitored"

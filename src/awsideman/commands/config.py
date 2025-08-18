@@ -216,6 +216,37 @@ def validate_config():
                 except (ValueError, TypeError):
                     errors.append("Cache 'max_size_mb' must be an integer")
 
+    # Validate template configuration
+    if "templates" in config_data:
+        template_config = config_data["templates"]
+        if not isinstance(template_config, dict):
+            errors.append("Templates section must be a dictionary")
+        else:
+            # Validate template directory
+            if "directory" in template_config:
+                template_dir = template_config["directory"]
+                if not isinstance(template_dir, str):
+                    errors.append("Template 'directory' must be a string")
+                elif template_dir and not template_dir.strip():
+                    errors.append("Template 'directory' cannot be empty")
+
+            # Validate template format preference
+            if "default_format" in template_config:
+                default_format = template_config["default_format"]
+                if default_format not in ["yaml", "json"]:
+                    errors.append("Template 'default_format' must be 'yaml' or 'json'")
+
+            # Validate template validation settings
+            if "validate_on_save" in template_config and not isinstance(
+                template_config["validate_on_save"], bool
+            ):
+                errors.append("Template 'validate_on_save' must be a boolean")
+
+            if "auto_backup" in template_config and not isinstance(
+                template_config["auto_backup"], bool
+            ):
+                errors.append("Template 'auto_backup' must be a boolean")
+
     # Display results
     if errors:
         console.print(f"[red]✗ Configuration validation failed with {len(errors)} error(s):[/red]")
@@ -231,6 +262,190 @@ def validate_config():
 
     if not errors and not warnings:
         console.print("[green]Configuration is valid with no warnings.[/green]")
+
+
+@app.command("templates")
+def manage_template_config(
+    action: str = typer.Argument(..., help="Action to perform: show, set, reset"),
+    key: str = typer.Option(None, "--key", "-k", help="Configuration key to set"),
+    value: str = typer.Option(None, "--value", "-v", help="Value to set for the key"),
+):
+    """Manage template configuration settings."""
+    config = Config()
+
+    if action == "show":
+        _show_template_config(config)
+    elif action == "set":
+        if not key or not value:
+            console.print("[red]Error: Both --key and --value are required for 'set' action.[/red]")
+            raise typer.Exit(1)
+        _set_template_config(config, key, value)
+    elif action == "reset":
+        _reset_template_config(config)
+    else:
+        console.print(f"[red]Error: Unknown action '{action}'. Use: show, set, or reset.[/red]")
+        raise typer.Exit(1)
+
+
+def _show_template_config(config: Config):
+    """Display current template configuration."""
+    template_config = config.get_template_config()
+
+    console.print("[bold blue]Template Configuration[/bold blue]")
+
+    table = Table()
+    table.add_column("Setting", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_column("Default", style="yellow")
+
+    # Show current values with defaults
+    table.add_row(
+        "Storage Directory",
+        template_config.get("storage_directory", "Not set"),
+        "~/.awsideman/templates",
+    )
+    table.add_row("Default Format", template_config.get("default_format", "Not set"), "yaml")
+
+    # Validation settings
+    validation = template_config.get("validation", {})
+    table.add_row("Strict Mode", str(validation.get("strict_mode", "Not set")), "true")
+    table.add_row("Require Metadata", str(validation.get("require_metadata", "Not set")), "false")
+
+    # Execution settings
+    execution = template_config.get("execution", {})
+    table.add_row("Default Dry Run", str(execution.get("default_dry_run", "Not set")), "false")
+    table.add_row("Parallel Execution", str(execution.get("parallel_execution", "Not set")), "true")
+    table.add_row("Batch Size", str(execution.get("batch_size", "Not set")), "10")
+
+    console.print(table)
+
+    # Show additional information
+    console.print(
+        f"\n[blue]Current template directory:[/blue] {template_config.get('storage_directory', '~/.awsideman/templates')}"
+    )
+
+    # Check if directory exists and is accessible
+    import pathlib
+
+    template_dir = pathlib.Path(
+        template_config.get("storage_directory", "~/.awsideman/templates")
+    ).expanduser()
+    if template_dir.exists():
+        console.print("[green]✓ Directory exists and is accessible[/green]")
+        try:
+            template_count = len(
+                list(template_dir.glob("*.yaml")) + list(template_dir.glob("*.json"))
+            )
+            console.print(f"[blue]Found {template_count} template file(s)[/blue]")
+        except Exception:
+            console.print("[yellow]Could not count template files[/yellow]")
+    else:
+        console.print(f"[yellow]Directory does not exist: {template_dir}[/yellow]")
+        console.print(
+            "[blue]Use 'awsideman config templates set storage_directory <path>' to set it.[/blue]"
+        )
+
+
+def _set_template_config(config: Config, key: str, value: str):
+    """Set a template configuration value."""
+    valid_keys = [
+        "storage_directory",
+        "default_format",
+        "strict_mode",
+        "require_metadata",
+        "default_dry_run",
+        "parallel_execution",
+        "batch_size",
+    ]
+
+    if key not in valid_keys:
+        console.print(f"[red]Error: Invalid key '{key}'.[/red]")
+        console.print(f"Valid keys: {', '.join(valid_keys)}")
+        raise typer.Exit(1)
+
+    # Validate value based on key
+    if key == "default_format":
+        if value not in ["yaml", "json"]:
+            console.print(
+                f"[red]Error: '{value}' is not a valid format. Use 'yaml' or 'json'.[/red]"
+            )
+            raise typer.Exit(1)
+    elif key in ["strict_mode", "require_metadata", "default_dry_run", "parallel_execution"]:
+        if value.lower() not in ["true", "false", "1", "0"]:
+            console.print(
+                f"[red]Error: '{value}' is not a valid boolean value. Use 'true' or 'false'.[/red]"
+            )
+            raise typer.Exit(1)
+        # Convert to boolean
+        value = value.lower() in ["true", "1"]
+    elif key == "batch_size":
+        try:
+            batch_size = int(value)
+            if batch_size < 1 or batch_size > 1000:
+                console.print("[red]Error: Batch size must be between 1 and 1000.[/red]")
+                raise typer.Exit(1)
+            value = batch_size
+        except ValueError:
+            console.print(f"[red]Error: '{value}' is not a valid integer.[/red]")
+            raise typer.Exit(1)
+    elif key == "storage_directory":
+        # Validate directory path
+        import pathlib
+
+        try:
+            dir_path = pathlib.Path(value).expanduser()
+            if dir_path.exists() and not dir_path.is_dir():
+                console.print(f"[red]Error: '{value}' exists but is not a directory.[/red]")
+                raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Error: Invalid directory path '{value}': {e}[/red]")
+            raise typer.Exit(1)
+
+    # Get current template config
+    current_config = config.get_template_config()
+
+    # Update the appropriate section
+    if key in ["strict_mode", "require_metadata"]:
+        if "validation" not in current_config:
+            current_config["validation"] = {}
+        current_config["validation"][key] = value
+    elif key in ["default_dry_run", "parallel_execution", "batch_size"]:
+        if "execution" not in current_config:
+            current_config["execution"] = {}
+        current_config["execution"][key] = value
+    else:
+        current_config[key] = value
+
+    # Set the configuration
+    try:
+        config.set_template_config(current_config)
+        console.print(f"[green]✓ Template configuration '{key}' set to '{value}'[/green]")
+
+        # Show updated configuration
+        console.print("\n[blue]Updated template configuration:[/blue]")
+        _show_template_config(config)
+
+    except Exception as e:
+        console.print(f"[red]Error setting template configuration: {e}[/red]")
+        raise typer.Exit(1)
+
+
+def _reset_template_config(config: Config):
+    """Reset template configuration to defaults."""
+    try:
+        from ..utils.config import DEFAULT_TEMPLATE_CONFIG
+
+        config.set_template_config(DEFAULT_TEMPLATE_CONFIG)
+
+        console.print("[green]✓ Template configuration reset to defaults[/green]")
+
+        # Show updated configuration
+        console.print("\n[blue]Current template configuration:[/blue]")
+        _show_template_config(config)
+
+    except Exception as e:
+        console.print(f"[red]Error resetting template configuration: {e}[/red]")
+        raise typer.Exit(1)
 
 
 def _display_config_table(config_data: dict):
@@ -287,6 +502,68 @@ def _display_config_table(config_data: dict):
                     ttl_table.add_row(operation, str(ttl))
 
                 console.print(ttl_table)
+
+        elif section_name == "templates" and isinstance(section_data, dict):
+            # Special handling for template config
+            table = Table()
+            table.add_column("Setting", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_column("Default", style="yellow")
+
+            # Show template settings with defaults
+            defaults = {
+                "storage_directory": "~/.awsideman/templates",
+                "default_format": "yaml",
+                "strict_mode": "true",
+                "require_metadata": "false",
+                "default_dry_run": "false",
+                "parallel_execution": "true",
+                "batch_size": "10",
+            }
+
+            # Show top-level settings
+            for key in ["storage_directory", "default_format"]:
+                if key in section_data:
+                    table.add_row(key, str(section_data[key]), defaults.get(key, "Not set"))
+
+            # Show validation settings
+            if "validation" in section_data and isinstance(section_data["validation"], dict):
+                validation = section_data["validation"]
+                for key in ["strict_mode", "require_metadata"]:
+                    if key in validation:
+                        table.add_row(
+                            f"validation.{key}", str(validation[key]), defaults.get(key, "Not set")
+                        )
+
+            # Show execution settings
+            if "execution" in section_data and isinstance(section_data["execution"], dict):
+                execution = section_data["execution"]
+                for key in ["default_dry_run", "parallel_execution", "batch_size"]:
+                    if key in execution:
+                        table.add_row(
+                            f"execution.{key}", str(execution[key]), defaults.get(key, "Not set")
+                        )
+
+            console.print(table)
+
+            # Show template directory status
+            if "storage_directory" in section_data:
+                import pathlib
+
+                template_dir = pathlib.Path(section_data["storage_directory"]).expanduser()
+                if template_dir.exists():
+                    try:
+                        template_count = len(
+                            list(template_dir.glob("*.yaml")) + list(template_dir.glob("*.json"))
+                        )
+                        console.print(f"\n[blue]Template directory: {template_dir}[/blue]")
+                        console.print(f"[green]Found {template_count} template file(s)[/green]")
+                    except Exception:
+                        console.print(f"\n[blue]Template directory: {template_dir}[/blue]")
+                        console.print("[yellow]Could not count template files[/yellow]")
+                else:
+                    console.print(f"\n[blue]Template directory: {template_dir}[/blue]")
+                    console.print("[yellow]Directory does not exist[/yellow]")
 
         else:
             # Generic handling for other sections

@@ -1,0 +1,60 @@
+metadata:
+  name: "devops-access-template"
+  description: "DevOps engineer access for infrastructure management"
+  version: "1.0"
+  author: "DevOps Team"
+  created_at: "2024-01-15T10:00:00Z"
+  updated_at: "2024-01-15T10:00:00Z"
+  tags:
+    environment: "all"
+    team: "devops"
+    access_level: "power"
+    security_level: "medium"
+
+assignments:
+  - entities:
+      - "group:devops-engineers"
+      - "group:infrastructure-team"
+      - "user:devops.lead"
+    permission_sets:
+      - "DevOpsAccess"
+      - "InfrastructureManagement"
+      - "CloudFormationFullAccess"
+    targets:
+      account_tags:
+        Environment: "production"
+        Purpose: "infrastructure"
+
+  - entities:
+      - "group:senior-devops"
+      - "user:platform.engineer"
+    permission_sets:
+      - "DevOpsAccess"
+      - "InfrastructureManagement"
+      - "SecurityManagement"
+      - "CostManagement"
+    targets:
+      account_tags:
+        Environment: "production"
+        Purpose: "platform"
+
+  - entities:
+      - "group:devops-engineers"
+    permission_sets:
+      - "DevOpsAccess"
+      - "InfrastructureManagement"
+    targets:
+      account_tags:
+        Environment: "development"
+        Purpose: "infrastructure"
+
+  - entities:
+      - "group:monitoring-team"
+    permission_sets:
+      - "DevOpsAccess"
+      - "MonitoringAccess"
+      - "LoggingAccess"
+    targets:
+      account_tags:
+        Environment: "production"
+        Purpose: "monitoring"

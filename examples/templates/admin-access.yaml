@@ -1,0 +1,49 @@
+metadata:
+  name: "admin-access-template"
+  description: "Administrative access for production accounts"
+  version: "1.0"
+  author: "Security Team"
+  created_at: "2024-01-15T10:00:00Z"
+  updated_at: "2024-01-15T10:00:00Z"
+  tags:
+    environment: "production"
+    team: "administrators"
+    access_level: "admin"
+    security_level: "high"
+
+assignments:
+  - entities:
+      - "user:admin.user"
+      - "group:system-administrators"
+      - "group:security-team"
+    permission_sets:
+      - "AdministratorAccess"
+      - "SecurityAudit"
+    targets:
+      account_tags:
+        Environment: "production"
+        Critical: "true"
+
+  - entities:
+      - "user:emergency.admin"
+      - "group:incident-response"
+    permission_sets:
+      - "EmergencyAccess"
+      - "ReadOnlyAccess"
+    targets:
+      account_ids:
+        - "111111111111"  # Primary production account
+        - "222222222222"  # Secondary production account
+      account_tags:
+        Environment: "production"
+        Tier: "critical"
+
+  - entities:
+      - "group:compliance-team"
+    permission_sets:
+      - "ComplianceAudit"
+      - "ReadOnlyAccess"
+    targets:
+      account_tags:
+        Environment: "production"
+        Compliance: "required"

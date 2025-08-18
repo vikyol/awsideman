@@ -27,6 +27,7 @@ try:
         rollback,
         sso,
         status,
+        templates,
         user,
     )
     from .commands.backup import app as backup_app
@@ -53,6 +54,7 @@ except ImportError:
         rollback,
         sso,
         status,
+        templates,
         user,
     )
     from awsideman.commands.backup import app as backup_app
@@ -79,6 +81,7 @@ app.add_typer(bulk.app, name="bulk")
 app.add_typer(status.app, name="status")
 app.add_typer(access_review.app, name="access-review")
 app.add_typer(rollback.app, name="rollback")
+app.add_typer(templates.app, name="templates")
 app.add_typer(backup_app, name="backup")
 app.add_typer(restore_app, name="restore")
 

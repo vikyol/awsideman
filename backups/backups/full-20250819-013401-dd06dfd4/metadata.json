@@ -1,0 +1,33 @@
+{
+  "backup_id": "full-20250819-013401-dd06dfd4",
+  "timestamp": "2025-08-19T01:34:01.082473",
+  "instance_arn": "arn:aws:sso:::instance/ssoins-6508c653ed1fcf28",
+  "backup_type": "full",
+  "version": "1.0.0",
+  "source_account": "235494818372",
+  "source_region": "eu-north-1",
+  "retention_policy": {
+    "keep_daily": 7,
+    "keep_weekly": 4,
+    "keep_monthly": 12,
+    "keep_yearly": 3,
+    "auto_cleanup": true
+  },
+  "encryption_info": {
+    "algorithm": "AES-256",
+    "key_id": null,
+    "iv": null,
+    "encrypted": true
+  },
+  "resource_counts": {
+    "users": 3,
+    "groups": 0,
+    "permission_sets": 0,
+    "assignments": 0
+  },
+  "size_bytes": 0,
+  "checksum": "d20a57d92a1fa632c1d7071054d762ba24793397efaa047d9a7decbe1acd7178",
+  "encryption_metadata": {},
+  "compressed": true,
+  "final_checksum": "d20a57d92a1fa632c1d7071054d762ba24793397efaa047d9a7decbe1acd7178"
+}
