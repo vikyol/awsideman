@@ -5,7 +5,7 @@ backup schedules with cron-based scheduling and notification support.
 """
 
 import asyncio
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import typer
 from rich.console import Console
@@ -128,7 +128,9 @@ def create_schedule(
             raise typer.Exit(1)
 
         # Initialize components
-        storage_backend_obj = _initialize_storage_backend(storage_backend, storage_path)
+        storage_backend_obj = _initialize_storage_backend(
+            storage_backend, storage_path, profile_name, profile_data
+        )
         storage_engine = StorageEngine(backend=storage_backend_obj)
         schedule_manager = ScheduleManager(storage_engine=storage_engine)
 
@@ -418,7 +420,12 @@ def get_schedule_status(
         raise typer.Exit(1)
 
 
-def _initialize_storage_backend(storage_backend: str, storage_path: Optional[str]):
+def _initialize_storage_backend(
+    storage_backend: str,
+    storage_path: Optional[str],
+    profile_name: Optional[str] = None,
+    profile_data: Optional[Dict] = None,
+):
     """Initialize storage backend based on configuration."""
     if storage_backend.lower() == "filesystem":
         storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
@@ -432,7 +439,19 @@ def _initialize_storage_backend(storage_backend: str, storage_path: Optional[str
         bucket_name, prefix = (
             storage_path.split("/", 1) if "/" in storage_path else (storage_path, "")
         )
-        return S3StorageBackend(bucket_name=bucket_name, prefix=prefix)
+
+        # Configure S3 backend with profile support
+        s3_config = {"bucket_name": bucket_name, "prefix": prefix}
+
+        # Use profile name for SSO and named profiles
+        if profile_name:
+            s3_config["profile_name"] = profile_name
+
+        # Add region from profile data if available
+        if profile_data and "region" in profile_data:
+            s3_config["region_name"] = profile_data["region"]
+
+        return S3StorageBackend(**s3_config)
     else:
         console.print(f"[red]Error: Unsupported storage backend '{storage_backend}'.[/red]")
         console.print("[yellow]Supported backends: filesystem, s3[/yellow]")

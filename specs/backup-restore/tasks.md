@@ -1,5 +1,7 @@
 # Implementation Plan
 
+## Phase 1: Core Implementation (Completed)
+
 - [x] 1. Set up core data models and interfaces
   - Create backup data models (BackupData, BackupMetadata, RestoreOptions)
   - Implement base interfaces for managers and storage backends
@@ -161,3 +163,61 @@
   - Test disaster recovery scenarios and data integrity
   - Verify compliance with audit and retention requirements
   - _Requirements: Complete system validation for all requirements_
+
+## Phase 2: Cross-Account Restore Enhancement (Future)
+
+- [ ] 22. Implement cross-account data transformation layer
+  - Create AccountMappingService to handle source-to-target account transformations
+  - Implement resource ID mapping for Identity Store resources (users, groups)
+  - Add permission set ARN transformation for cross-account contexts
+  - Create assignment mapping that references target account resources
+  - _Requirements: 5.1, 5.2, 5.3 - Enhanced cross-account restore functionality_
+
+- [ ] 23. Add cross-account resource validation and compatibility
+  - Implement pre-restore validation for cross-account resource compatibility
+  - Add target account permission validation before resource creation
+  - Create resource naming conflict detection and resolution
+  - Add cross-account dependency mapping and validation
+  - _Requirements: 5.4, 5.5 - Robust cross-account validation_
+
+- [ ] 24. Enhance cross-account restore with data transformation
+  - Modify RestoreProcessor to use AccountMappingService for resource creation
+  - Implement dynamic Identity Store ID resolution for target accounts
+  - Add resource attribute transformation (descriptions, tags, etc.)
+  - Create cross-account restore preview with transformed resource mapping
+  - _Requirements: 2.1, 2.2, 2.3 - Enhanced restore with account mapping_
+
+- [ ] 25. Add cross-account restore testing and validation
+  - Create comprehensive test scenarios for cross-account restore operations
+  - Test resource transformation with different account configurations
+  - Validate cross-account permission and trust policy requirements
+  - Add integration tests for complex multi-account restore scenarios
+  - _Requirements: Testing and validation of cross-account functionality_
+
+- [ ] 26. Implement cross-account restore rollback and recovery
+  - Add rollback capabilities for failed cross-account restore operations
+  - Implement partial restore recovery for cross-account scenarios
+  - Create cleanup procedures for partially created cross-account resources
+  - Add audit logging for cross-account restore operations
+  - _Requirements: 2.4, 2.5 - Cross-account restore reliability_
+
+## Current Status
+
+**Phase 1**: ✅ **COMPLETED** - All core backup and restore functionality is implemented and working
+**Phase 2**: 🔄 **PLANNED** - Cross-account restore infrastructure is complete, but data transformation layer is needed
+
+### Known Limitations (Phase 2)
+
+- **Cross-account restore** currently creates resources in the **source account's context** instead of the target account
+- **Resource mapping** between accounts is not implemented (Identity Store IDs, account IDs, instance ARNs)
+- **Data transformation** layer is needed to convert source account resource references to target account equivalents
+
+### Infrastructure Status
+
+- ✅ **Cross-account role assumption** - Fully working
+- ✅ **S3 storage and credentials** - Fully working
+- ✅ **API call infrastructure** - Fully working
+- ✅ **Instance discovery** - Fully working
+- ✅ **Parameter validation** - Fully working
+
+The foundation for cross-account restore is complete and ready for Phase 2 enhancement.

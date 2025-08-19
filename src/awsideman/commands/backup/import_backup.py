@@ -79,7 +79,19 @@ def import_backup(
             bucket_name, prefix = (
                 storage_path.split("/", 1) if "/" in storage_path else (storage_path, "")
             )
-            storage_backend_obj = S3StorageBackend(bucket_name=bucket_name, prefix=prefix)
+
+            # Configure S3 backend with profile support
+            s3_config = {"bucket_name": bucket_name, "prefix": prefix}
+
+            # Use profile name for SSO and named profiles
+            if profile_name:
+                s3_config["profile_name"] = profile_name
+
+            # Add region from profile data if available
+            if profile_data and "region" in profile_data:
+                s3_config["region_name"] = profile_data["region"]
+
+            storage_backend_obj = S3StorageBackend(**s3_config)
         else:
             console.print(f"[red]Error: Unsupported storage backend '{storage_backend}'.[/red]")
             console.print("[yellow]Supported backends: filesystem, s3[/yellow]")

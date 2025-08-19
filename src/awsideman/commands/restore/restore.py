@@ -1,6 +1,7 @@
 """Restore backup command for awsideman."""
 
 import asyncio
+from datetime import datetime
 from typing import Optional
 
 import typer
@@ -12,7 +13,6 @@ from ...backup_restore.backends import FileSystemStorageBackend, S3StorageBacken
 from ...backup_restore.models import ConflictStrategy, ResourceType, RestoreOptions
 from ...backup_restore.restore_manager import RestoreManager
 from ...backup_restore.storage import StorageEngine
-from ...backup_restore.validation import BackupValidator
 from ...utils.config import Config
 from ...utils.validators import validate_profile
 
@@ -21,7 +21,7 @@ config = Config()
 
 
 def restore_backup(
-    backup_id: str = typer.Argument(..., help="Backup ID to restore from"),
+    backup_id: str = typer.Argument(..., help="Backup ID to apply restore from"),
     resources: Optional[str] = typer.Option(
         None,
         "--resources",
@@ -44,6 +44,11 @@ def restore_backup(
     target_instance_arn: Optional[str] = typer.Option(
         None, "--target-instance-arn", help="Target Identity Center instance ARN"
     ),
+    target_role_arn: Optional[str] = typer.Option(
+        None,
+        "--target-role-arn",
+        help="IAM role ARN to assume in target account for cross-account restore",
+    ),
     storage_backend: str = typer.Option(
         "filesystem", "--storage", help="Storage backend: filesystem or s3"
     ),
@@ -58,7 +63,7 @@ def restore_backup(
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
 ):
-    """Restore AWS Identity Center configuration from a backup.
+    """Apply restore of AWS Identity Center configuration from a backup.
 
     Restores AWS Identity Center resources (users, groups, permission sets,
     assignments) from a backup. Supports selective restore, conflict resolution,
@@ -66,23 +71,37 @@ def restore_backup(
 
     Examples:
         # Restore all resources from a backup
-        $ awsideman restore backup-20240117-143022-abc12345
+        $ awsideman restore apply backup-20240117-143022-abc12345
 
         # Dry-run restore to preview changes
-        $ awsideman restore backup-123 --dry-run
+        $ awsideman restore apply backup-123 --dry-run
 
         # Restore only users and groups
-        $ awsideman restore backup-123 --resources users,groups
+        $ awsideman restore apply backup-123 --resources users,groups
 
         # Restore with conflict resolution strategy
-        $ awsideman restore backup-123 --conflict-strategy overwrite
+        $ awsideman restore apply backup-123 --conflict-strategy overwrite
 
         # Cross-account restore
-        $ awsideman restore backup-123 --target-account 123456789012 --target-region us-west-2
+        $ awsideman restore apply backup-123 --target-account 123456789012 --target-region us-west-2
     """
     try:
         # Validate profile and get profile data
         profile_name, profile_data = validate_profile(profile)
+
+        # Try to get storage location from local metadata index first
+        from ...backup_restore.local_metadata_index import get_global_metadata_index
+
+        metadata_index = get_global_metadata_index()
+        storage_info = metadata_index.get_storage_location(backup_id)
+
+        if storage_info and not storage_path:
+            # Use storage info from metadata index if not explicitly provided
+            storage_backend = storage_info["backend"]
+            storage_path = storage_info["location"]
+            console.print(
+                f"[blue]Auto-detected storage: {storage_backend} at {storage_path}[/blue]"
+            )
 
         # Parse resource types
         resource_types = []
@@ -131,53 +150,105 @@ def restore_backup(
             bucket_name, prefix = (
                 storage_path.split("/", 1) if "/" in storage_path else (storage_path, "")
             )
-            storage_backend_obj = S3StorageBackend(bucket_name=bucket_name, prefix=prefix)
+
+            # Configure S3 backend with profile support
+            s3_config = {"bucket_name": bucket_name, "prefix": prefix}
+
+            # Use profile name for SSO and named profiles
+            if profile_name:
+                s3_config["profile_name"] = profile_name
+
+            # Add region from profile data if available
+            if profile_data and "region" in profile_data:
+                s3_config["region_name"] = profile_data["region"]
+
+            storage_backend_obj = S3StorageBackend(**s3_config)
         else:
             console.print(f"[red]Error: Unsupported storage backend '{storage_backend}'.[/red]")
             console.print("[yellow]Supported backends: filesystem, s3[/yellow]")
             raise typer.Exit(1)
 
+        # Initialize AWS client manager
+        from ...aws_clients.manager import AWSClientManager
+
+        aws_client_manager = AWSClientManager(
+            profile=profile_name, region=profile_data.get("region")
+        )
+
+        # Get the required clients
+        identity_center_client = aws_client_manager.get_identity_center_client()
+        identity_store_client = aws_client_manager.get_identity_store_client()
+
         # Initialize components
         storage_engine = StorageEngine(backend=storage_backend_obj)
-        restore_manager = RestoreManager(storage_engine=storage_engine)
-        validator = BackupValidator(storage_engine=storage_engine)
+        restore_manager = RestoreManager(
+            storage_engine=storage_engine,
+            identity_center_client=identity_center_client,
+            identity_store_client=identity_store_client,
+        )
 
         # Check if backup exists
         console.print(f"[blue]Checking backup: {backup_id}[/blue]")
 
         try:
-            storage_engine.retrieve_backup(backup_id)
+            backup_data = asyncio.run(storage_engine.retrieve_backup(backup_id))
+            if not backup_data:
+                console.print(f"[red]Error: Backup '{backup_id}' not found.[/red]")
+                console.print(
+                    "[yellow]Use 'awsideman backup list' to see available backups.[/yellow]"
+                )
+                raise typer.Exit(1)
         except Exception as e:
             console.print(f"[red]Error: Backup '{backup_id}' not found.[/red]")
             console.print(f"[yellow]Details: {e}[/yellow]")
             raise typer.Exit(1)
+
+        # Create cross-account configuration if role ARN is provided
+        cross_account_config = None
+        if target_role_arn and target_account:
+            from ...backup_restore.models import CrossAccountConfig
+
+            cross_account_config = CrossAccountConfig(
+                target_account_id=target_account,
+                role_arn=target_role_arn,
+                session_name=f"awsideman-restore-{int(datetime.now().timestamp())}",
+            )
 
         # Validate backup compatibility if not skipped
         if not skip_validation:
             console.print("[blue]Validating backup compatibility...[/blue]")
 
             try:
-                compatibility_result = asyncio.run(
-                    validator.validate_compatibility(
-                        backup_id=backup_id,
-                        target_account=target_account,
-                        target_region=target_region,
-                        target_instance_arn=target_instance_arn,
+                # For cross-account operations, skip validation since we can't access the target yet
+                if cross_account_config:
+                    console.print(
+                        "[yellow]Skipping compatibility validation for cross-account restore[/yellow]"
                     )
-                )
+                    console.print(
+                        "[yellow]Validation will be performed during the actual restore operation[/yellow]"
+                    )
+                else:
+                    # Use the local restore manager for validation
+                    compatibility_result = asyncio.run(
+                        restore_manager.validate_compatibility(
+                            backup_id=backup_id,
+                            target_instance_arn=target_instance_arn
+                            or backup_data.metadata.instance_arn,
+                        )
+                    )
 
-                if not compatibility_result.is_compatible:
-                    console.print("[red]Backup compatibility validation failed![/red]")
-                    console.print("[yellow]Use --skip-validation to proceed anyway.[/yellow]")
+                    if not compatibility_result.is_valid:
+                        console.print("[red]Backup compatibility validation failed![/red]")
+                        console.print("[yellow]Use --skip-validation to proceed anyway.[/yellow]")
 
-                    if compatibility_result.issues:
-                        console.print("\n[bold red]Compatibility Issues:[/bold red]")
-                        for issue in compatibility_result.issues:
-                            console.print(f"[red]• {issue}[/red]")
+                        if compatibility_result.errors:
+                            console.print("\n[bold red]Compatibility Issues:[/bold red]")
+                            for issue in compatibility_result.errors:
+                                console.print(f"[red]• {issue}[/red]")
 
-                    raise typer.Exit(1)
+                        raise typer.Exit(1)
 
-                console.print("[green]✓ Backup compatibility validation passed![/green]")
+                    console.print("[green]✓ Backup compatibility validation passed![/green]")
 
             except Exception as e:
                 console.print(f"[red]Compatibility validation failed: {e}[/red]")
@@ -185,6 +256,9 @@ def restore_backup(
                     raise typer.Exit(1)
 
         # Create restore options
+        # For cross-account operations, always skip validation since target clients aren't available yet
+        final_skip_validation = skip_validation or (cross_account_config is not None)
+
         restore_options = RestoreOptions(
             target_resources=resource_types if resource_types else [ResourceType.ALL],
             conflict_strategy=ConflictStrategy(conflict_strategy.lower()),
@@ -192,8 +266,24 @@ def restore_backup(
             target_account=target_account,
             target_region=target_region,
             target_instance_arn=target_instance_arn,
-            skip_validation=skip_validation,
+            skip_validation=final_skip_validation,
+            cross_account_config=cross_account_config,
         )
+
+        # Select the appropriate restore manager
+        if cross_account_config:
+            from ...backup_restore.restore_manager import CrossAccountRestoreManager
+
+            # Create a client manager for cross-account operations
+            cross_account_client_manager = AWSClientManager(
+                profile=profile_name, region=profile_data.get("region")
+            )
+            operation_restore_manager = CrossAccountRestoreManager(
+                client_manager=cross_account_client_manager, storage_engine=storage_engine
+            )
+            console.print("[blue]Using cross-account restore manager[/blue]")
+        else:
+            operation_restore_manager = restore_manager
 
         # Perform restore operation
         if dry_run:
@@ -214,7 +304,9 @@ def restore_backup(
 
             try:
                 restore_result = asyncio.run(
-                    restore_manager.restore_backup(backup_id=backup_id, options=restore_options)
+                    operation_restore_manager.restore_backup(
+                        backup_id=backup_id, options=restore_options
+                    )
                 )
                 progress.update(task, description=f"{operation_type} completed!")
             except Exception as e:
@@ -233,7 +325,11 @@ def restore_backup(
             console.print("[blue]Use --dry-run=false to perform the actual restore.[/blue]")
         else:
             console.print("[green]✓ Restore completed successfully![/green]")
-            console.print(f"[blue]Restored {restore_result.changes_applied} resources.[/blue]")
+            if isinstance(restore_result.changes_applied, dict):
+                total_changes = sum(restore_result.changes_applied.values())
+                console.print(f"[blue]Restored {total_changes} resources.[/blue]")
+            else:
+                console.print(f"[blue]Restored {restore_result.changes_applied} resources.[/blue]")
 
     except Exception as e:
         console.print(f"[red]Error during restore: {e}[/red]")
@@ -261,7 +357,12 @@ def display_restore_results(restore_result, dry_run: bool):
     console.print(summary_table)
 
     # Detailed changes
-    if restore_result.changes_applied > 0:
+    if restore_result.changes_applied and (
+        isinstance(restore_result.changes_applied, dict)
+        and sum(restore_result.changes_applied.values()) > 0
+        or isinstance(restore_result.changes_applied, int)
+        and restore_result.changes_applied > 0
+    ):
         console.print("\n[bold cyan]Detailed Changes:[/bold cyan]")
         changes_table = Table()
         changes_table.add_column("Resource Type", style="cyan")

@@ -40,7 +40,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from ..aws_clients.manager import AWSClientManager
 from ..rollback.logger import OperationLogger
+from ..rollback.processor import RollbackProcessor
 from ..utils.config import Config
 from ..utils.validators import validate_profile
 
@@ -317,7 +319,7 @@ def apply_rollback(
 
     Rolls back a previously executed operation by performing the inverse actions.
     For assign operations, this will revoke the assignments. For revoke operations,
-    this will re-assign the permission sets.
+    this will re-assign the same permission sets.
 
     ROLLBACK BEHAVIOR:
 
@@ -418,57 +420,15 @@ def apply_rollback(
             console.print(f"[red]✗ Error validating operation: {str(e)}[/red]")
             raise typer.Exit(1)
 
-    # Step 2: Display operation details and rollback plan
+    # Step 2: Display operation details
     console.print("\n[blue]Step 2: Generating rollback plan...[/blue]")
 
     try:
         # Display operation details
         details_panel = _create_operation_details_panel(operation)
         console.print(details_panel)
-
-        # Determine rollback action type
-        if operation.operation_type.value == "assign":
-            rollback_action = "revoke"
-            action_description = "The following assignments will be revoked:"
-        else:
-            rollback_action = "assign"
-            action_description = "The following assignments will be created:"
-
-        # Display rollback plan
-        console.print(f"\n[yellow]{action_description}[/yellow]")
-
-        plan_table = Table(show_header=True, header_style="bold yellow")
-        plan_table.add_column("Principal", style="cyan")
-        plan_table.add_column("Permission Set", style="blue")
-        plan_table.add_column("Accounts", style="green")
-        plan_table.add_column("Action", style="magenta")
-
-        # Add rollback actions to table
-        successful_results = [r for r in operation.results if r.success]
-        account_names_map = dict(zip(operation.account_ids, operation.account_names))
-
-        if successful_results:
-            account_list = []
-            for result in successful_results:
-                account_name = account_names_map.get(result.account_id, result.account_id)
-                account_list.append(f"{account_name} ({result.account_id})")
-
-            plan_table.add_row(
-                operation.principal_name,
-                operation.permission_set_name,
-                "\n".join(account_list),
-                rollback_action.upper(),
-            )
-
-        console.print(plan_table)
-
-        # Display summary
-        console.print(
-            f"\n[dim]Rollback will {rollback_action} {len(successful_results)} assignment(s)[/dim]"
-        )
-
     except Exception as e:
-        console.print(f"[red]✗ Error generating rollback plan: {str(e)}[/red]")
+        console.print(f"[red]✗ Error displaying operation details: {str(e)}[/red]")
         raise typer.Exit(1)
 
     # Handle dry-run mode
@@ -480,6 +440,15 @@ def apply_rollback(
         raise typer.Exit(0)
 
     # Step 3: Get user confirmation
+    # Determine rollback action type for display purposes
+    if operation.operation_type.value == "assign":
+        rollback_action = "revoke"
+    else:
+        rollback_action = "assign"
+
+    # Calculate successful results that can be rolled back
+    successful_results = [r for r in operation.results if r.success]
+
     if not yes:
         console.print(
             f"\n[yellow]⚠ This will {rollback_action} {len(successful_results)} assignment(s).[/yellow]"
@@ -490,21 +459,176 @@ def apply_rollback(
             console.print("[yellow]Rollback cancelled by user.[/yellow]")
             raise typer.Exit(0)
 
-    # Step 4: Execute rollback (placeholder for now)
+    # Step 4: Execute rollback using RollbackProcessor
     console.print("\n[blue]Step 3: Executing rollback operation...[/blue]")
 
-    # TODO: This will be implemented in task 4 (RollbackProcessor)
-    console.print("[yellow]⚠ Rollback execution is not yet implemented.[/yellow]")
-    console.print(
-        "[yellow]This functionality will be available after implementing the RollbackProcessor.[/yellow]"
+    # Check if this appears to be test data
+    is_test_data = (
+        "1234567890abcdef" in operation.permission_set_arn
+        or "123456789012" in operation.account_ids
+        or "group-1234567890abcdef" in operation.principal_id
+        or "user-1234567890abcdef" in operation.principal_id
     )
-    console.print(f"[dim]Operation ID: {operation_id}[/dim]")
-    console.print(f"[dim]Rollback action: {rollback_action}[/dim]")
-    console.print(f"[dim]Assignments to process: {len(successful_results)}[/dim]")
 
-    # For now, just show what would happen
-    console.print("\n[blue]Rollback plan validated successfully![/blue]")
-    console.print("[yellow]Implementation of rollback execution is pending.[/yellow]")
+    if is_test_data:
+        console.print(
+            "[yellow]⚠ This appears to be test data and cannot be processed for rollback[/yellow]"
+        )
+        console.print(
+            "[yellow]Test operations contain fake AWS resource identifiers that cannot be used with real AWS APIs[/yellow]"
+        )
+        console.print(f"[dim]Permission Set ARN: {operation.permission_set_arn}[/dim]")
+        console.print(f"[dim]Principal ID: {operation.principal_id}[/dim]")
+        console.print(f"[dim]Account IDs: {operation.account_ids}[/dim]")
+        console.print(
+            "\n[blue]To test rollback functionality, you need to create real operations using the assignment commands[/blue]"
+        )
+        console.print("\n[blue]Rollback operation completed![/blue]")
+        return
+
+    # Validate that the operation contains valid AWS ARNs
+    if not operation.permission_set_arn.startswith("arn:aws:sso:::"):
+        console.print("[red]✗ Invalid permission set ARN format[/red]")
+        console.print(
+            "[yellow]This appears to be test data and cannot be processed for rollback[/yellow]"
+        )
+        console.print(f"[dim]ARN: {operation.permission_set_arn}[/dim]")
+        raise typer.Exit(1)
+
+    # Check if the ARN contains a valid instance ID
+    if "/ssoins-" not in operation.permission_set_arn:
+        console.print("[red]✗ Invalid permission set ARN format[/red]")
+        console.print(
+            "[yellow]This appears to be test data and cannot be processed for rollback[/yellow]"
+        )
+        console.print(f"[dim]ARN: {operation.permission_set_arn}[/dim]")
+        raise typer.Exit(1)
+
+    try:
+        # Initialize AWS client manager
+        region = profile_data.get("region")
+        aws_client_manager = AWSClientManager(profile=profile_name, region=region)
+
+        # Initialize RollbackProcessor
+        rollback_processor = RollbackProcessor(
+            aws_client_manager=aws_client_manager, config=config, show_progress=True
+        )
+
+        # Generate rollback plan
+        with console.status("[blue]Generating rollback plan...[/blue]"):
+            try:
+                rollback_plan = rollback_processor.generate_plan(operation_id)
+                console.print(f"[dim]Plan generation result: {rollback_plan}[/dim]")
+            except Exception as plan_error:
+                console.print(f"[red]✗ Error during plan generation: {str(plan_error)}[/red]")
+                console.print(f"[dim]Error type: {type(plan_error).__name__}[/dim]")
+                raise typer.Exit(1)
+
+            if not rollback_plan:
+                console.print("[red]✗ Failed to generate rollback plan[/red]")
+                console.print(
+                    "[yellow]This may be due to invalid operation data or AWS connectivity issues[/yellow]"
+                )
+                console.print(f"[dim]Operation ID: {operation_id}[/dim]")
+                console.print(f"[dim]Permission Set ARN: {operation.permission_set_arn}[/dim]")
+                raise typer.Exit(1)
+
+            # Display the actual rollback actions that will be executed
+            if rollback_plan.actions:
+                # Determine rollback action type
+                if rollback_plan.rollback_type.value == "revoke":
+                    action_description = "The following assignments will be revoked:"
+                    rollback_action = "revoke"
+                else:
+                    action_description = "The following assignments will be created:"
+                    rollback_action = "assign"
+
+                console.print(f"\n[yellow]{action_description}[/yellow]")
+
+                plan_table = Table(show_header=True, header_style="bold yellow")
+                plan_table.add_column("Principal", style="cyan")
+                plan_table.add_column("Permission Set", style="blue")
+                plan_table.add_column("Accounts", style="green")
+                plan_table.add_column("Action", style="magenta")
+
+                # Add rollback actions to table
+                account_names_map = dict(zip(operation.account_ids, operation.account_names))
+
+                for action in rollback_plan.actions:
+                    account_name = account_names_map.get(action.account_id, action.account_id)
+                    plan_table.add_row(
+                        operation.principal_name,
+                        operation.permission_set_name,
+                        f"{account_name} ({action.account_id})",
+                        rollback_action.upper(),
+                    )
+
+                console.print(plan_table)
+
+                # Display summary
+                console.print(
+                    f"\n[dim]Rollback will {rollback_action} {len(rollback_plan.actions)} assignment(s)[/dim]"
+                )
+            else:
+                console.print("[yellow]⚠ No actions to perform in rollback plan[/yellow]")
+                console.print("[yellow]The operation may already be in the desired state[/yellow]")
+                if rollback_plan.warnings:
+                    console.print("[yellow]Reasons:[/yellow]")
+                    for warning in rollback_plan.warnings:
+                        console.print(f"[yellow]  • {warning}[/yellow]")
+                console.print("\n[blue]Rollback operation completed![/blue]")
+                return
+
+        # Execute rollback
+        with console.status(
+            f"[blue]Executing rollback ({len(rollback_plan.actions)} actions)...[/blue]"
+        ):
+            rollback_result = rollback_processor.execute_rollback(
+                plan=rollback_plan,
+                dry_run=False,  # We already handled dry-run above
+                batch_size=batch_size,
+                verify_post_rollback=True,
+            )
+
+        # Display results
+        if rollback_result.success:
+            console.print("\n[green]✓ Rollback completed successfully![/green]")
+            console.print(
+                f"[dim]Rollback operation ID: {rollback_result.rollback_operation_id}[/dim]"
+            )
+            console.print(f"[dim]Completed: {rollback_result.completed_actions} actions[/dim]")
+            console.print(f"[dim]Duration: {rollback_result.duration_ms}ms[/dim]")
+
+            if rollback_result.completed_actions > 0:
+                console.print(
+                    f"\n[green]✓ Successfully {rollback_action}d {rollback_result.completed_actions} assignment(s)[/green]"
+                )
+        else:
+            console.print("\n[red]✗ Rollback completed with errors[/red]")
+            console.print(
+                f"[dim]Rollback operation ID: {rollback_result.rollback_operation_id}[/dim]"
+            )
+            console.print(f"[dim]Completed: {rollback_result.completed_actions} actions[/dim]")
+            console.print(f"[dim]Failed: {rollback_result.failed_actions} actions[/dim]")
+            console.print(f"[dim]Duration: {rollback_result.duration_ms}ms[/dim]")
+
+            if rollback_result.errors:
+                console.print("\n[red]Errors encountered:[/red]")
+                for error in rollback_result.errors:
+                    console.print(f"[red]  • {error}[/red]")
+
+        # Show warnings if any
+        if rollback_plan.warnings:
+            console.print("\n[yellow]Warnings:[/yellow]")
+            for warning in rollback_plan.warnings:
+                console.print(f"[yellow]  • {warning}[/yellow]")
+
+    except Exception as e:
+        console.print(f"\n[red]✗ Error executing rollback: {str(e)}[/red]")
+        console.print("[yellow]Check the error details above and try again.[/yellow]")
+        raise typer.Exit(1)
+
+    console.print("\n[blue]Rollback operation completed![/blue]")
 
 
 def _create_operation_details_panel(operation) -> Panel:

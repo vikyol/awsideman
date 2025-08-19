@@ -246,7 +246,7 @@ def assign_single_account(
     with console.status("[blue]Resolving permission set name...[/blue]"):
         try:
             permission_set_arn = resolve_permission_set_identifier(
-                aws_client, instance_arn, permission_set_name
+                sso_admin_client, instance_arn, permission_set_name, identity_store_id
             )
         except typer.Exit:
             # Error already handled by resolve_permission_set_identifier

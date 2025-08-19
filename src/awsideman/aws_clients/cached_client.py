@@ -433,9 +433,13 @@ class CachedIdentityCenterClient:
             # Add kwargs to params
             params.update(kwargs)
 
-            return self._cached_aws_client._execute_with_cache(
-                name, params, lambda: original_method(*args, **kwargs)
-            )
+            # Execute the API call with caching
+            def api_call():
+                return original_method(*args, **kwargs)
+
+            result = self._cached_aws_client._execute_with_cache(name, params, api_call)
+
+            return result
 
         return cached_method
 
@@ -506,8 +510,12 @@ class CachedIdentityStoreClient:
             # Add kwargs to params
             params.update(kwargs)
 
-            return self._cached_aws_client._execute_with_cache(
-                name, params, lambda: original_method(*args, **kwargs)
-            )
+            # Execute the API call with caching
+            def api_call():
+                return original_method(*args, **kwargs)
+
+            result = self._cached_aws_client._execute_with_cache(name, params, api_call)
+
+            return result
 
         return cached_method

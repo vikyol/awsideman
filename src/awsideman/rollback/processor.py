@@ -22,7 +22,6 @@ from .models import (
     RollbackValidation,
     RollbackVerification,
 )
-from .optimized_storage import MemoryOptimizedOperationStore
 from .performance import PerformanceTracker, ProgressTracker, measure_time
 from .state_verification import RollbackStateVerifier, VerificationLevel
 from .storage_monitor import StorageMonitor
@@ -57,11 +56,10 @@ class RollbackProcessor:
         # Set config first since it's used in other initializations
         self.config = config or Config()
 
-        self.store = MemoryOptimizedOperationStore(
-            storage_directory=storage_directory,
-            compression_enabled=True,
-            memory_limit_mb=self.config.get_rollback_config().get("memory_limit_mb", 100),
-        )
+        # Use the same storage backend as OperationLogger for consistency
+        from .storage import OperationStore
+
+        self.store = OperationStore(storage_directory=storage_directory)
         self.storage_monitor = StorageMonitor(storage_directory)
         self.aws_client_manager = aws_client_manager
         self.error_recovery = error_recovery or get_error_recovery()
@@ -376,22 +374,31 @@ class RollbackProcessor:
                     f"Skipping rollback for account {result.account_id} due to original failure: {result.error}"
                 )
 
-        # Add warnings for state mismatches
+        # Filter out actions that are already in the desired state and add warnings
+        filtered_actions = []
         for action in actions:
             if (
                 rollback_type == RollbackActionType.REVOKE
                 and action.current_state == AssignmentState.NOT_ASSIGNED
             ):
                 warnings.append(
-                    f"Account {action.account_id}: Assignment already revoked, rollback may be unnecessary"
+                    f"Account {action.account_id}: Assignment already revoked, skipping rollback action"
                 )
+                # Skip this action as it's already in the desired state
             elif (
                 rollback_type == RollbackActionType.ASSIGN
                 and action.current_state == AssignmentState.ASSIGNED
             ):
                 warnings.append(
-                    f"Account {action.account_id}: Assignment already exists, rollback may conflict"
+                    f"Account {action.account_id}: Assignment already exists, skipping rollback action"
                 )
+                # Skip this action as it's already in the desired state
+            else:
+                # Include this action as it needs to be processed
+                filtered_actions.append(action)
+
+        # Update actions list to only include necessary actions
+        actions = filtered_actions
 
         # Estimate duration based on number of actions and complexity
         base_time_per_action = 3  # Base time in seconds
@@ -535,11 +542,22 @@ class RollbackProcessor:
                         duration_ms=0,
                     )
 
+        # Check if there are actions to process
+        if not plan.actions:
+            # If no actions, return early
+            return RollbackResult(
+                success=True,
+                rollback_operation_id=rollback_operation_id,
+                completed_actions=0,
+                failed_actions=0,
+                errors=[],
+                duration_ms=0,
+            )
+
         # Process actions in batches with progress tracking
         with self.progress_tracker.track_operation(
             f"Rolling back {len(plan.actions)} assignments", len(plan.actions)
         ) as progress:
-
             for i in range(0, len(plan.actions), batch_size):
                 batch = plan.actions[i : i + batch_size]
                 batch_start_time = datetime.now(timezone.utc)
@@ -551,26 +569,119 @@ class RollbackProcessor:
                         action_start_time = datetime.now(timezone.utc)
 
                         def execute_action():
-                            if action.action_type == RollbackActionType.ASSIGN:
-                                # Create assignment
-                                return self.identity_center_client.create_account_assignment(
-                                    InstanceArn=sso_instance_arn,
-                                    TargetId=action.account_id,
-                                    TargetType="AWS_ACCOUNT",
-                                    PermissionSetArn=action.permission_set_arn,
-                                    PrincipalType=self._get_principal_type_from_action(action),
-                                    PrincipalId=action.principal_id,
-                                )
-                            else:
-                                # Delete assignment
-                                return self.identity_center_client.delete_account_assignment(
-                                    InstanceArn=sso_instance_arn,
-                                    TargetId=action.account_id,
-                                    TargetType="AWS_ACCOUNT",
-                                    PermissionSetArn=action.permission_set_arn,
-                                    PrincipalType=self._get_principal_type_from_action(action),
-                                    PrincipalId=action.principal_id,
-                                )
+                            import concurrent.futures
+
+                            def aws_api_call():
+                                try:
+                                    if action.action_type == RollbackActionType.ASSIGN:
+                                        # For assign operations, check if assignment already exists
+                                        existing_assignments = (
+                                            self.identity_center_client.list_account_assignments(
+                                                InstanceArn=sso_instance_arn,
+                                                AccountId=action.account_id,
+                                                PermissionSetArn=action.permission_set_arn,
+                                            )
+                                        )
+
+                                        # Check if assignment already exists
+                                        assignment_exists = any(
+                                            assignment.get("PrincipalId") == action.principal_id
+                                            and assignment.get("PrincipalType")
+                                            == action.principal_type.value
+                                            for assignment in existing_assignments.get(
+                                                "AccountAssignments", []
+                                            )
+                                        )
+
+                                        if assignment_exists:
+                                            console.print(
+                                                f"[yellow]Assignment already exists for account {action.account_id}, skipping creation[/yellow]"
+                                            )
+                                            # Return a mock successful response
+                                            return {
+                                                "AccountAssignmentCreationStatus": {
+                                                    "Status": "SUCCEEDED",
+                                                    "TargetId": action.account_id,
+                                                    "RequestId": "already-exists",
+                                                }
+                                            }
+
+                                        # Create assignment
+                                        response = (
+                                            self.identity_center_client.create_account_assignment(
+                                                InstanceArn=sso_instance_arn,
+                                                TargetId=action.account_id,
+                                                TargetType="AWS_ACCOUNT",
+                                                PermissionSetArn=action.permission_set_arn,
+                                                PrincipalType=self._get_principal_type_from_action(
+                                                    action
+                                                ),
+                                                PrincipalId=action.principal_id,
+                                            )
+                                        )
+                                        return response
+                                    else:
+                                        # For delete operations, check if assignment exists before attempting deletion
+                                        existing_assignments = (
+                                            self.identity_center_client.list_account_assignments(
+                                                InstanceArn=sso_instance_arn,
+                                                AccountId=action.account_id,
+                                                PermissionSetArn=action.permission_set_arn,
+                                            )
+                                        )
+
+                                        # Check if assignment exists
+                                        assignment_exists = any(
+                                            assignment.get("PrincipalId") == action.principal_id
+                                            and assignment.get("PrincipalType")
+                                            == action.principal_type.value
+                                            for assignment in existing_assignments.get(
+                                                "AccountAssignments", []
+                                            )
+                                        )
+                                        if not assignment_exists:
+                                            console.print(
+                                                f"[yellow]Assignment already deleted for account {action.account_id}, skipping deletion[/yellow]"
+                                            )
+                                            # Return a mock successful response
+                                            return {
+                                                "AccountAssignmentDeletionStatus": {
+                                                    "Status": "SUCCEEDED",
+                                                    "TargetId": action.account_id,
+                                                    "RequestId": "already-deleted",
+                                                }
+                                            }
+
+                                        # Delete assignment
+                                        response = (
+                                            self.identity_center_client.delete_account_assignment(
+                                                InstanceArn=sso_instance_arn,
+                                                TargetId=action.account_id,
+                                                TargetType="AWS_ACCOUNT",
+                                                PermissionSetArn=action.permission_set_arn,
+                                                PrincipalType=self._get_principal_type_from_action(
+                                                    action
+                                                ),
+                                                PrincipalId=action.principal_id,
+                                            )
+                                        )
+                                        return response
+                                except Exception as e:
+                                    console.print(f"[red]AWS API call failed: {str(e)}[/red]")
+                                    raise
+
+                            # Execute AWS API call with timeout using ThreadPoolExecutor
+                            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                                future = executor.submit(aws_api_call)
+                                try:
+                                    # Wait up to 60 seconds for the AWS API call to complete
+                                    result = future.result(timeout=60)
+                                    return result
+                                except concurrent.futures.TimeoutError:
+                                    console.print(
+                                        f"[red]AWS API call timed out after 60 seconds for account {action.account_id}[/red]"
+                                    )
+                                    raise TimeoutError("AWS API call timed out after 60 seconds")
 
                         # Execute action with error recovery
                         result = self.error_recovery.execute_with_recovery(
@@ -615,7 +726,39 @@ class RollbackProcessor:
                             console.print(f"[red]Error: {error_msg}[/red]")
 
                         # Update progress
-                        progress.advance_progress()
+
+                        try:
+                            # Use a timeout to prevent deadlock in progress tracking
+                            import threading
+
+                            def advance_with_timeout():
+                                progress.advance_progress()
+                                return True
+
+                            # Try to advance progress with a 1-second timeout
+                            result_container = [False]
+
+                            def thread_target():
+                                try:
+                                    advance_with_timeout()
+                                    result_container[0] = True
+                                except Exception:
+                                    pass
+
+                            thread = threading.Thread(target=thread_target)
+                            thread.daemon = True
+                            thread.start()
+                            thread.join(timeout=1.0)
+
+                            if thread.is_alive():
+                                pass  # Progress advance timed out - continuing without progress update
+                            elif result_container[0]:
+                                pass  # Progress advanced successfully
+                            else:
+                                pass  # Progress advance failed - continuing anyway
+
+                        except Exception:
+                            pass  # Progress handling error - continuing without progress update
 
                         # Update performance tracking
                         self.performance_tracker.update_operation_progress(

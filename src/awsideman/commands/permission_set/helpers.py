@@ -253,7 +253,7 @@ def resolve_permission_set_identifier(
         # Search for permission sets by name
         response = sso_admin_client.list_permission_sets(InstanceArn=instance_arn)
 
-        for permission_set_arn in response["PermissionSetArns"]:
+        for permission_set_arn in response.get("PermissionSets", []):
             try:
                 ps_response = sso_admin_client.describe_permission_set(
                     InstanceArn=instance_arn, PermissionSetArn=permission_set_arn

@@ -23,7 +23,7 @@ from .validate import validate_restore
 app = typer.Typer(help="Restore AWS Identity Center configurations from backups")
 
 # Register commands with the app
-app.command("restore")(restore_backup)
+app.command("apply")(restore_backup)
 app.command("preview")(preview_restore)
 app.command("validate")(validate_restore)
 
