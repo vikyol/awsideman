@@ -9,8 +9,9 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Optional, Protocol
 
+from ..permission_cloning.models import EntityReference
+
 if TYPE_CHECKING:
-    from ..permission_cloning.models import EntityReference
     from .executor import ExecutionResult, PreviewResult
     from .models import Template, TemplateInfo
     from .validator import ValidationResult

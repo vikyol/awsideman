@@ -1,5 +1,6 @@
 """Validate backup command for awsideman."""
 
+import asyncio
 from typing import Optional
 
 import typer
@@ -78,7 +79,18 @@ def validate_backup(
             bucket_name, prefix = (
                 storage_path.split("/", 1) if "/" in storage_path else (storage_path, "")
             )
-            storage_backend = S3StorageBackend(bucket_name=bucket_name, prefix=prefix)
+            # Configure S3 backend with profile support
+            s3_config = {"bucket_name": bucket_name, "prefix": prefix}
+
+            # Use profile name for SSO and named profiles
+            if profile_name:
+                s3_config["profile_name"] = profile_name
+
+            # Add region from profile data if available
+            if profile_data and "region" in profile_data:
+                s3_config["region_name"] = profile_data["region"]
+
+            storage_backend = S3StorageBackend(**s3_config)
         else:
             console.print(f"[red]Error: Unsupported storage backend '{storage_backend}'.[/red]")
             console.print("[yellow]Supported backends: filesystem, s3[/yellow]")
@@ -86,31 +98,37 @@ def validate_backup(
 
         # Initialize components
         storage_engine = StorageEngine(backend=storage_backend)
-        validator = BackupValidator(storage_engine=storage_engine)
+        validator = BackupValidator()
 
         # Check if backup exists
         console.print(f"[blue]Validating backup: {backup_id}[/blue]")
 
         try:
-            backup_metadata = storage_engine.get_backup_metadata(backup_id)
+            backup_metadata = asyncio.run(storage_engine.get_backup_metadata(backup_id))
         except Exception as e:
             console.print(f"[red]Error: Backup '{backup_id}' not found.[/red]")
             console.print(f"[yellow]Details: {e}[/yellow]")
             raise typer.Exit(1)
 
-        # Perform validation
+        if not backup_metadata:
+            console.print(f"[red]Error: Backup '{backup_id}' not found.[/red]")
+            raise typer.Exit(1)
+
+        # Retrieve backup data for validation
         with Progress(
             SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
         ) as progress:
+            task = progress.add_task("Retrieving backup data...", total=None)
+            backup_data = asyncio.run(storage_engine.retrieve_backup(backup_id))
+            progress.remove_task(task)
+
+            if not backup_data:
+                console.print(f"[red]Error: Could not retrieve backup data for '{backup_id}'[/red]")
+                raise typer.Exit(1)
+
+            # Validate backup data
             task = progress.add_task("Validating backup...", total=None)
-
-            validation_result = validator.validate_backup(
-                backup_id=backup_id,
-                check_integrity=check_integrity,
-                check_completeness=check_completeness,
-                check_consistency=check_consistency,
-            )
-
+            validation_result = asyncio.run(validator.validate_backup_data(backup_data))
             progress.update(task, description="Validation completed!")
 
         # Display results
@@ -146,90 +164,45 @@ def display_validation_results(validation_result, backup_metadata):
         "[green]Valid[/green]" if validation_result.is_valid else "[red]Invalid[/red]",
     )
     summary_table.add_row(
-        "Integrity Check",
-        (
-            "[green]Passed[/green]"
-            if validation_result.integrity_check.passed
-            else "[red]Failed[/red]"
-        ),
+        "Validation Status",
+        ("[green]Passed[/green]" if validation_result.is_valid else "[red]Failed[/red]"),
     )
-    summary_table.add_row(
-        "Completeness Check",
-        (
-            "[green]Passed[/green]"
-            if validation_result.completeness_check.passed
-            else "[red]Failed[/red]"
-        ),
-    )
-    summary_table.add_row(
-        "Consistency Check",
-        (
-            "[green]Passed[/green]"
-            if validation_result.consistency_check.passed
-            else "[red]Failed[/red]"
-        ),
-    )
+    summary_table.add_row("Errors", str(len(validation_result.errors)))
+    summary_table.add_row("Warnings", str(len(validation_result.warnings)))
 
     console.print(summary_table)
 
-    # Detailed results
-    if validation_result.integrity_check.details:
-        console.print("\n[bold cyan]Integrity Check Details:[/bold cyan]")
-        integrity_table = Table()
-        integrity_table.add_column("Check", style="cyan")
-        integrity_table.add_column("Status", style="white")
-        integrity_table.add_column("Details", style="white")
+    # Error and warning details
+    if validation_result.errors:
+        console.print("\n[bold red]Errors:[/bold red]")
+        for error in validation_result.errors:
+            console.print(f"  • {error}")
 
-        for check in validation_result.integrity_check.details:
-            status_style = "[green]Passed[/green]" if check.passed else "[red]Failed[/red]"
-            integrity_table.add_row(check.name, status_style, check.description or "")
-
-        console.print(integrity_table)
-
-    if validation_result.completeness_check.details:
-        console.print("\n[bold cyan]Completeness Check Details:[/bold cyan]")
-        completeness_table = Table()
-        completeness_table.add_column("Resource Type", style="cyan")
-        completeness_table.add_column("Expected", style="white")
-        completeness_table.add_column("Found", style="white")
-        completeness_table.add_column("Status", style="white")
-
-        for resource_check in validation_result.completeness_check.details:
-            status_style = (
-                "[green]Complete[/green]" if resource_check.is_complete else "[red]Incomplete[/red]"
-            )
-            completeness_table.add_row(
-                resource_check.resource_type,
-                str(resource_check.expected_count),
-                str(resource_check.actual_count),
-                status_style,
-            )
-
-        console.print(completeness_table)
-
-    if validation_result.consistency_check.details:
-        console.print("\n[bold cyan]Consistency Check Details:[/bold cyan]")
-        consistency_table = Table()
-        consistency_table.add_column("Check", style="cyan")
-        consistency_table.add_column("Status", style="white")
-        consistency_table.add_column("Issues", style="white")
-
-        for check in validation_result.consistency_check.details:
-            status_style = (
-                "[green]Consistent[/green]" if check.is_consistent else "[red]Inconsistent[/red]"
-            )
-            issues = ", ".join(check.issues) if check.issues else "None"
-            consistency_table.add_row(check.name, status_style, issues)
-
-        console.print(consistency_table)
-
-    # Warnings and recommendations
     if validation_result.warnings:
         console.print("\n[bold yellow]Warnings:[/bold yellow]")
         for warning in validation_result.warnings:
-            console.print(f"[yellow]• {warning}[/yellow]")
+            console.print(f"  • {warning}")
 
-    if validation_result.recommendations:
-        console.print("\n[bold blue]Recommendations:[/bold blue]")
-        for recommendation in validation_result.recommendations:
-            console.print(f"[blue]• {recommendation}[/blue]")
+    # Additional details if available
+    if validation_result.details:
+        console.print("\n[bold cyan]Validation Details:[/bold cyan]")
+        details_table = Table()
+        details_table.add_column("Property", style="cyan")
+        details_table.add_column("Value", style="white")
+
+        for key, value in validation_result.details.items():
+            details_table.add_row(key.replace("_", " ").title(), str(value))
+
+        console.print(details_table)
+
+    # Resource count details from backup metadata
+    if backup_metadata.resource_counts:
+        console.print("\n[bold cyan]Resource Counts:[/bold cyan]")
+        resource_table = Table()
+        resource_table.add_column("Resource Type", style="cyan")
+        resource_table.add_column("Count", style="white")
+
+        for resource_type, count in backup_metadata.resource_counts.items():
+            resource_table.add_row(resource_type.replace("_", " ").title(), str(count))
+
+        console.print(resource_table)

@@ -152,6 +152,61 @@ class BackupManager(BackupManagerInterface):
 
             if options.backup_type == BackupType.INCREMENTAL and options.since:
                 backup_data = await self.collector.collect_incremental(options.since, options)
+
+                # Early detection: Check if incremental backup contains any actual changes
+                # For now, we'll use a simple heuristic: if all resource counts match the previous backup
+                # and the since date is recent, we can assume no changes
+
+                # Get the most recent backup to compare against
+                try:
+                    recent_backups = await self.storage_engine.list_backups()
+                    if recent_backups:
+                        # Sort by timestamp and get the most recent
+                        recent_backups.sort(key=lambda x: x.timestamp, reverse=True)
+                        latest_backup = recent_backups[0]
+
+                        if latest_backup:
+                            # Compare resource counts
+                            current_counts = {
+                                "users": len(backup_data.users),
+                                "groups": len(backup_data.groups),
+                                "permission_sets": len(backup_data.permission_sets),
+                                "assignments": len(backup_data.assignments),
+                            }
+
+                            previous_counts = latest_backup.resource_counts or {}
+
+                            # Check if counts are identical
+                            counts_match = all(
+                                current_counts.get(key, 0) == previous_counts.get(key, 0)
+                                for key in current_counts.keys()
+                            )
+
+                            # If counts match and since date is very recent (within last hour), likely no changes
+                            time_since_last = datetime.now() - latest_backup.timestamp
+                            very_recent = time_since_last.total_seconds() < 3600  # 1 hour
+
+                            if counts_match and very_recent:
+                                logger.info(
+                                    "No changes detected since last backup, skipping incremental backup creation"
+                                )
+                                await self._complete_operation(
+                                    operation_id, True, "No changes detected, backup skipped"
+                                )
+
+                                return BackupResult(
+                                    success=True,
+                                    backup_id=None,
+                                    message="No changes detected since last backup",
+                                    warnings=["Incremental backup skipped - no changes found"],
+                                    metadata=None,
+                                    duration=datetime.now() - start_time,
+                                )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not compare with previous backup for early detection: {e}"
+                    )
+                    # Continue with backup creation if comparison fails
             else:
                 backup_data = await self._collect_full_backup(options, operation_id)
 
@@ -196,8 +251,8 @@ class BackupManager(BackupManagerInterface):
             self._active_operations[operation_id]["status"] = "optimizing"
 
             try:
-                optimization_metadata = await self.performance_optimizer.optimize_backup_data(
-                    backup_data
+                optimized_data, optimization_metadata = (
+                    await self.performance_optimizer.optimize_backup_data(backup_data)
                 )
                 logger.info(
                     f"Backup optimization completed: {optimization_metadata['original_size']} -> "

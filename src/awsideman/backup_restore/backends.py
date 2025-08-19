@@ -262,6 +262,7 @@ class S3StorageBackend(StorageBackendInterface):
         aws_session_token: Optional[str] = None,
         region_name: Optional[str] = None,
         endpoint_url: Optional[str] = None,
+        profile_name: Optional[str] = None,
     ):
         """
         Initialize S3 storage backend.
@@ -274,12 +275,14 @@ class S3StorageBackend(StorageBackendInterface):
             aws_session_token: AWS session token (for temporary credentials)
             region_name: AWS region name
             endpoint_url: Custom S3 endpoint URL (for S3-compatible services)
+            profile_name: AWS profile name (for SSO or named profiles)
         """
         if not HAS_BOTO3:
             raise ImportError("boto3 and aioboto3 are required for S3 storage backend")
 
         self.bucket_name = bucket_name
         self.prefix = prefix.rstrip("/") + "/" if prefix else ""
+        self.profile_name = profile_name
 
         # AWS credentials and configuration
         self.aws_config = {
@@ -299,6 +302,15 @@ class S3StorageBackend(StorageBackendInterface):
         """Convert storage key to S3 key with prefix."""
         return f"{self.prefix}{key}"
 
+    def _create_session(self) -> aioboto3.Session:
+        """Create aioboto3 session with profile or explicit credentials."""
+        if self.profile_name:
+            # Use profile-based session for SSO and named profiles
+            return aioboto3.Session(profile_name=self.profile_name)
+        else:
+            # Use explicit credentials or default credential chain
+            return aioboto3.Session()
+
     async def write_data(self, key: str, data: bytes) -> bool:
         """
         Write data to S3.
@@ -313,7 +325,7 @@ class S3StorageBackend(StorageBackendInterface):
         try:
             s3_key = self._get_s3_key(key)
 
-            session = aioboto3.Session()
+            session = self._create_session()
             async with session.client("s3", **self.aws_config) as s3:
                 await s3.put_object(
                     Bucket=self.bucket_name,
@@ -343,7 +355,7 @@ class S3StorageBackend(StorageBackendInterface):
         try:
             s3_key = self._get_s3_key(key)
 
-            session = aioboto3.Session()
+            session = self._create_session()
             async with session.client("s3", **self.aws_config) as s3:
                 response = await s3.get_object(Bucket=self.bucket_name, Key=s3_key)
                 data = await response["Body"].read()
@@ -371,7 +383,7 @@ class S3StorageBackend(StorageBackendInterface):
         try:
             s3_key = self._get_s3_key(key)
 
-            session = aioboto3.Session()
+            session = self._create_session()
             async with session.client("s3", **self.aws_config) as s3:
                 await s3.delete_object(Bucket=self.bucket_name, Key=s3_key)
 
@@ -398,7 +410,7 @@ class S3StorageBackend(StorageBackendInterface):
                 search_prefix += prefix
 
             keys = []
-            session = aioboto3.Session()
+            session = self._create_session()
             async with session.client("s3", **self.aws_config) as s3:
                 paginator = s3.get_paginator("list_objects_v2")
 
@@ -431,7 +443,7 @@ class S3StorageBackend(StorageBackendInterface):
         try:
             s3_key = self._get_s3_key(key)
 
-            session = aioboto3.Session()
+            session = self._create_session()
             async with session.client("s3", **self.aws_config) as s3:
                 await s3.head_object(Bucket=self.bucket_name, Key=s3_key)
 
@@ -457,7 +469,7 @@ class S3StorageBackend(StorageBackendInterface):
         try:
             s3_key = self._get_s3_key(key)
 
-            session = aioboto3.Session()
+            session = self._create_session()
             async with session.client("s3", **self.aws_config) as s3:
                 response = await s3.head_object(Bucket=self.bucket_name, Key=s3_key)
 

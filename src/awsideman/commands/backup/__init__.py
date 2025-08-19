@@ -26,7 +26,6 @@ from . import (
     delete,
     export,
     health,
-    list,
     monitor,
     performance,
     schedule,
@@ -98,7 +97,6 @@ app.command("monitor")(monitor_backups)
 __all__ = [
     "app",
     "create",
-    "list",
     "validate",
     "delete",
     "schedule",

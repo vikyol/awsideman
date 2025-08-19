@@ -327,12 +327,12 @@ def run_performance_benchmark(
             from datetime import datetime
 
             from ...backup_restore.models import (
+                AssignmentData,
                 BackupData,
                 BackupMetadata,
                 BackupType,
                 EncryptionMetadata,
                 GroupData,
-                PermissionAssignment,
                 PermissionSetData,
                 RetentionPolicy,
                 UserData,
@@ -389,7 +389,7 @@ def run_performance_benchmark(
             ]
 
             assignments = [
-                PermissionAssignment(
+                AssignmentData(
                     account_id="123456789012",
                     permission_set_arn=f"arn:aws:sso:::permissionSet/ps-{i % ps_count}",
                     principal_type="USER",

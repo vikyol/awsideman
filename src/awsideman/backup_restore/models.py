@@ -105,6 +105,8 @@ class BackupMetadata:
     resource_counts: Dict[str, int] = field(default_factory=dict)
     size_bytes: int = 0
     checksum: Optional[str] = None
+    storage_backend: Optional[str] = None  # 'filesystem' or 's3'
+    storage_location: Optional[str] = None  # Path or bucket/prefix
 
     def __post_init__(self):
         """Post-initialization validation."""
@@ -139,6 +141,8 @@ class BackupMetadata:
             "resource_counts": self.resource_counts,
             "size_bytes": self.size_bytes,
             "checksum": self.checksum,
+            "storage_backend": self.storage_backend,
+            "storage_location": self.storage_location,
         }
 
     @classmethod
@@ -157,6 +161,8 @@ class BackupMetadata:
             resource_counts=data.get("resource_counts", {}),
             size_bytes=data.get("size_bytes", 0),
             checksum=data.get("checksum"),
+            storage_backend=data.get("storage_backend"),
+            storage_location=data.get("storage_location"),
         )
 
 
