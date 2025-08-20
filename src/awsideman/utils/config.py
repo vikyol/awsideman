@@ -54,6 +54,12 @@ DEFAULT_ROLLBACK_CONFIG = {
     "max_operations": 10000,
     "confirmation_required": True,
     "dry_run_default": False,
+    "verification": {
+        "enabled": True,  # Whether to perform post-rollback verification
+        "delay_seconds": 10,  # Wait time before verification
+        "max_retries": 3,  # Maximum verification attempts
+        "retry_delay_seconds": 5,  # Initial delay between retries
+    },
 }
 
 # Default template configuration
@@ -68,6 +74,46 @@ DEFAULT_TEMPLATE_CONFIG = {
         "default_dry_run": False,
         "parallel_execution": True,
         "batch_size": 10,
+    },
+}
+
+# Default backup configuration
+DEFAULT_BACKUP_CONFIG = {
+    "storage": {
+        "default_backend": "filesystem",  # Options: "filesystem", "s3"
+        "filesystem": {
+            "path": "~/.awsideman/backups",
+        },
+        "s3": {
+            "bucket": None,  # Must be configured by user
+            "prefix": "backups",
+            "region": None,  # Will use profile region if not specified
+        },
+    },
+    "encryption": {
+        "enabled": True,
+        "type": "aes256",  # Options: "none", "aes256"
+    },
+    "compression": {
+        "enabled": True,
+        "type": "gzip",  # Options: "none", "gzip"
+    },
+    "defaults": {
+        "backup_type": "full",  # Options: "full", "incremental"
+        "include_inactive_users": False,
+        "resource_types": "all",  # Options: "all", "users", "groups", "permission_sets", "assignments"
+    },
+    "retention": {
+        "keep_daily": 7,
+        "keep_weekly": 4,
+        "keep_monthly": 12,
+        "auto_cleanup": True,
+    },
+    "performance": {
+        "deduplication_enabled": True,
+        "parallel_processing_enabled": True,
+        "resource_monitoring_enabled": True,
+        "max_workers": 8,
     },
 }
 
@@ -210,9 +256,23 @@ class Config:
             # If no template config exists, create default
             yaml_data["templates"] = DEFAULT_TEMPLATE_CONFIG.copy()
 
+        # Migrate backup configuration
+        if "backup" in json_data:
+            yaml_data["backup"] = json_data["backup"]
+        else:
+            # If no backup config exists, create default
+            yaml_data["backup"] = DEFAULT_BACKUP_CONFIG.copy()
+
         # Migrate any other top-level configuration
         for key, value in json_data.items():
-            if key not in ["profiles", "default_profile", "cache", "rollback"]:
+            if key not in [
+                "profiles",
+                "default_profile",
+                "cache",
+                "rollback",
+                "templates",
+                "backup",
+            ]:
                 yaml_data[key] = value
 
         return yaml_data

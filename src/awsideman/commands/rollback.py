@@ -511,7 +511,7 @@ def apply_rollback(
 
         # Initialize RollbackProcessor
         rollback_processor = RollbackProcessor(
-            aws_client_manager=aws_client_manager, config=config, show_progress=True
+            aws_client_manager=aws_client_manager, config=config, show_progress=False
         )
 
         # Generate rollback plan

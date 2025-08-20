@@ -22,8 +22,8 @@ config = Config()
 
 
 def create_backup(
-    backup_type: str = typer.Option(
-        "full", "--type", "-t", help="Backup type: full or incremental"
+    backup_type: Optional[str] = typer.Option(
+        None, "--type", "-t", help="Backup type: full or incremental (overrides config default)"
     ),
     resources: Optional[str] = typer.Option(
         None,
@@ -37,18 +37,22 @@ def create_backup(
         "-s",
         help="For incremental backups: start date (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)",
     ),
-    storage_backend: str = typer.Option(
-        "filesystem", "--storage", help="Storage backend: filesystem or s3"
+    storage_backend: Optional[str] = typer.Option(
+        None, "--storage", help="Storage backend: filesystem or s3 (overrides config default)"
     ),
     storage_path: Optional[str] = typer.Option(
         None, "--storage-path", help="Storage path (directory for filesystem, bucket/prefix for s3)"
     ),
-    no_encryption: bool = typer.Option(False, "--no-encryption", help="Disable backup encryption"),
-    no_compression: bool = typer.Option(
-        False, "--no-compression", help="Disable backup compression"
+    no_encryption: bool = typer.Option(
+        False, "--no-encryption", help="Disable backup encryption (overrides config)"
     ),
-    include_inactive: bool = typer.Option(
-        False, "--include-inactive", help="Include inactive users in backup"
+    no_compression: bool = typer.Option(
+        False, "--no-compression", help="Disable backup compression (overrides config)"
+    ),
+    include_inactive: Optional[bool] = typer.Option(
+        None,
+        "--include-inactive",
+        help="Include inactive users in backup (overrides config default)",
     ),
     output_format: str = typer.Option(
         "table", "--format", "-f", help="Output format: table or json"
@@ -78,7 +82,31 @@ def create_backup(
         $ awsideman backup create --no-encryption
     """
     try:
-        # Validate input parameters
+        # Validate profile and get profile data
+        profile_name, profile_data = validate_profile(profile)
+
+        # Load backup configuration defaults
+        backup_config = config.get("backup", {})
+
+        # Apply configuration defaults if command line options not provided
+        if backup_type is None:
+            backup_type = backup_config.get("defaults", {}).get("backup_type", "full")
+
+        if storage_backend is None:
+            storage_backend = backup_config.get("storage", {}).get("default_backend", "filesystem")
+
+        if include_inactive is None:
+            include_inactive = backup_config.get("defaults", {}).get(
+                "include_inactive_users", False
+            )
+
+        # Get default resource types if not specified
+        if not resources:
+            config_resource_types = backup_config.get("defaults", {}).get("resource_types", "all")
+            if config_resource_types != "all":
+                resources = config_resource_types
+
+        # Now validate input parameters after defaults are applied
         if backup_type.lower() not in ["full", "incremental"]:
             console.print(f"[red]Error: Invalid backup type '{backup_type}'.[/red]")
             console.print("[yellow]Backup type must be either 'full' or 'incremental'.[/yellow]")
@@ -89,15 +117,7 @@ def create_backup(
         if resources:
             resource_list = [r.strip().lower() for r in resources.split(",")]
             for resource in resource_list:
-                if resource == "all":
-                    resource_types = [
-                        ResourceType.USERS,
-                        ResourceType.GROUPS,
-                        ResourceType.PERMISSION_SETS,
-                        ResourceType.ASSIGNMENTS,
-                    ]
-                    break
-                elif resource == "users":
+                if resource == "users":
                     resource_types.append(ResourceType.USERS)
                 elif resource == "groups":
                     resource_types.append(ResourceType.GROUPS)
@@ -105,6 +125,14 @@ def create_backup(
                     resource_types.append(ResourceType.PERMISSION_SETS)
                 elif resource == "assignments":
                     resource_types.append(ResourceType.ASSIGNMENTS)
+                elif resource == "all":
+                    resource_types = [
+                        ResourceType.USERS,
+                        ResourceType.GROUPS,
+                        ResourceType.PERMISSION_SETS,
+                        ResourceType.ASSIGNMENTS,
+                    ]
+                    break
                 else:
                     console.print(f"[red]Error: Invalid resource type '{resource}'.[/red]")
                     console.print(
@@ -136,9 +164,6 @@ def create_backup(
                 console.print(f"[red]Error parsing date: {e}[/red]")
                 raise typer.Exit(1)
 
-        # Validate profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
-
         # Initialize backup components
         console.print("[blue]Initializing backup components...[/blue]")
 
@@ -156,13 +181,28 @@ def create_backup(
 
         # Initialize storage backend
         if storage_backend.lower() == "filesystem":
-            storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
+            storage_path = storage_path or backup_config.get("storage", {}).get(
+                "filesystem", {}
+            ).get("path", "~/.awsideman/backups")
             backend_instance = FileSystemStorageBackend(base_path=storage_path)
         elif storage_backend.lower() == "s3":
+            # Use configured S3 bucket if no storage path provided
             if not storage_path:
-                console.print("[red]Error: S3 storage requires --storage-path parameter.[/red]")
-                console.print("[yellow]Format: bucket-name/prefix[/yellow]")
-                raise typer.Exit(1)
+                config_bucket = backup_config.get("storage", {}).get("s3", {}).get("bucket")
+                if config_bucket:
+                    config_prefix = (
+                        backup_config.get("storage", {}).get("s3", {}).get("prefix", "backups")
+                    )
+                    storage_path = f"{config_bucket}/{config_prefix}"
+                else:
+                    console.print(
+                        "[red]Error: S3 storage requires --storage-path parameter or configured bucket in config file.[/red]"
+                    )
+                    console.print(
+                        "[yellow]Configure with: awsideman backup config set storage.s3.bucket <bucket-name>[/yellow]"
+                    )
+                    console.print("[yellow]Or use: --storage-path bucket-name/prefix[/yellow]")
+                    raise typer.Exit(1)
 
             bucket_name, prefix = (
                 storage_path.split("/", 1) if "/" in storage_path else (storage_path, "")
@@ -174,8 +214,11 @@ def create_backup(
             if profile_name:
                 s3_config["profile_name"] = profile_name
 
-            # Add region from profile data if available
-            if profile_data and "region" in profile_data:
+            # Add region from profile data if available, or use configured region
+            config_region = backup_config.get("storage", {}).get("s3", {}).get("region")
+            if config_region:
+                s3_config["region_name"] = config_region
+            elif profile_data and "region" in profile_data:
                 s3_config["region_name"] = profile_data["region"]
 
             backend_instance = S3StorageBackend(**s3_config)
@@ -295,8 +338,7 @@ def create_backup(
                         console.print(
                             f"[blue]Size: {backup_result.metadata.size_bytes / 1024 / 1024:.2f} MB[/blue]"
                         )
-                    else:
-                        console.print("[blue]Size: Unknown[/blue]")
+                    # Remove the "Unknown" case - don't display size if it can't be calculated
             else:
                 # Backup was skipped (no changes)
                 console.print("[blue]No changes detected since last backup[/blue]")
@@ -348,10 +390,7 @@ def display_backup_results(backup_result):
             table.add_row("Size", "No changes since last backup")
         elif backup_result.metadata.size_bytes > 0:
             table.add_row("Size", f"{backup_result.metadata.size_bytes / 1024 / 1024:.2f} MB")
-        else:
-            table.add_row("Size", "Unknown")
-    else:
-        table.add_row("Size", "N/A")
+        # Remove the "Unknown" and "N/A" cases - don't display size if it can't be calculated
 
     if backup_result.metadata and hasattr(backup_result.metadata, "resource_counts"):
         table.add_row("Resources", str(backup_result.metadata.resource_counts))

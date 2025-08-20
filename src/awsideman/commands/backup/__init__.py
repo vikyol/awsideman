@@ -22,6 +22,7 @@ import typer
 
 # Import all submodules first
 from . import (
+    config,
     create,
     delete,
     export,
@@ -82,6 +83,9 @@ performance_app.command("stats")(performance.show_performance_stats)
 performance_app.command("benchmark")(performance.run_performance_benchmark)
 performance_app.command("clear")(performance.clear_optimization_caches)
 app.add_typer(performance_app, name="performance")
+
+# Configuration subcommands
+app.add_typer(config.app, name="config")
 
 # Export/Import commands
 app.command("export")(export_backup)

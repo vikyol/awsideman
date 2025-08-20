@@ -127,8 +127,7 @@ def delete_backup(
             console.print("  Size: No changes since last backup")
         elif backup_metadata.size_bytes and backup_metadata.size_bytes > 0:
             console.print(f"  Size: {backup_metadata.size_bytes / 1024 / 1024:.2f} MB")
-        else:
-            console.print("  Size: Unknown")
+        # Don't display size if it can't be calculated
         console.print(f"  Version: {backup_metadata.version}")
         console.print(f"  Storage: {storage_backend_type.upper()}")
         console.print(f"  Location: {storage_location}")

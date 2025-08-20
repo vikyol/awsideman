@@ -57,3 +57,63 @@ cache:
     list_accounts: 7200   # 2 hours
     describe_account: 3600  # 1 hour
     list_account_assignments: 1800  # 30 minutes
+
+# Rollback configuration
+rollback:
+  # Basic rollback settings
+  enabled: true
+  storage_directory: "~/.awsideman/operations"
+  retention_days: 90
+  auto_cleanup: true
+  max_operations: 10000
+  confirmation_required: true
+  dry_run_default: false
+
+  # Verification settings for handling AWS Identity Center eventual consistency
+  verification:
+    enabled: true                    # Whether to perform post-rollback verification
+    delay_seconds: 10               # Wait time before verification (allows IdC to propagate changes)
+    max_retries: 3                  # Maximum verification attempts
+    retry_delay_seconds: 5          # Initial delay between retries (exponential backoff)
+
+# Backup configuration
+backup:
+  # Storage configuration
+  storage:
+    default_backend: "filesystem"    # Options: "filesystem", "s3"
+    filesystem:
+      path: "~/.awsideman/backups"  # Local backup directory
+    s3:
+      bucket: null                   # S3 bucket name (must be configured)
+      prefix: "backups"              # S3 key prefix
+      region: null                   # S3 region (uses profile region if not specified)
+
+  # Encryption settings
+  encryption:
+    enabled: true                    # Enable backup encryption
+    type: "aes256"                  # Encryption type: "none", "aes256"
+
+  # Compression settings
+  compression:
+    enabled: true                    # Enable backup compression
+    type: "gzip"                    # Compression type: "none", "gzip"
+
+  # Default backup settings
+  defaults:
+    backup_type: "full"             # Default backup type: "full", "incremental"
+    include_inactive_users: false   # Include inactive users by default
+    resource_types: "all"           # Default resources: "all", "users", "groups", "permission_sets", "assignments"
+
+  # Retention policy
+  retention:
+    keep_daily: 7                   # Keep daily backups for 7 days
+    keep_weekly: 4                  # Keep weekly backups for 4 weeks
+    keep_monthly: 12                # Keep monthly backups for 12 months
+    auto_cleanup: true              # Automatically clean up old backups
+
+  # Performance settings
+  performance:
+    deduplication_enabled: true     # Enable deduplication to reduce storage
+    parallel_processing_enabled: true  # Enable parallel processing
+    resource_monitoring_enabled: true  # Enable resource monitoring
+    max_workers: 8                  # Maximum number of worker threads

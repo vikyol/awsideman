@@ -157,13 +157,13 @@ def display_unified_backup_list(backups, metadata_index):
     table.add_column("Location", style="white")
 
     for backup in backups:
-        # Format size
+        # Format size - only show when it can be calculated
         if backup.backup_type.value == "incremental" and backup.size_bytes == 0:
             size_str = "No changes since last backup"
         elif backup.size_bytes and backup.size_bytes > 0:
             size_str = f"{backup.size_bytes / 1024 / 1024:.2f} MB"
         else:
-            size_str = "Unknown"
+            size_str = ""  # Don't show size if it can't be calculated
 
         # Format timestamp
         timestamp_str = (
