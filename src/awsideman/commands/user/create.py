@@ -8,6 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ...aws_clients.manager import AWSClientManager
+from ..cache.helpers import get_cache_manager
 from .helpers import (
     console,
     format_user_for_display,
@@ -84,16 +85,21 @@ def create_user(
             "Emails": [{"Value": email, "Primary": True, "Type": "work"}],
         }
 
-        # Add optional name attributes if provided
-        if first_name or last_name:
-            name_attributes = {}
-            if first_name:
-                name_attributes["GivenName"] = first_name
-            if last_name:
-                name_attributes["FamilyName"] = last_name
+        # Add name attributes - AWS Identity Center requires a Name attribute
+        name_attributes = {}
+        if first_name:
+            name_attributes["GivenName"] = first_name
+        else:
+            # Use display_name as GivenName if no first_name provided
+            name_attributes["GivenName"] = display_name
 
-            if name_attributes:
-                create_user_params["Name"] = name_attributes
+        if last_name:
+            name_attributes["FamilyName"] = last_name
+        else:
+            # Use a default last name if none provided
+            name_attributes["FamilyName"] = "User"
+
+        create_user_params["Name"] = name_attributes
 
         try:
             # Make the API call to create the user
@@ -104,6 +110,17 @@ def create_user(
             if not user_id:
                 console.print("[red]Error: Failed to create user. No user ID returned.[/red]")
                 raise typer.Exit(1)
+
+            # Invalidate user-related cache entries to ensure consistency
+            try:
+                cache_manager = get_cache_manager()
+                cache_manager.invalidate()  # Clear all cache to ensure new user appears in lists
+                console.print("[dim]Cache invalidated to ensure consistency.[/dim]")
+            except Exception as cache_error:
+                # Don't fail the command if cache invalidation fails
+                console.print(
+                    f"[yellow]Warning: Failed to invalidate cache: {cache_error}[/yellow]"
+                )
 
             console.print(f"[green]User '{username}' created successfully.[/green]")
             console.print(f"[green]User ID: {user_id}[/green]")
@@ -138,6 +155,16 @@ def create_user(
                             details_table.add_row(key, str(value))
                     else:
                         details_table.add_row(key, str(value))
+
+                # Debug: Check if table has rows
+                if len(details_table.rows) == 0:
+                    # If no rows, add some basic information
+                    details_table.add_row("User ID", user_id)
+                    details_table.add_row("Username", username)
+                    if display_name:
+                        details_table.add_row("Display Name", display_name)
+                    if email:
+                        details_table.add_row("Email", email)
 
                 # Create a panel for the user details
                 panel = Panel(

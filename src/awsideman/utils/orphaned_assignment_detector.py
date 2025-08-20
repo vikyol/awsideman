@@ -557,7 +557,8 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                     # Delete the account assignment
                     client.delete_account_assignment(
                         InstanceArn=instance_arn,
-                        AccountId=assignment.account_id,
+                        TargetId=assignment.account_id,
+                        TargetType="AWS_ACCOUNT",
                         PermissionSetArn=assignment.permission_set_arn,
                         PrincipalType=assignment.principal_type.value,
                         PrincipalId=assignment.principal_id,

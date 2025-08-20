@@ -158,8 +158,8 @@ class TestCleanupOrphanedCommand:
 
         # Mock cleanup result
         cleanup_result = Mock()
-        cleanup_result.cleaned_count = 1
-        cleanup_result.failed_count = 0
+        cleanup_result.successful_cleanups = 1
+        cleanup_result.failed_cleanups = 0
 
         # Setup asyncio.run to return different results for detection and cleanup
         mock_asyncio_run.side_effect = [detection_result, cleanup_result]
@@ -254,8 +254,8 @@ class TestCleanupOrphanedCommand:
 
         # Mock cleanup result
         cleanup_result = Mock()
-        cleanup_result.cleaned_count = 1
-        cleanup_result.failed_count = 0
+        cleanup_result.successful_cleanups = 1
+        cleanup_result.failed_cleanups = 0
 
         # Setup asyncio.run to return different results for detection and cleanup
         mock_asyncio_run.side_effect = [detection_result, cleanup_result]

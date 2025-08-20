@@ -450,11 +450,11 @@ class OptimizedAssignmentCopier:
             # Create the account assignment
             response = sso_admin_client.create_account_assignment(
                 InstanceArn=self.assignment_retriever.instance_arn,
-                TargetId=user_id,
+                TargetId=account_id,
                 TargetType="AWS_ACCOUNT",
                 PermissionSetArn=permission_set_arn,
                 PrincipalType="USER",
-                AccountId=account_id,
+                PrincipalId=user_id,
             )
 
             logger.debug(f"Created user assignment: {response}")
@@ -484,11 +484,11 @@ class OptimizedAssignmentCopier:
             # Create the account assignment
             response = sso_admin_client.create_account_assignment(
                 InstanceArn=self.assignment_retriever.instance_arn,
-                TargetId=group_id,
+                TargetId=account_id,
                 TargetType="AWS_ACCOUNT",
                 PermissionSetArn=permission_set_arn,
                 PrincipalType="GROUP",
-                AccountId=account_id,
+                PrincipalId=group_id,
             )
 
             logger.debug(f"Created group assignment: {response}")

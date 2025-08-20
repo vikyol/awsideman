@@ -150,7 +150,19 @@ class RollbackStateVerifier:
         warnings = []
 
         # Verify each successful result from the original operation
-        for result in operation.results:
+        # Handle different operation record types
+        if hasattr(operation, "results"):
+            results_to_check = operation.results
+        elif hasattr(operation, "accounts_affected"):
+            # For PermissionCloningOperationRecord, create mock results from accounts
+            results_to_check = [
+                type("MockResult", (), {"account_id": account_id, "success": True})()
+                for account_id in operation.accounts_affected
+            ]
+        else:
+            results_to_check = []
+
+        for result in results_to_check:
             if not result.success:
                 warnings.append(f"Skipping verification for failed account {result.account_id}")
                 continue

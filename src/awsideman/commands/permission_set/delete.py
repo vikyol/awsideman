@@ -50,17 +50,21 @@ def delete_permission_set(
         profile_name, profile_data = validate_profile(profile)
 
         # Validate the SSO instance and get instance ARN and identity store ID
-        instance_arn, _ = validate_sso_instance(profile_data)
+        instance_arn, identity_store_id = validate_sso_instance(profile_data)
 
         # Initialize the AWS client manager with the profile and region
         region = profile_data.get("region")
         aws_client = AWSClientManager(profile=profile_name, region=region)
 
+        # Get the SSO admin client
+        sso_admin_client = aws_client.get_client("sso-admin")
+
         # Resolve the permission set identifier to an ARN
-        permission_set_arn = resolve_permission_set_identifier(aws_client, instance_arn, identifier)
+        permission_set_arn = resolve_permission_set_identifier(
+            sso_admin_client, instance_arn, identifier, identity_store_id
+        )
 
         # Get the permission set details for confirmation
-        sso_admin_client = aws_client.get_client("sso-admin")
 
         # Use with_retry decorator to handle transient errors
         @with_retry(max_retries=3, delay=1.0)
@@ -162,6 +166,9 @@ def delete_permission_set(
         # Handle network-related errors
         handle_network_error(e)
         raise typer.Exit(1)
+    except typer.Exit:
+        # Re-raise typer.Exit without additional error messages
+        raise
     except Exception as e:
         # Handle other unexpected errors
         console.print(f"[red]Error: {str(e)}[/red]")

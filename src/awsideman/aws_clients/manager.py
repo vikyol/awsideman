@@ -670,7 +670,22 @@ def get_account_details(
         # Get account tags
         try:
             tags_data = organizations_client.list_tags_for_resource(account_id)
-            tags = {tag["Key"]: tag["Value"] for tag in tags_data}
+
+            # Handle different return types from cached vs non-cached clients
+            if isinstance(tags_data, dict) and "Tags" in tags_data:
+                # Cached client returns {"Tags": [...]}
+                tags_list = tags_data["Tags"]
+            elif isinstance(tags_data, list):
+                # Non-cached client returns [...] directly
+                tags_list = tags_data
+            else:
+                # Fallback for unexpected types
+                console.print(
+                    f"[yellow]Warning: Unexpected tags data format for account {account_id}: {type(tags_data)}[/yellow]"
+                )
+                tags_list = []
+
+            tags = {tag["Key"]: tag["Value"] for tag in tags_list}
         except Exception as e:
             console.print(
                 f"[yellow]Warning: Could not retrieve tags for account {account_id}: {str(e)}[/yellow]"

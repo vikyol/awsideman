@@ -228,6 +228,8 @@ class PermissionSetCloner:
                 rollback_id=rollback_id,
                 success=True,
                 error_message=None,
+                source_arn=source_arn,
+                target_arn=new_permission_set_arn,
             )
 
             # Log performance metrics
@@ -337,15 +339,21 @@ class PermissionSetCloner:
         """
         try:
             # Use source description if no target description provided
-            final_description = description or source_config.description
+            final_description = description or source_config.description or "Cloned permission set"
 
-            response = self.sso_admin_client.create_permission_set(
-                InstanceArn=self.instance_arn,
-                Name=name,
-                Description=final_description,
-                SessionDuration=source_config.session_duration,
-                RelayState=source_config.relay_state_url,
-            )
+            # Prepare parameters for create_permission_set
+            create_params = {
+                "InstanceArn": self.instance_arn,
+                "Name": name,
+                "Description": final_description,
+                "SessionDuration": source_config.session_duration,
+            }
+
+            # Only include RelayState if it's not None
+            if source_config.relay_state_url:
+                create_params["RelayState"] = source_config.relay_state_url
+
+            response = self.sso_admin_client.create_permission_set(**create_params)
 
             permission_set_arn = response["PermissionSet"]["PermissionSetArn"]
             logger.info(f"Created permission set '{name}' with ARN: {permission_set_arn}")

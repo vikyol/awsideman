@@ -30,6 +30,7 @@ def clone_permission_set(
     instance_arn: Optional[str] = typer.Option(
         None, "--instance-arn", help="SSO instance ARN (from config if not provided)"
     ),
+    profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
     preview: bool = typer.Option(
         False, "--preview", help="Preview the operation without executing"
     ),
@@ -42,16 +43,52 @@ def clone_permission_set(
     try:
         # Get configuration
         config = Config()
-        if not instance_arn:
-            instance_arn = config.get_instance_arn()
 
+        # Discover SSO instance ARN if not provided
         if not instance_arn:
-            typer.echo("❌ Error: SSO instance ARN is required")
-            typer.echo("Provide it via --instance-arn or configure it in your settings")
-            raise typer.Exit(1)
+            try:
+                # Initialize AWS client manager to discover SSO information
+                # Use awsideman default profile
+                profile_to_use = config.get("default_profile")
+                if not profile_to_use:
+                    typer.echo("❌ Error: No profile specified and no default profile set.")
+                    typer.echo(
+                        "Use --profile option or set a default profile with 'awsideman profile set-default'."
+                    )
+                    raise typer.Exit(1)
+
+                aws_client = AWSClientManager(profile=profile_to_use)
+                sso_client = aws_client.get_identity_center_client()
+
+                # Get SSO instance information
+                instances = sso_client.list_instances()
+                if not instances.get("Instances"):
+                    typer.echo(
+                        "❌ Error: No SSO instances found. Cannot proceed with clone operation."
+                    )
+                    raise typer.Exit(1)
+
+                instance_arn = instances["Instances"][0]["InstanceArn"]
+                typer.echo(f"🔍 Discovered SSO instance: {instance_arn}")
+
+            except Exception as e:
+                typer.echo(f"❌ Error discovering SSO information: {e}")
+                typer.echo(
+                    "Please provide --instance-arn parameter or ensure AWS credentials are properly configured."
+                )
+                raise typer.Exit(1)
 
         # Initialize AWS client manager
-        client_manager = AWSClientManager()
+        # Use the profile we discovered or the default profile
+        profile_to_use = profile or config.get("default_profile")
+        if not profile_to_use:
+            typer.echo("❌ Error: No profile specified and no default profile set.")
+            typer.echo(
+                "Use --profile option or set a default profile with 'awsideman profile set-default'."
+            )
+            raise typer.Exit(1)
+
+        client_manager = AWSClientManager(profile=profile_to_use)
 
         if preview:
             # Generate preview
@@ -100,7 +137,6 @@ def clone_permission_set(
                 target_name=to,
                 target_description=description,
                 preview=False,
-                dry_run=dry_run,
             )
 
             if clone_result.success:
@@ -131,24 +167,20 @@ def clone_permission_set(
                             client_manager, rollback_processor
                         )
 
+                        # Get the ARNs from the clone result
+                        source_arn = clone_result.source_arn or ""
+                        target_arn = clone_result.target_arn or ""
+
                         operation_id = rollback_integration.track_permission_set_clone_operation(
                             source_permission_set_name=name,
-                            source_permission_set_arn=(
-                                clone_result.cloned_config.arn
-                                if hasattr(clone_result.cloned_config, "arn")
-                                else ""
-                            ),
+                            source_permission_set_arn=source_arn,
                             target_permission_set_name=to,
-                            target_permission_set_arn=(
-                                clone_result.cloned_config.arn
-                                if hasattr(clone_result.cloned_config, "arn")
-                                else ""
-                            ),
+                            target_permission_set_arn=target_arn,
                             clone_result=clone_result,
                         )
 
                         typer.echo(f"\n📝 Operation tracked for rollback: {operation_id}")
-                        typer.echo(f"To rollback: awsideman rollback {operation_id}")
+                        typer.echo(f"To rollback: awsideman rollback apply {operation_id}")
 
                     except Exception as e:
                         typer.echo(f"⚠️  Warning: Failed to track operation for rollback: {str(e)}")

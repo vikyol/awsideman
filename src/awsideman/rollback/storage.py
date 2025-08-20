@@ -114,23 +114,79 @@ class OperationStore:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         for op_data in data["operations"]:
-            operation = OperationRecord.from_dict(op_data)
+            # Determine the operation type and create the appropriate record
+            if "source_entity_id" in op_data and "target_entity_id" in op_data:
+                # This is a permission cloning operation
+                from .models import PermissionCloningOperationRecord
+
+                operation = PermissionCloningOperationRecord.from_dict(op_data)
+            elif (
+                "source_permission_set_name" in op_data and "target_permission_set_name" in op_data
+            ):
+                # This is a permission set cloning operation
+                from .models import PermissionSetCloningOperationRecord
+
+                operation = PermissionSetCloningOperationRecord.from_dict(op_data)
+            else:
+                # This is a standard operation
+                operation = OperationRecord.from_dict(op_data)
 
             # Apply filters
             if operation_type and operation.operation_type.value != operation_type:
                 continue
 
-            if principal and not (
-                principal.lower() in operation.principal_name.lower()
-                or principal in operation.principal_id
-            ):
-                continue
+            # Handle different operation record types for principal filtering
+            if principal:
+                principal_match = False
+                if hasattr(operation, "principal_name"):
+                    principal_match = (
+                        principal.lower() in operation.principal_name.lower()
+                        or principal in operation.principal_id
+                    )
+                elif hasattr(operation, "source_entity_name"):
+                    # For permission cloning operations, check both source and target
+                    principal_match = (
+                        principal.lower() in operation.source_entity_name.lower()
+                        or principal in operation.source_entity_id
+                        or principal.lower() in operation.target_entity_name.lower()
+                        or principal in operation.target_entity_id
+                    )
+                elif hasattr(operation, "source_permission_set_name"):
+                    # For permission set cloning operations, check both source and target
+                    principal_match = (
+                        principal.lower() in operation.source_permission_set_name.lower()
+                        or principal.lower() in operation.target_permission_set_name.lower()
+                    )
 
-            if permission_set and not (
-                permission_set.lower() in operation.permission_set_name.lower()
-                or permission_set in operation.permission_set_arn
-            ):
-                continue
+                if not principal_match:
+                    continue
+
+            # Handle different operation record types for permission set filtering
+            if permission_set:
+                permission_set_match = False
+                if hasattr(operation, "permission_set_name"):
+                    permission_set_match = (
+                        permission_set.lower() in operation.permission_set_name.lower()
+                        or permission_set in operation.permission_set_arn
+                    )
+                elif (
+                    hasattr(operation, "permission_sets_involved")
+                    and operation.permission_sets_involved
+                ):
+                    # For permission cloning operations, check involved permission sets
+                    permission_set_match = any(
+                        permission_set.lower() in ps_arn.lower()
+                        for ps_arn in operation.permission_sets_involved
+                    )
+                elif hasattr(operation, "source_permission_set_name"):
+                    # For permission set cloning operations, check both source and target
+                    permission_set_match = (
+                        permission_set.lower() in operation.source_permission_set_name.lower()
+                        or permission_set.lower() in operation.target_permission_set_name.lower()
+                    )
+
+                if not permission_set_match:
+                    continue
 
             if cutoff_date and operation.timestamp < cutoff_date:
                 continue

@@ -338,6 +338,32 @@ class CachedOrganizationsClient:
             lambda: self._organizations_client.list_parents(child_id),
         )
 
+    def get_paginator(self, operation_name: str):
+        """
+        Get a paginator for the specified operation.
+
+        Args:
+            operation_name: Name of the operation to get a paginator for
+
+        Returns:
+            Paginator object for the specified operation
+        """
+        # Delegate to the underlying organizations client
+        return self._organizations_client.client.get_paginator(operation_name)
+
+    def __getattr__(self, name):
+        """
+        Intercept method calls and delegate to the underlying organizations client.
+
+        Args:
+            name: Method name being called
+
+        Returns:
+            Result from the underlying client
+        """
+        # Delegate to the underlying organizations client for any missing methods
+        return getattr(self._organizations_client.client, name)
+
 
 def create_cached_client_manager(
     profile: Optional[str] = None,

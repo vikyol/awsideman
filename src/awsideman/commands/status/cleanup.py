@@ -126,19 +126,19 @@ def cleanup_orphaned(
             progress.remove_task(task)
 
         # Display cleanup results
-        if cleanup_result and hasattr(cleanup_result, "cleaned_count"):
+        if cleanup_result and hasattr(cleanup_result, "successful_cleanups"):
             console.print(
-                f"[green]✅ Successfully cleaned up {cleanup_result.cleaned_count} orphaned assignments.[/green]"
+                f"[green]✅ Successfully cleaned up {cleanup_result.successful_cleanups} orphaned assignments.[/green]"
             )
 
-            if hasattr(cleanup_result, "failed_count") and cleanup_result.failed_count > 0:
+            if hasattr(cleanup_result, "failed_cleanups") and cleanup_result.failed_cleanups > 0:
                 console.print(
-                    f"[yellow]⚠️  Failed to clean up {cleanup_result.failed_count} assignments.[/yellow]"
+                    f"[yellow]⚠️  Failed to clean up {cleanup_result.failed_cleanups} assignments.[/yellow]"
                 )
 
-                if hasattr(cleanup_result, "errors") and cleanup_result.errors:
+                if hasattr(cleanup_result, "cleanup_errors") and cleanup_result.cleanup_errors:
                     console.print("\nErrors encountered:")
-                    for error in cleanup_result.errors[:5]:  # Show first 5 errors
+                    for error in cleanup_result.cleanup_errors[:5]:  # Show first 5 errors
                         console.print(f"  • {error}")
         else:
             console.print("[red]❌ Cleanup operation failed.[/red]")

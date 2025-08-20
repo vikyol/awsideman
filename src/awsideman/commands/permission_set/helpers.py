@@ -249,26 +249,25 @@ def resolve_permission_set_identifier(
     if identifier.startswith("arn:aws:sso:::permissionSet/"):
         return identifier
 
+    # Search for permission sets by name
     try:
-        # Search for permission sets by name
         response = sso_admin_client.list_permission_sets(InstanceArn=instance_arn)
-
-        for permission_set_arn in response.get("PermissionSets", []):
-            try:
-                ps_response = sso_admin_client.describe_permission_set(
-                    InstanceArn=instance_arn, PermissionSetArn=permission_set_arn
-                )
-
-                if ps_response["PermissionSet"]["Name"] == identifier:
-                    return permission_set_arn
-            except Exception:
-                continue
-
-        # If not found, show error
-        console.print(f"[red]Error: Permission set '{identifier}' not found.[/red]")
-        console.print("Use 'awsideman permission-set list' to see available permission sets.")
-        raise typer.Exit(1)
-
     except Exception as e:
         console.print(f"[red]Error resolving permission set identifier: {str(e)}[/red]")
         raise typer.Exit(1)
+
+    for permission_set_arn in response.get("PermissionSets", []):
+        try:
+            ps_response = sso_admin_client.describe_permission_set(
+                InstanceArn=instance_arn, PermissionSetArn=permission_set_arn
+            )
+
+            if ps_response["PermissionSet"]["Name"] == identifier:
+                return permission_set_arn
+        except Exception:
+            continue
+
+    # If not found, show error and exit
+    console.print(f"[red]Error: Permission set '{identifier}' not found.[/red]")
+    console.print("Use 'awsideman permission-set list' to see available permission sets.")
+    raise typer.Exit(1)

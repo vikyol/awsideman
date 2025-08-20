@@ -77,6 +77,7 @@ def copy_assignments(
     batch_size: int = typer.Option(10, "--batch-size", help="Batch size for parallel processing"),
     max_workers: int = typer.Option(5, "--max-workers", help="Maximum number of parallel workers"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
 ):
     """Copy permission assignments from source entity to target entity."""
     try:
@@ -86,31 +87,71 @@ def copy_assignments(
 
         # Get configuration
         config = Config()
-        if not instance_arn:
-            instance_arn = config.get_instance_arn()
-        if not identity_store_id:
-            identity_store_id = config.get_identity_store_id()
 
+        # Discover SSO instance ARN and identity store ID if not provided
         if not instance_arn or not identity_store_id:
-            typer.echo("❌ Error: SSO instance ARN and identity store ID are required")
+            try:
+                # Initialize AWS client manager to discover SSO information
+                # Use provided profile or awsideman default profile
+                profile_to_use = profile or config.get("default_profile")
+                if not profile_to_use:
+                    typer.echo("❌ Error: No profile specified and no default profile set.")
+                    typer.echo(
+                        "Use --profile option or set a default profile with 'awsideman profile set-default'."
+                    )
+                    raise typer.Exit(1)
+
+                aws_client = AWSClientManager(profile=profile_to_use)
+                sso_client = aws_client.get_identity_center_client()
+
+                # Get SSO instance information
+                instances = sso_client.list_instances()
+                if not instances.get("Instances"):
+                    typer.echo(
+                        "❌ Error: No SSO instances found. Cannot proceed with copy operation."
+                    )
+                    raise typer.Exit(1)
+
+                if not instance_arn:
+                    instance_arn = instances["Instances"][0]["InstanceArn"]
+                    typer.echo(f"🔍 Discovered SSO instance: {instance_arn}")
+
+                if not identity_store_id:
+                    identity_store_id = instances["Instances"][0]["IdentityStoreId"]
+                    typer.echo(f"🔍 Discovered identity store ID: {identity_store_id}")
+
+            except Exception as e:
+                typer.echo(f"❌ Error discovering SSO information: {e}")
+                typer.echo(
+                    "Please provide --instance-arn and --identity-store-id parameters or ensure AWS credentials are properly configured."
+                )
+                raise typer.Exit(1)
+
+        # Initialize AWS client manager
+        # Use provided profile or awsideman default profile
+        profile_to_use = profile or config.get("default_profile")
+        if not profile_to_use:
+            typer.echo("❌ Error: No profile specified and no default profile set.")
             typer.echo(
-                "Provide them via --instance-arn and --identity-store-id or configure them in your settings"
+                "Use --profile option or set a default profile with 'awsideman profile set-default'."
             )
             raise typer.Exit(1)
 
-        # Initialize AWS client manager
-        client_manager = AWSClientManager()
+        client_manager = AWSClientManager(profile=profile_to_use)
 
         # Parse filters
-        copy_filters = None
-        if any([exclude_permission_sets, include_accounts, exclude_accounts]):
-            copy_filters = CopyFilters(
-                exclude_permission_sets=(
-                    exclude_permission_sets.split(",") if exclude_permission_sets else None
-                ),
-                include_accounts=include_accounts.split(",") if include_accounts else None,
-                exclude_accounts=exclude_accounts.split(",") if exclude_accounts else None,
-            )
+        copy_filters = CopyFilters(
+            exclude_permission_sets=(
+                exclude_permission_sets.split(",") if exclude_permission_sets else None
+            ),
+            include_accounts=include_accounts.split(",") if include_accounts else None,
+            exclude_accounts=exclude_accounts.split(",") if exclude_accounts else None,
+        )
+
+        # Debug: Print filter information
+        if verbose:
+            typer.echo(f"🔍 Filters: {copy_filters}")
+            typer.echo(f"🔍 Filter type: {type(copy_filters)}")
 
         if preview:
             # Generate preview
@@ -142,9 +183,9 @@ def copy_assignments(
 
             if preview_result["copy_summary"]["assignments_to_copy"] > 0:
                 typer.echo("\nAssignments to be copied:")
-                for assignment in preview_result["assignments_to_copy"]:
+                for assignment in preview_result["assignments"]["new"]:
                     typer.echo(
-                        f"  - {assignment['permission_set_name']} in account {assignment['account_name']}"
+                        f"  - {assignment.permission_set_name} in account {assignment.account_name}"
                     )
 
             if preview_result["warnings"]:
@@ -321,7 +362,7 @@ def copy_assignments(
                         )
 
                         typer.echo(f"\n📝 Operation tracked for rollback: {operation_id}")
-                        typer.echo(f"To rollback: awsideman rollback {operation_id}")
+                        typer.echo(f"To rollback: awsideman rollback apply {operation_id}")
 
                     except Exception as e:
                         typer.echo(f"⚠️  Warning: Failed to track operation for rollback: {str(e)}")

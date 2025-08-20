@@ -155,8 +155,17 @@ class RollbackProcessor:
             )
 
         # Check if all results were successful
-        failed_results = [r for r in operation.results if not r.success]
-        successful_results = [r for r in operation.results if r.success]
+        # Handle different operation record types
+        if hasattr(operation, "results"):
+            failed_results = [r for r in operation.results if not r.success]
+            successful_results = [r for r in operation.results if r.success]
+        elif hasattr(operation, "assignments_copied"):
+            # For PermissionCloningOperationRecord, all assignments are considered successful
+            failed_results = []
+            successful_results = operation.assignments_copied
+        else:
+            failed_results = []
+            successful_results = []
 
         if failed_results:
             warnings.append(
@@ -278,35 +287,76 @@ class RollbackProcessor:
                 return ["Could not extract SSO instance ARN for state verification"]
 
             # Check current assignment state for successful results
-            for result in operation.results:
-                if not result.success:
+            # Handle different operation record types
+            if hasattr(operation, "results"):
+                results_to_check = operation.results
+            elif hasattr(operation, "accounts_affected"):
+                # For PermissionCloningOperationRecord, create mock results from accounts
+                results_to_check = [
+                    {"account_id": account_id, "success": True}
+                    for account_id in operation.accounts_affected
+                ]
+            else:
+                results_to_check = []
+
+            for result in results_to_check:
+                # Handle different result formats
+                if hasattr(result, "success"):
+                    if not result.success:
+                        continue
+                    account_id = result.account_id
+                elif isinstance(result, dict):
+                    if not result.get("success", True):
+                        continue
+                    account_id = result["account_id"]
+                else:
                     continue
 
                 try:
                     # Check if assignment currently exists
                     current_assignments = self.identity_center_client.list_account_assignments(
                         InstanceArn=sso_instance_arn,
-                        AccountId=result.account_id,
+                        AccountId=account_id,
                         PermissionSetArn=operation.permission_set_arn,
                     )
 
                     # Look for matching assignment
                     assignment_exists = False
+
+                    # Determine which principal to check based on operation type
+                    if hasattr(operation, "principal_id"):
+                        check_principal_id = operation.principal_id
+                        check_principal_type = operation.principal_type.value
+                    elif hasattr(operation, "source_entity_id"):
+                        if operation.operation_type == OperationType.COPY_ASSIGNMENTS:
+                            # For copy operations, check the target user's assignments
+                            check_principal_id = operation.target_entity_id
+                            check_principal_type = operation.target_entity_type.value
+                        else:
+                            # For other operations, use source entity info
+                            check_principal_id = operation.source_entity_id
+                            check_principal_type = operation.source_entity_type.value
+                    else:
+                        continue
+
                     for assignment in current_assignments.get("AccountAssignments", []):
                         if (
-                            assignment["PrincipalId"] == operation.principal_id
-                            and assignment["PrincipalType"] == operation.principal_type.value
+                            assignment["PrincipalId"] == check_principal_id
+                            and assignment["PrincipalType"] == check_principal_type
                         ):
                             assignment_exists = True
                             break
 
                     # Check for conflicts based on operation type
-                    if operation.operation_type == OperationType.ASSIGN:
-                        # If original was assign, rollback is revoke
+                    if (
+                        operation.operation_type == OperationType.ASSIGN
+                        or operation.operation_type == OperationType.COPY_ASSIGNMENTS
+                    ):
+                        # If original was assign or copy, rollback is revoke
                         # Assignment should exist for rollback to work
                         if not assignment_exists:
                             conflicts.append(
-                                f"Assignment no longer exists for account {result.account_id} "
+                                f"Assignment no longer exists for account {account_id} "
                                 f"(may have been manually revoked)"
                             )
                     else:
@@ -314,19 +364,17 @@ class RollbackProcessor:
                         # Assignment should not exist for rollback to work
                         if assignment_exists:
                             conflicts.append(
-                                f"Assignment already exists for account {result.account_id} "
+                                f"Assignment already exists for account {account_id} "
                                 f"(may have been manually re-assigned)"
                             )
 
                 except ClientError as e:
                     error_code = e.response.get("Error", {}).get("Code", "Unknown")
                     conflicts.append(
-                        f"Could not verify state for account {result.account_id}: {error_code}"
+                        f"Could not verify state for account {account_id}: {error_code}"
                     )
                 except Exception as e:
-                    conflicts.append(
-                        f"Could not verify state for account {result.account_id}: {str(e)}"
-                    )
+                    conflicts.append(f"Could not verify state for account {account_id}: {str(e)}")
 
         except Exception as e:
             conflicts.append(f"State conflict check failed: {str(e)}")
@@ -347,32 +395,85 @@ class RollbackProcessor:
             return None
 
         # Determine rollback type (inverse of original operation)
-        if operation.operation_type == OperationType.ASSIGN:
+        if (
+            operation.operation_type == OperationType.ASSIGN
+            or operation.operation_type == OperationType.COPY_ASSIGNMENTS
+        ):
+            # Both ASSIGN and COPY_ASSIGNMENTS operations assign permissions, so rollback should revoke
             rollback_type = RollbackActionType.REVOKE
         else:
+            # REVOKE operations remove permissions, so rollback should assign back
             rollback_type = RollbackActionType.ASSIGN
 
         # Generate rollback actions for successful results only
         actions = []
         warnings = []
 
-        for result in operation.results:
-            if result.success:
+        # Handle different operation record types
+        if hasattr(operation, "results"):
+            results_to_process = operation.results
+        elif hasattr(operation, "accounts_affected"):
+            # For PermissionCloningOperationRecord, create mock results from accounts
+            results_to_process = [
+                {"account_id": account_id, "success": True}
+                for account_id in operation.accounts_affected
+            ]
+        else:
+            results_to_process = []
+
+        for result in results_to_process:
+            # Handle different result formats
+            if hasattr(result, "success"):
+                success = result.success
+                account_id = result.account_id
+                error = getattr(result, "error", "Unknown error")
+            elif isinstance(result, dict):
+                success = result.get("success", True)
+                account_id = result["account_id"]
+                error = result.get("error", "Unknown error")
+            else:
+                continue
+
+            if success:
                 # Determine current state if AWS client is available
-                current_state = self._get_current_assignment_state(operation, result.account_id)
+                current_state = self._get_current_assignment_state(operation, account_id)
+
+                # Handle different operation record types for principal and permission set info
+                if hasattr(operation, "principal_id"):
+                    principal_id = operation.principal_id
+                    permission_set_arn = operation.permission_set_arn
+                    principal_type = operation.principal_type
+                elif hasattr(operation, "source_entity_id"):
+                    # For PermissionCloningOperationRecord, determine the correct principal based on operation type
+                    if operation.operation_type == OperationType.COPY_ASSIGNMENTS:
+                        # For copy operations, rollback should affect the TARGET user (who received the permissions)
+                        principal_id = operation.target_entity_id
+                        principal_type = operation.target_entity_type
+                    else:
+                        # For other operations, use source entity info
+                        principal_id = operation.source_entity_id
+                        principal_type = operation.source_entity_type
+
+                    permission_set_arn = (
+                        operation.permission_sets_involved[0]
+                        if operation.permission_sets_involved
+                        else ""
+                    )
+                else:
+                    continue
 
                 action = RollbackAction(
-                    principal_id=operation.principal_id,
-                    permission_set_arn=operation.permission_set_arn,
-                    account_id=result.account_id,
+                    principal_id=principal_id,
+                    permission_set_arn=permission_set_arn,
+                    account_id=account_id,
                     action_type=rollback_type,
                     current_state=current_state,
-                    principal_type=operation.principal_type,
+                    principal_type=principal_type,
                 )
                 actions.append(action)
             else:
                 warnings.append(
-                    f"Skipping rollback for account {result.account_id} due to original failure: {result.error}"
+                    f"Skipping rollback for account {account_id} due to original failure: {error}"
                 )
 
         # Filter out actions that are already in the desired state and add warnings
@@ -430,7 +531,28 @@ class RollbackProcessor:
             return AssignmentState.UNKNOWN
 
         try:
-            sso_instance_arn = self._extract_sso_instance_arn(operation.permission_set_arn)
+            # Handle different operation record types
+            if hasattr(operation, "permission_set_arn"):
+                permission_set_arn = operation.permission_set_arn
+                principal_id = operation.principal_id
+                principal_type = operation.principal_type.value
+            elif (
+                hasattr(operation, "permission_sets_involved")
+                and operation.permission_sets_involved
+            ):
+                permission_set_arn = operation.permission_sets_involved[0]
+                if operation.operation_type == OperationType.COPY_ASSIGNMENTS:
+                    # For copy operations, check the target user's assignments
+                    principal_id = operation.target_entity_id
+                    principal_type = operation.target_entity_type.value
+                else:
+                    # For other operations, use source entity info
+                    principal_id = operation.source_entity_id
+                    principal_type = operation.source_entity_type.value
+            else:
+                return AssignmentState.UNKNOWN
+
+            sso_instance_arn = self._extract_sso_instance_arn(permission_set_arn)
             if not sso_instance_arn:
                 return AssignmentState.UNKNOWN
 
@@ -438,14 +560,14 @@ class RollbackProcessor:
             current_assignments = self.identity_center_client.list_account_assignments(
                 InstanceArn=sso_instance_arn,
                 AccountId=account_id,
-                PermissionSetArn=operation.permission_set_arn,
+                PermissionSetArn=permission_set_arn,
             )
 
             # Look for matching assignment
             for assignment in current_assignments.get("AccountAssignments", []):
                 if (
-                    assignment["PrincipalId"] == operation.principal_id
-                    and assignment["PrincipalType"] == operation.principal_type.value
+                    assignment["PrincipalId"] == principal_id
+                    and assignment["PrincipalType"] == principal_type
                 ):
                     return AssignmentState.ASSIGNED
 
@@ -979,6 +1101,40 @@ class RollbackProcessor:
             if not original_operation:
                 return
 
+            # Handle different operation record types
+            if hasattr(original_operation, "principal_id"):
+                principal_id = original_operation.principal_id
+                principal_type = original_operation.principal_type.value
+                principal_name = original_operation.principal_name
+                permission_set_arn = original_operation.permission_set_arn
+                permission_set_name = original_operation.permission_set_name
+            elif hasattr(original_operation, "source_entity_id"):
+                # For PermissionCloningOperationRecord, determine the correct principal based on operation type
+                if original_operation.operation_type == OperationType.COPY_ASSIGNMENTS:
+                    # For copy operations, rollback affects the TARGET user (who received the permissions)
+                    principal_id = original_operation.target_entity_id
+                    principal_type = original_operation.target_entity_type.value
+                    principal_name = original_operation.target_entity_name
+                else:
+                    # For other operations, use source entity info
+                    principal_id = original_operation.source_entity_id
+                    principal_type = original_operation.source_entity_type.value
+                    principal_name = original_operation.source_entity_name
+                permission_set_arn = (
+                    original_operation.permission_sets_involved[0]
+                    if original_operation.permission_sets_involved
+                    else ""
+                )
+                permission_set_name = (
+                    permission_set_arn.split("/")[-1] if permission_set_arn else "Unknown"
+                )
+            else:
+                principal_id = "Unknown"
+                principal_type = "Unknown"
+                principal_name = "Unknown"
+                permission_set_arn = "Unknown"
+                permission_set_name = "Unknown"
+
             # Create rollback record
             rollback_record = {
                 "rollback_operation_id": rollback_operation_id,
@@ -988,11 +1144,11 @@ class RollbackProcessor:
                 "completed_actions": completed_actions,
                 "failed_actions": failed_actions,
                 "total_actions": len(plan.actions),
-                "principal_id": original_operation.principal_id,
-                "principal_type": original_operation.principal_type.value,
-                "principal_name": original_operation.principal_name,
-                "permission_set_arn": original_operation.permission_set_arn,
-                "permission_set_name": original_operation.permission_set_name,
+                "principal_id": principal_id,
+                "principal_type": principal_type,
+                "principal_name": principal_name,
+                "permission_set_arn": permission_set_arn,
+                "permission_set_name": permission_set_name,
                 "account_ids": [action.account_id for action in plan.actions],
             }
 

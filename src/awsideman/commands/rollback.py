@@ -42,7 +42,6 @@ from rich.table import Table
 
 from ..aws_clients.manager import AWSClientManager
 from ..rollback.logger import OperationLogger
-from ..rollback.processor import RollbackProcessor
 from ..utils.config import Config
 from ..utils.validators import validate_profile
 
@@ -225,17 +224,51 @@ def list_operations(
             op_type = operation.operation_type.value.upper()
 
             # Format principal name (truncate if too long)
-            principal_name = operation.principal_name
+            if hasattr(operation, "principal_name"):
+                principal_name = operation.principal_name
+            elif hasattr(operation, "source_entity_name"):
+                # For permission cloning operations, show source -> target
+                if operation.operation_type.value == "copy_assignments":
+                    principal_name = (
+                        f"{operation.source_entity_name} → {operation.target_entity_name}"
+                    )
+                else:
+                    principal_name = operation.source_entity_name
+            elif hasattr(operation, "source_permission_set_name"):
+                # For permission set cloning operations, show source -> target
+                principal_name = f"{operation.source_permission_set_name} → {operation.target_permission_set_name}"
+            else:
+                principal_name = "Unknown"
+
             if len(principal_name) > 20:
                 principal_name = principal_name[:17] + "..."
 
             # Format permission set name (truncate if too long)
-            ps_name = operation.permission_set_name
+            if hasattr(operation, "permission_set_name"):
+                ps_name = operation.permission_set_name
+            elif (
+                hasattr(operation, "permission_sets_involved")
+                and operation.permission_sets_involved
+            ):
+                # For permission cloning operations, show first permission set
+                ps_name = operation.permission_sets_involved[0].split("/")[-1]
+            elif hasattr(operation, "source_permission_set_name"):
+                # For permission set cloning operations, show source permission set
+                ps_name = operation.source_permission_set_name
+            else:
+                ps_name = "Unknown"
+
             if len(ps_name) > 25:
                 ps_name = ps_name[:22] + "..."
 
             # Format account count
-            account_count = len(operation.account_ids)
+            if hasattr(operation, "account_ids"):
+                account_count = len(operation.account_ids)
+            elif hasattr(operation, "accounts_affected"):
+                account_count = len(operation.accounts_affected)
+            else:
+                account_count = 0
+
             if account_count == 1:
                 accounts_text = f"{account_count} account"
             else:
@@ -246,10 +279,24 @@ def list_operations(
                 status = "[red]Rolled Back[/red]"
             else:
                 # Check if all results were successful
-                successful_results = sum(1 for r in operation.results if r.success)
-                total_results = len(operation.results)
+                if hasattr(operation, "results"):
+                    successful_results = sum(1 for r in operation.results if r.success)
+                    total_results = len(operation.results)
+                elif hasattr(operation, "assignments_copied"):
+                    # For permission cloning operations, use assignments_copied
+                    successful_results = len(operation.assignments_copied)
+                    total_results = (
+                        len(operation.accounts_affected)
+                        if hasattr(operation, "accounts_affected")
+                        else successful_results
+                    )
+                else:
+                    successful_results = 0
+                    total_results = 0
 
-                if successful_results == total_results:
+                if total_results == 0:
+                    status = "[yellow]Unknown[/yellow]"
+                elif successful_results == total_results:
                     status = "[green]Success[/green]"
                 elif successful_results == 0:
                     status = "[red]Failed[/red]"
@@ -410,8 +457,16 @@ def apply_rollback(
                 )
                 raise typer.Exit(1)
 
+            # Handle different operation record types for display
+            if hasattr(operation, "operation_type"):
+                operation_type_display = operation.operation_type.value
+            elif hasattr(operation, "source_permission_set_name"):
+                operation_type_display = "permission_set_clone"
+            else:
+                operation_type_display = "unknown"
+
             console.print(
-                f"[green]✓ Found operation: {operation.operation_type.value} operation from {operation.timestamp.strftime('%Y-%m-%d %H:%M')}[/green]"
+                f"[green]✓ Found operation: {operation_type_display} operation from {operation.timestamp.strftime('%Y-%m-%d %H:%M')}[/green]"
             )
 
         except typer.Exit:
@@ -441,33 +496,142 @@ def apply_rollback(
 
     # Step 3: Get user confirmation
     # Determine rollback action type for display purposes
-    if operation.operation_type.value == "assign":
-        rollback_action = "revoke"
+    if hasattr(operation, "operation_type"):
+        if operation.operation_type.value == "assign":
+            rollback_action = "revoke"
+        elif operation.operation_type.value == "copy_assignments":
+            # For copy operations, rollback means revoking the copied assignments
+            rollback_action = "revoke"
+        else:
+            rollback_action = "assign"
+    elif hasattr(operation, "source_permission_set_name"):
+        # For permission set cloning operations, rollback means deleting the cloned permission set
+        rollback_action = "delete"
     else:
-        rollback_action = "assign"
+        rollback_action = "unknown"
 
     # Calculate successful results that can be rolled back
-    successful_results = [r for r in operation.results if r.success]
+    if hasattr(operation, "results"):
+        successful_results = [r for r in operation.results if r.success]
+    elif hasattr(operation, "assignments_copied"):
+        # For PermissionCloningOperationRecord, use assignments_copied
+        successful_results = operation.assignments_copied
+    elif hasattr(operation, "source_permission_set_name"):
+        # For PermissionSetCloningOperationRecord, there's typically one permission set to delete
+        successful_results = (
+            [operation.target_permission_set_arn] if operation.target_permission_set_arn else []
+        )
+    else:
+        successful_results = []
 
     if not yes:
-        console.print(
-            f"\n[yellow]⚠ This will {rollback_action} {len(successful_results)} assignment(s).[/yellow]"
-        )
+        if rollback_action == "delete":
+            console.print(
+                f"\n[yellow]⚠ This will {rollback_action} {len(successful_results)} permission set(s).[/yellow]"
+            )
+        else:
+            console.print(
+                f"\n[yellow]⚠ This will {rollback_action} {len(successful_results)} assignment(s).[/yellow]"
+            )
 
         confirm = typer.confirm("Do you want to proceed with the rollback?")
         if not confirm:
             console.print("[yellow]Rollback cancelled by user.[/yellow]")
             raise typer.Exit(0)
 
-    # Step 4: Execute rollback using RollbackProcessor
+    # Step 4: Execute rollback using appropriate processor
     console.print("\n[blue]Step 3: Executing rollback operation...[/blue]")
 
+    # Check if this is a permission set cloning operation
+    if hasattr(operation, "source_permission_set_name"):
+        # This is a permission set cloning operation - use specialized rollback integration
+        console.print(
+            "[blue]Detected permission set cloning operation, using specialized rollback...[/blue]"
+        )
+
+        try:
+            # Initialize AWS client manager and rollback integration
+            region = profile_data.get("region")
+            aws_client_manager = AWSClientManager(profile=profile_name, region=region)
+
+            from ..permission_cloning.rollback_integration import (
+                PermissionCloningRollbackIntegration,
+            )
+            from ..rollback.processor import RollbackProcessor
+
+            # Initialize rollback processor for the integration
+            rollback_processor = RollbackProcessor(
+                aws_client_manager=aws_client_manager, config=config, show_progress=False
+            )
+
+            # Validate that we have a source permission set ARN
+            if not (
+                hasattr(operation, "source_permission_set_arn")
+                and operation.source_permission_set_arn
+            ):
+                # Fall back to discovering it
+                try:
+                    sso_admin_client = aws_client_manager.get_sso_admin_client()
+                    response = sso_admin_client.list_instances()
+                    instances = response.get("Instances", [])
+                    if not instances:
+                        console.print("[red]✗ No SSO instances found[/red]")
+                        raise typer.Exit(1)
+                except Exception as e:
+                    console.print(f"[red]✗ Error discovering SSO instance ARN: {str(e)}[/red]")
+                    raise typer.Exit(1)
+
+            rollback_integration = PermissionCloningRollbackIntegration(
+                aws_client_manager, rollback_processor
+            )
+
+            # Execute the rollback
+            result = rollback_integration.rollback_permission_set_clone_operation(operation_id)
+
+            if result["success"]:
+                console.print(
+                    f"[green]✅ Successfully rolled back permission set clone operation {operation_id}[/green]"
+                )
+                console.print(
+                    f"[green]  - Deleted permission set: {result['permission_set_deleted']}[/green]"
+                )
+                console.print(
+                    f"[green]  - Permission set ARN: {result['permission_set_arn']}[/green]"
+                )
+            else:
+                console.print(
+                    f"[red]❌ Failed to rollback permission set clone operation {operation_id}[/red]"
+                )
+                console.print(f"[red]  - Error: {result['error']}[/red]")
+                raise typer.Exit(1)
+
+            return
+
+        except Exception as e:
+            console.print(f"[red]✗ Error during permission set clone rollback: {str(e)}[/red]")
+            raise typer.Exit(1)
+
+    # For other operation types, continue with the standard rollback processor
     # Check if this appears to be test data
+    if hasattr(operation, "permission_set_arn"):
+        permission_set_arn = operation.permission_set_arn
+        account_ids = operation.account_ids
+        principal_id = operation.principal_id
+    elif hasattr(operation, "permission_sets_involved") and operation.permission_sets_involved:
+        # For PermissionCloningOperationRecord, use the first permission set
+        permission_set_arn = operation.permission_sets_involved[0]
+        account_ids = operation.accounts_affected
+        principal_id = operation.source_entity_id
+    else:
+        permission_set_arn = ""
+        account_ids = []
+        principal_id = ""
+
     is_test_data = (
-        "1234567890abcdef" in operation.permission_set_arn
-        or "123456789012" in operation.account_ids
-        or "group-1234567890abcdef" in operation.principal_id
-        or "user-1234567890abcdef" in operation.principal_id
+        "1234567890abcdef" in permission_set_arn
+        or "123456789012" in account_ids
+        or "group-1234567890abcdef" in principal_id
+        or "user-1234567890abcdef" in principal_id
     )
 
     if is_test_data:
@@ -477,9 +641,9 @@ def apply_rollback(
         console.print(
             "[yellow]Test operations contain fake AWS resource identifiers that cannot be used with real AWS APIs[/yellow]"
         )
-        console.print(f"[dim]Permission Set ARN: {operation.permission_set_arn}[/dim]")
-        console.print(f"[dim]Principal ID: {operation.principal_id}[/dim]")
-        console.print(f"[dim]Account IDs: {operation.account_ids}[/dim]")
+        console.print(f"[dim]Permission Set ARN: {permission_set_arn}[/dim]")
+        console.print(f"[dim]Principal ID: {principal_id}[/dim]")
+        console.print(f"[dim]Account IDs: {account_ids}[/dim]")
         console.print(
             "\n[blue]To test rollback functionality, you need to create real operations using the assignment commands[/blue]"
         )
@@ -487,21 +651,21 @@ def apply_rollback(
         return
 
     # Validate that the operation contains valid AWS ARNs
-    if not operation.permission_set_arn.startswith("arn:aws:sso:::"):
+    if not permission_set_arn.startswith("arn:aws:sso:::"):
         console.print("[red]✗ Invalid permission set ARN format[/red]")
         console.print(
             "[yellow]This appears to be test data and cannot be processed for rollback[/yellow]"
         )
-        console.print(f"[dim]ARN: {operation.permission_set_arn}[/dim]")
+        console.print(f"[dim]ARN: {permission_set_arn}[/dim]")
         raise typer.Exit(1)
 
     # Check if the ARN contains a valid instance ID
-    if "/ssoins-" not in operation.permission_set_arn:
+    if "/ssoins-" not in permission_set_arn:
         console.print("[red]✗ Invalid permission set ARN format[/red]")
         console.print(
             "[yellow]This appears to be test data and cannot be processed for rollback[/yellow]"
         )
-        console.print(f"[dim]ARN: {operation.permission_set_arn}[/dim]")
+        console.print(f"[dim]ARN: {permission_set_arn}[/dim]")
         raise typer.Exit(1)
 
     try:
@@ -530,7 +694,7 @@ def apply_rollback(
                     "[yellow]This may be due to invalid operation data or AWS connectivity issues[/yellow]"
                 )
                 console.print(f"[dim]Operation ID: {operation_id}[/dim]")
-                console.print(f"[dim]Permission Set ARN: {operation.permission_set_arn}[/dim]")
+                console.print(f"[dim]Permission Set ARN: {permission_set_arn}[/dim]")
                 raise typer.Exit(1)
 
             # Display the actual rollback actions that will be executed
@@ -552,13 +716,48 @@ def apply_rollback(
                 plan_table.add_column("Action", style="magenta")
 
                 # Add rollback actions to table
-                account_names_map = dict(zip(operation.account_ids, operation.account_names))
+                if hasattr(operation, "account_ids") and hasattr(operation, "account_names"):
+                    account_names_map = dict(zip(operation.account_ids, operation.account_names))
+                elif hasattr(operation, "accounts_affected"):
+                    # For PermissionCloningOperationRecord, create a simple mapping
+                    account_names_map = {
+                        account_id: account_id for account_id in operation.accounts_affected
+                    }
+                else:
+                    account_names_map = {}
 
                 for action in rollback_plan.actions:
                     account_name = account_names_map.get(action.account_id, action.account_id)
+                    # Handle different operation record types
+                    if hasattr(operation, "principal_name"):
+                        principal_name = operation.principal_name
+                    elif hasattr(operation, "source_entity_name"):
+                        # For copy operations, show the target user (who will be affected by rollback)
+                        if operation.operation_type.value == "copy_assignments":
+                            principal_name = operation.target_entity_name
+                        else:
+                            # For other operations, use source entity info
+                            principal_name = operation.source_entity_name
+                    else:
+                        principal_name = "Unknown"
+
+                    # Handle different operation record types for permission set name
+                    if hasattr(operation, "permission_set_name"):
+                        permission_set_name = operation.permission_set_name
+                    elif (
+                        hasattr(operation, "permission_sets_involved")
+                        and operation.permission_sets_involved
+                    ):
+                        # For PermissionCloningOperationRecord, use the first permission set
+                        permission_set_name = operation.permission_sets_involved[0].split("/")[
+                            -1
+                        ]  # Extract name from ARN
+                    else:
+                        permission_set_name = "Unknown"
+
                     plan_table.add_row(
-                        operation.principal_name,
-                        operation.permission_set_name,
+                        principal_name,
+                        permission_set_name,
                         f"{account_name} ({action.account_id})",
                         rollback_action.upper(),
                     )
@@ -603,6 +802,19 @@ def apply_rollback(
                 console.print(
                     f"\n[green]✓ Successfully {rollback_action}d {rollback_result.completed_actions} assignment(s)[/green]"
                 )
+
+                # Add specific warning for copy operation rollbacks
+                if operation.operation_type.value == "copy_assignments":
+                    console.print("\n[yellow]⚠️  Post-rollback warning:[/yellow]")
+                    console.print(
+                        f"[yellow]The target user '{operation.target_entity_name}' has had their copied assignments revoked.[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]This rollback only affects assignments that were added during the copy operation.[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]Any pre-existing assignments on the target user remain unchanged.[/yellow]"
+                    )
         else:
             console.print("\n[red]✗ Rollback completed with errors[/red]")
             console.print(
@@ -638,7 +850,16 @@ def _create_operation_details_panel(operation) -> Panel:
     # Operation Information
     details_content.append("[bold blue]Operation Information[/bold blue]")
     details_content.append(f"  ID: [cyan]{operation.operation_id}[/cyan]")
-    details_content.append(f"  Type: [magenta]{operation.operation_type.value.upper()}[/magenta]")
+
+    # Handle different operation record types for operation type
+    if hasattr(operation, "operation_type"):
+        operation_type_display = operation.operation_type.value.upper()
+    elif hasattr(operation, "source_permission_set_name"):
+        operation_type_display = "PERMISSION_SET_CLONE"
+    else:
+        operation_type_display = "UNKNOWN"
+
+    details_content.append(f"  Type: [magenta]{operation_type_display}[/magenta]")
     details_content.append(
         f"  Date: [green]{operation.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}[/green]"
     )
@@ -646,23 +867,91 @@ def _create_operation_details_panel(operation) -> Panel:
 
     # Principal Information
     details_content.append("[bold cyan]Principal Information[/bold cyan]")
-    details_content.append(f"  Name: [cyan]{operation.principal_name}[/cyan]")
-    details_content.append(f"  Type: [magenta]{operation.principal_type.value}[/magenta]")
-    details_content.append(f"  ID: [dim]{operation.principal_id}[/dim]")
+
+    # Handle different operation record types
+    if hasattr(operation, "principal_name"):
+        principal_name = operation.principal_name
+        principal_type = operation.principal_type.value
+        principal_id = operation.principal_id
+    elif hasattr(operation, "source_entity_name"):
+        # For copy operations, show the target user (who will be affected by rollback)
+        if (
+            hasattr(operation, "operation_type")
+            and operation.operation_type.value == "copy_assignments"
+        ):
+            principal_name = operation.target_entity_name
+            principal_type = operation.target_entity_type.value
+            principal_id = operation.target_entity_id
+        else:
+            # For other operations, use source entity info
+            principal_name = operation.source_entity_name
+            principal_type = operation.source_entity_type.value
+            principal_id = operation.source_entity_id
+    elif hasattr(operation, "source_permission_set_name"):
+        # For permission set cloning operations, show the target permission set (which will be deleted)
+        principal_name = operation.target_permission_set_name
+        principal_type = "PERMISSION_SET"
+        principal_id = operation.target_permission_set_arn
+    else:
+        principal_name = "Unknown"
+        principal_type = "Unknown"
+        principal_id = "Unknown"
+
+    details_content.append(f"  Name: [cyan]{principal_name}[/cyan]")
+    details_content.append(f"  Type: [magenta]{principal_type}[/magenta]")
+    details_content.append(f"  ID: [dim]{principal_id}[/dim]")
     details_content.append("")
 
     # Permission Set Information
     details_content.append("[bold blue]Permission Set Information[/bold blue]")
-    details_content.append(f"  Name: [blue]{operation.permission_set_name}[/blue]")
-    details_content.append(f"  ARN: [dim]{operation.permission_set_arn}[/dim]")
+
+    # Handle different operation record types for permission set name
+    if hasattr(operation, "permission_set_name"):
+        permission_set_name = operation.permission_set_name
+        permission_set_arn = operation.permission_set_arn
+    elif hasattr(operation, "permission_sets_involved") and operation.permission_sets_involved:
+        # For PermissionCloningOperationRecord, use the first permission set
+        permission_set_arn = operation.permission_sets_involved[0]
+        permission_set_name = permission_set_arn.split("/")[-1]  # Extract name from ARN
+    elif hasattr(operation, "source_permission_set_name"):
+        # For PermissionSetCloningOperationRecord, show both source and target
+        permission_set_name = (
+            f"{operation.source_permission_set_name} → {operation.target_permission_set_name}"
+        )
+        permission_set_arn = (
+            operation.target_permission_set_arn
+        )  # Show target ARN (what will be deleted)
+    else:
+        permission_set_name = "Unknown"
+        permission_set_arn = "Unknown"
+
+    details_content.append(f"  Name: [blue]{permission_set_name}[/blue]")
+    details_content.append(f"  ARN: [dim]{permission_set_arn}[/dim]")
     details_content.append("")
 
     # Results Summary
     details_content.append("[bold white]Results Summary[/bold white]")
-    successful_results = sum(1 for r in operation.results if r.success)
-    failed_results = len(operation.results) - successful_results
 
-    details_content.append(f"  Total Accounts: [white]{len(operation.results)}[/white]")
+    # Handle different operation record types for results
+    if hasattr(operation, "results"):
+        successful_results = sum(1 for r in operation.results if r.success)
+        failed_results = len(operation.results) - successful_results
+        total_accounts = len(operation.results)
+    elif hasattr(operation, "accounts_affected"):
+        # For PermissionCloningOperationRecord, use accounts_affected
+        total_accounts = len(operation.accounts_affected)
+        successful_results = (
+            len(operation.assignments_copied)
+            if hasattr(operation, "assignments_copied")
+            else total_accounts
+        )
+        failed_results = total_accounts - successful_results
+    else:
+        total_accounts = 0
+        successful_results = 0
+        failed_results = 0
+
+    details_content.append(f"  Total Accounts: [white]{total_accounts}[/white]")
     details_content.append(f"  Successful: [green]{successful_results}[/green]")
     if failed_results > 0:
         details_content.append(f"  Failed: [red]{failed_results}[/red]")

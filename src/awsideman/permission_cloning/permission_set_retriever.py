@@ -227,7 +227,7 @@ class PermissionSetRetriever:
         try:
             response = self.sso_admin_client.list_permission_sets(InstanceArn=self.instance_arn)
 
-            for permission_set_arn in response["PermissionSetArns"]:
+            for permission_set_arn in response["PermissionSets"]:
                 try:
                     basic_info = self._get_permission_set_basic_info(permission_set_arn)
                     if basic_info["name"] == permission_set_name:

@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ...aws_clients.manager import AWSClientManager
+from ..cache.helpers import get_cache_manager
 from .helpers import console, format_user_for_display, validate_profile, validate_sso_instance
 
 
@@ -206,6 +207,19 @@ def delete_user(
                 IdentityStoreId=identity_store_id,
                 UserId=user_id,
             )
+
+            # Invalidate user-related cache entries to ensure consistency
+            try:
+                cache_manager = get_cache_manager()
+                # Invalidate list_users cache entries that would contain the deleted user
+                # We need to clear cache entries that might contain this user
+                cache_manager.invalidate()  # Clear all cache for now - could be more targeted
+                console.print("[dim]Cache invalidated to ensure consistency.[/dim]")
+            except Exception as cache_error:
+                # Don't fail the command if cache invalidation fails
+                console.print(
+                    f"[yellow]Warning: Failed to invalidate cache: {cache_error}[/yellow]"
+                )
 
             # Display success message with checkmark emoji
             console.print(f"[green]✓ User '{username}' deleted successfully.[/green]")

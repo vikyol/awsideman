@@ -200,39 +200,43 @@ def _list_permission_sets_internal(
         console.print(table)
 
         # Handle pagination - interactive by default
+        final_next_token = None  # Initialize final next token
+
         if next_token:
-            # If next_token was explicitly provided as a parameter, return the results without interactive pagination
-            if next_token != list_permission_sets_params.get("NextToken"):
-                console.print(f"\n[blue]Next token for additional results: {next_token}[/blue]")
-                console.print("[blue]Use --next-token parameter to retrieve the next page.[/blue]")
-            else:
-                console.print(
-                    "\n[blue]Press ENTER to see the next page, or any other key to exit...[/blue]"
-                )
-                try:
-                    # Wait for single key press
-                    key = get_single_key()
+            # Check if this is a recursive call (next_token from API response) vs. explicit user parameter
+            # We can determine this by checking if the next_token parameter matches the original function call
+            # For the first call, next_token parameter will be None, so we show interactive prompt
+            # For recursive calls, next_token will be the API response token, so we show interactive prompt
 
-                    # If the user pressed Enter (or Return), fetch the next page
-                    if key in ["\r", "\n", ""]:
-                        console.print("\n[blue]Fetching next page...[/blue]\n")
-                        # Call _list_permission_sets_internal recursively with the next token
-                        return _list_permission_sets_internal(
-                            filter=filter, limit=limit, next_token=next_token, profile=profile
-                        )
-                    else:
-                        console.print("\n[yellow]Pagination stopped.[/yellow]")
-                        console.print(
-                            f"[blue]To continue pagination later, use: --next-token {next_token}[/blue]"
-                        )
-                except KeyboardInterrupt:
-                    console.print("\n[yellow]Pagination stopped by user.[/yellow]")
-                    console.print(
-                        f"[blue]To continue pagination later, use: --next-token {next_token}[/blue]"
+            # Always show interactive prompt for permission set list
+            console.print(
+                "\n[blue]Press ENTER to see the next page, or any other key to exit...[/blue]"
+            )
+            try:
+                # Wait for single key press
+                key = get_single_key()
+
+                # If the user pressed Enter (or Return), fetch the next page
+                if key in ["\r", "\n", ""]:
+                    console.print("\n[blue]Fetching next page...[/blue]\n")
+                    # Call _list_permission_sets_internal recursively with the next token
+                    return _list_permission_sets_internal(
+                        filter=filter, limit=limit, next_token=next_token, profile=profile
                     )
+                else:
+                    console.print("\n[yellow]Pagination stopped.[/yellow]")
+                    # Set final next token to None to indicate pagination has stopped
+                    final_next_token = None
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Pagination stopped by user.[/yellow]")
+                # Set final next token to None to indicate pagination has stopped
+                final_next_token = None
+        else:
+            # No next token, so no pagination
+            final_next_token = None
 
-        # Return the filtered permission sets and next token for further processing
-        return filtered_permission_sets, next_token
+        # Return the filtered permission sets and final next token
+        return filtered_permission_sets, final_next_token
 
     except ClientError as e:
         # Handle AWS API errors with improved error messages and guidance

@@ -117,6 +117,7 @@ class PreviewGenerator:
                 },
                 "filters_applied": filters.to_dict() if filters else None,
                 "estimated_impact": self._estimate_impact(new_assignments),
+                "warnings": [],  # Add empty warnings list to prevent KeyError
             }
 
             logger.info(
@@ -292,23 +293,31 @@ class PreviewGenerator:
         self, entity_id: str, entity_type: str
     ) -> List[PermissionAssignment]:
         """Get source entity assignments."""
-        if entity_type.upper() == "USER":
-            return self.assignment_retriever.get_user_assignments(entity_id)
-        elif entity_type.upper() == "GROUP":
-            return self.assignment_retriever.get_group_assignments(entity_id)
-        else:
-            raise ValueError(f"Invalid entity type: {entity_type}")
+        try:
+            # Use the internal method that accepts entity_id and entity_type directly
+            raw_assignments = self.assignment_retriever._fetch_entity_assignments(
+                entity_id, entity_type
+            )
+            # Convert to PermissionAssignment objects and enrich with names
+            return self.assignment_retriever._enrich_assignments(raw_assignments)
+        except Exception as e:
+            logger.error(f"Error getting source assignments: {e}")
+            return []
 
     def _get_target_assignments(
         self, entity_id: str, entity_type: str
     ) -> List[PermissionAssignment]:
         """Get target entity assignments."""
-        if entity_type.upper() == "USER":
-            return self.assignment_retriever.get_user_assignments(entity_id)
-        elif entity_type.upper() == "GROUP":
-            return self.assignment_retriever.get_group_assignments(entity_id)
-        else:
-            raise ValueError(f"Invalid entity type: {entity_type}")
+        try:
+            # Use the internal method that accepts entity_id and entity_type directly
+            raw_assignments = self.assignment_retriever._fetch_entity_assignments(
+                entity_id, entity_type
+            )
+            # Convert to PermissionAssignment objects and enrich with names
+            return self.assignment_retriever._enrich_assignments(raw_assignments)
+        except Exception as e:
+            logger.error(f"Error getting target assignments: {e}")
+            return []
 
     def _analyze_assignments(
         self,

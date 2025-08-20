@@ -306,9 +306,41 @@ class PermissionCloningRollbackIntegration:
 
             logger.info(f"Rolling back permission set clone operation {operation_id}")
 
+            # Get the target permission set ARN if it's not stored in the operation record
+            target_permission_set_arn = operation_record.target_permission_set_arn
+            if not target_permission_set_arn:
+                # Try to derive the ARN from the permission set name
+                try:
+                    sso_admin_client = self.client_manager.get_sso_admin_client()
+                    instance_arn = self._get_instance_arn()
+
+                    # List all permission sets and find the one with matching name
+                    response = sso_admin_client.list_permission_sets(InstanceArn=instance_arn)
+                    for ps_arn in response.get("PermissionSets", []):
+                        ps_details = sso_admin_client.describe_permission_set(
+                            InstanceArn=instance_arn, PermissionSetArn=ps_arn
+                        )
+                        if (
+                            ps_details.get("PermissionSet", {}).get("Name")
+                            == operation_record.target_permission_set_name
+                        ):
+                            target_permission_set_arn = ps_arn
+                            break
+
+                    if not target_permission_set_arn:
+                        raise ValueError(
+                            f"Could not find permission set with name '{operation_record.target_permission_set_name}'"
+                        )
+
+                except Exception as e:
+                    logger.error(f"Failed to derive target permission set ARN: {str(e)}")
+                    raise ValueError(
+                        f"Target permission set ARN not available and could not be derived: {str(e)}"
+                    )
+
             try:
                 # Delete the cloned permission set
-                self._delete_permission_set(operation_record.target_permission_set_arn)
+                self._delete_permission_set(target_permission_set_arn)
 
                 # Mark operation as rolled back
                 operation_record.rolled_back = True
@@ -467,9 +499,10 @@ class PermissionCloningRollbackIntegration:
         # get this from configuration or the client manager
         try:
             sso_admin_client = self.client_manager.get_sso_admin_client()
-            instances = sso_admin_client.list_instances()
-            if instances["InstanceList"]:
-                return instances["InstanceList"][0]["InstanceArn"]
+            response = sso_admin_client.list_instances()
+            instances = response.get("Instances", [])
+            if instances:
+                return instances[0]["InstanceArn"]
             else:
                 raise ValueError("No SSO instances found")
         except Exception as e:

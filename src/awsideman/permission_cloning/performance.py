@@ -656,9 +656,10 @@ class StreamProcessor:
         """
         if len(assignments) < self.config.stream_threshold:
             # Use regular batch processing for smaller lists
-            return self.batch_processor.process_assignments_parallel(
-                assignments, target_entity, operation_func, metrics
-            )
+            with self.batch_processor as bp:
+                return bp.process_assignments_parallel(
+                    assignments, target_entity, operation_func, metrics
+                )
 
         logger.info(f"Using stream processing for {len(assignments)} assignments")
 
@@ -679,9 +680,10 @@ class StreamProcessor:
             )
 
             # Process chunk
-            chunk_successful, chunk_errors = self.batch_processor.process_assignments_parallel(
-                chunk, target_entity, operation_func, metrics
-            )
+            with self.batch_processor as bp:
+                chunk_successful, chunk_errors = bp.process_assignments_parallel(
+                    chunk, target_entity, operation_func, metrics
+                )
 
             successful_assignments.extend(chunk_successful)
             error_messages.extend(chunk_errors)

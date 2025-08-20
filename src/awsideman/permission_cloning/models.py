@@ -322,6 +322,8 @@ class CloneResult:
     rollback_id: Optional[str] = None
     success: bool = True
     error_message: Optional[str] = None
+    source_arn: Optional[str] = None
+    target_arn: Optional[str] = None
 
     def validate(self) -> "ValidationResult":
         """Validate the clone result."""
