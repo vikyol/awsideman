@@ -7,10 +7,10 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from awsideman.backup_restore.backends import FileSystemStorageBackend
-from awsideman.backup_restore.local_metadata_index import get_global_metadata_index
-from awsideman.utils.config import Config
-from awsideman.utils.validators import validate_profile
+from ...backup_restore.backends import FileSystemStorageBackend
+from ...backup_restore.local_metadata_index import get_global_metadata_index
+from ...utils.config import Config
+from ...utils.validators import validate_profile
 
 console = Console()
 config = Config()

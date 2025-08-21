@@ -3,7 +3,7 @@
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from ...utils.models import CacheEntry
 from ...utils.security import get_secure_logger, input_validator
@@ -141,7 +141,6 @@ class FileBackend(CacheBackend):
                 logger.warning(f"Cannot read cache file as JSON: {cache_file} - {e}")
                 self._handle_corrupted_cache_file(cache_file, f"invalid format: {e}")
                 return None
-
         except json.JSONDecodeError as e:
             logger.warning(f"Corrupted cache file with invalid JSON: {cache_file} - {e}")
             self._handle_corrupted_cache_file(cache_file, f"invalid JSON: {e}")
@@ -478,12 +477,101 @@ class FileBackend(CacheBackend):
                 original_error=e,
             )
 
-    def health_check(self) -> bool:
+    def get_recent_entries(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get recent cache entries with metadata.
+
+        Args:
+            limit: Maximum number of entries to return
+
+        Returns:
+            List of dictionaries containing entry metadata
+        """
+        entries = []
+        
+        try:
+            cache_files = self.path_manager.list_cache_files()
+            if not cache_files:
+                return entries
+            
+            # Sort by modification time (newest first)
+            cache_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            
+            for cache_file in cache_files[:limit]:
+                try:
+                    # Get basic file info
+                    stat = cache_file.stat()
+                    key = cache_file.stem  # Remove .json extension
+                    
+                    # Try to read the cache entry JSON to get metadata
+                    try:
+                        with open(cache_file, "r", encoding="utf-8") as f:
+                            cache_data = json.load(f)
+                        
+                        # Extract metadata from the JSON
+                        created_at = cache_data.get("created_at", 0)
+                        ttl = cache_data.get("ttl", 0)
+                        operation = cache_data.get("operation", "unknown")
+                        
+                        # Calculate age and remaining TTL
+                        current_time = time.time()
+                        age_seconds = current_time - created_at
+                        remaining_ttl = ttl - age_seconds
+                        
+                        # Format TTL information
+                        if remaining_ttl > 0:
+                            ttl_display = f"{remaining_ttl:.0f}s remaining"
+                        else:
+                            ttl_display = "Expired"
+                        
+                        # Calculate age
+                        if age_seconds < 60:
+                            age_display = f"{age_seconds:.0f}s ago"
+                        elif age_seconds < 3600:
+                            age_display = f"{age_seconds/60:.0f}m ago"
+                        else:
+                            age_display = f"{age_seconds/3600:.1f}h ago"
+                        
+                        entries.append({
+                            "key": key,
+                            "operation": operation,
+                            "ttl": ttl_display,
+                            "age": age_display,
+                            "size": f"{stat.st_size} bytes",
+                            "modified": stat.st_mtime,
+                            "file_size": stat.st_size,
+                            "is_expired": remaining_ttl <= 0
+                        })
+                        
+                    except (json.JSONDecodeError, KeyError, TypeError) as e:
+                        # If we can't read the JSON, return basic file info
+                        logger.debug(f"Could not read cache entry metadata from {cache_file}: {e}")
+                        entries.append({
+                            "key": key,
+                            "operation": "unknown",
+                            "ttl": "Unknown",
+                            "age": "Unknown",
+                            "size": f"{stat.st_size} bytes",
+                            "modified": stat.st_mtime,
+                            "file_size": stat.st_size,
+                            "is_expired": False
+                        })
+                        
+                except Exception as e:
+                    logger.debug(f"Error reading cache entry metadata from {cache_file}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.warning(f"Error getting recent entries from file backend: {e}")
+        
+        return entries
+
+    def health_check(self) -> Dict[str, Any]:
         """
         Check if file backend is healthy and accessible.
 
         Returns:
-            True if backend is healthy, False otherwise
+            Dictionary with health status information
         """
         try:
             # Check if cache directory exists and is accessible
@@ -497,7 +585,12 @@ class FileBackend(CacheBackend):
                     logger.error(
                         f"File backend health check failed - cannot create cache directory: {e}"
                     )
-                    return False
+                    return {
+                        "healthy": False,
+                        "backend_type": self.backend_type,
+                        "message": f"Cannot create cache directory: {e}",
+                        "error": str(e)
+                    }
 
             # Test write access by creating a temporary file
             test_file = cache_dir / ".health_check_test"
@@ -505,16 +598,30 @@ class FileBackend(CacheBackend):
                 test_file.write_text("health_check")
                 test_file.unlink()
                 logger.debug("File backend health check passed")
-                return True
+                return {
+                    "healthy": True,
+                    "backend_type": self.backend_type,
+                    "message": "File backend is healthy and accessible"
+                }
             except Exception as e:
                 logger.error(
                     f"File backend health check failed - cannot write to cache directory: {e}"
                 )
-                return False
+                return {
+                    "healthy": False,
+                    "backend_type": self.backend_type,
+                    "message": f"Cannot write to cache directory: {e}",
+                    "error": str(e)
+                }
 
         except Exception as e:
             logger.error(f"File backend health check failed with unexpected error: {e}")
-            return False
+            return {
+                "healthy": False,
+                "backend_type": self.backend_type,
+                "message": f"Unexpected error during health check: {e}",
+                "error": str(e)
+            }
 
     def get_detailed_health_status(self) -> BackendHealthStatus:
         """

@@ -457,7 +457,7 @@ class TestTemplateExecutor:
         """Test successful permission set ARN retrieval."""
         mock_client = MagicMock()
         mock_client.list_permission_sets.return_value = {
-            "PermissionSetArns": ["arn:permission-set"]
+            "PermissionSets": ["arn:permission-set"]
         }
         mock_client.describe_permission_set.return_value = {
             "PermissionSet": {"Name": "DeveloperAccess"}
@@ -471,7 +471,7 @@ class TestTemplateExecutor:
         """Test permission set ARN retrieval when not found."""
         mock_client = MagicMock()
         mock_client.list_permission_sets.return_value = {
-            "PermissionSetArns": ["arn:permission-set"]
+            "PermissionSets": ["arn:permission-set"]
         }
         mock_client.describe_permission_set.return_value = {
             "PermissionSet": {"Name": "DifferentName"}

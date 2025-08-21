@@ -99,7 +99,7 @@ class TestAssignmentCopier:
     def sample_filters(self):
         """Create sample copy filters for testing."""
         return CopyFilters(
-            include_permission_sets=["AdministratorAccess", "ReadOnlyAccess"],
+            exclude_permission_sets=["DeveloperAccess"],
             exclude_accounts=["555555555555"],
         )
 
@@ -122,7 +122,7 @@ class TestAssignmentCopier:
 
         result = assignment_copier.validate_entities(valid_user_entity, valid_group_entity)
 
-        assert result.result_type == "SUCCESS"
+        assert result.result_type == ValidationResultType.SUCCESS
         assert len(result.messages) == 0
         assert mock_entity_resolver.validate_entity.call_count == 2
 
@@ -140,7 +140,7 @@ class TestAssignmentCopier:
 
         result = assignment_copier.validate_entities(valid_user_entity, valid_group_entity)
 
-        assert result.result_type == "ERROR"
+        assert result.result_type == ValidationResultType.ERROR
         assert "Source USER: User not found" in result.messages[0]
 
     def test_validate_entities_target_error(
@@ -159,7 +159,7 @@ class TestAssignmentCopier:
 
         result = assignment_copier.validate_entities(valid_user_entity, valid_group_entity)
 
-        assert result.result_type == "ERROR"
+        assert result.result_type == ValidationResultType.ERROR
         assert "Target GROUP: Group not found" in result.messages[0]
 
     def test_validate_entities_same_entity(
@@ -173,7 +173,7 @@ class TestAssignmentCopier:
 
         result = assignment_copier.validate_entities(valid_user_entity, valid_user_entity)
 
-        assert result.result_type == "ERROR"
+        assert result.result_type == ValidationResultType.ERROR
         assert "Source and target entities cannot be the same" in result.messages[0]
 
     def test_get_source_assignments_user(

@@ -7,11 +7,11 @@ import typer
 from rich.console import Console
 from rich.prompt import Confirm
 
-from awsideman.backup_restore.backends import FileSystemStorageBackend, S3StorageBackend
-from awsideman.backup_restore.local_metadata_index import get_global_metadata_index
-from awsideman.backup_restore.storage import StorageEngine
-from awsideman.utils.config import Config
-from awsideman.utils.validators import validate_profile
+from ...backup_restore.backends import FileSystemStorageBackend, S3StorageBackend
+from ...backup_restore.local_metadata_index import get_global_metadata_index
+from ...backup_restore.storage import StorageEngine
+from ...utils.config import Config
+from ...utils.validators import validate_profile
 
 console = Console()
 config = Config()

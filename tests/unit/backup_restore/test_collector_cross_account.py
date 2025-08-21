@@ -211,6 +211,11 @@ class TestIdentityCenterCollectorCrossAccount:
         mock_target_collector.collect_groups = AsyncMock(return_value=[])
         mock_target_collector.collect_permission_sets = AsyncMock(return_value=[])
         mock_target_collector.collect_assignments = AsyncMock(return_value=[])
+        
+        # Add missing client_manager attribute
+        mock_client_manager = Mock()
+        mock_client_manager.region = "us-east-1"
+        mock_target_collector.client_manager = mock_client_manager
 
         # Mock the _build_relationships method
         collector._build_relationships = Mock(return_value=Mock())
@@ -242,6 +247,11 @@ class TestIdentityCenterCollectorCrossAccount:
         mock_target_collector.collect_groups = AsyncMock(return_value=[])
         mock_target_collector.collect_permission_sets = AsyncMock(return_value=[])
         mock_target_collector.collect_assignments = AsyncMock(return_value=[])
+        
+        # Add missing client_manager attribute
+        mock_client_manager = Mock()
+        mock_client_manager.region = "us-east-1"
+        mock_target_collector.client_manager = mock_client_manager
 
         # Mock the _build_relationships method
         collector._build_relationships = Mock(return_value=Mock())
@@ -275,6 +285,11 @@ class TestIdentityCenterCollectorCrossAccount:
         mock_target_collector.collect_groups = AsyncMock(return_value=[])
         mock_target_collector.collect_permission_sets = AsyncMock(return_value=[])
         mock_target_collector.collect_assignments = AsyncMock(return_value=[])
+        
+        # Add missing client_manager attribute
+        mock_client_manager = Mock()
+        mock_client_manager.region = "us-east-1"
+        mock_target_collector.client_manager = mock_client_manager
 
         # Mock the _build_relationships method
         collector._build_relationships = Mock(return_value=Mock())
@@ -307,6 +322,11 @@ class TestIdentityCenterCollectorCrossAccount:
         mock_target_collector.collect_groups = AsyncMock(return_value=[])
         mock_target_collector.collect_permission_sets = AsyncMock(return_value=[])
         mock_target_collector.collect_assignments = AsyncMock(return_value=[])
+        
+        # Add missing client_manager attribute
+        mock_client_manager = Mock()
+        mock_client_manager.region = "us-east-1"
+        mock_target_collector.client_manager = mock_client_manager
 
         # Mock the _build_relationships method
         collector._build_relationships = Mock(return_value=Mock())

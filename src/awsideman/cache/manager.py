@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, List
 
 from ..encryption.provider import EncryptionError, EncryptionProviderFactory
 from ..utils.config import Config
@@ -1407,6 +1407,136 @@ class CacheManager:
             info["encryption_provider_class"] = None
 
         return info
+
+    def get_backend(self) -> Optional[CacheBackend]:
+        """Get the current cache backend instance.
+
+        Returns:
+            CacheBackend instance if available, None otherwise
+        """
+        return self.backend
+
+    def get_encryption_provider(self) -> Optional[Any]:
+        """Get the current encryption provider instance.
+
+        Returns:
+            Encryption provider instance if available, None otherwise
+        """
+        return self.encryption_provider
+
+    def get_recent_entries(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get recent cache entries with metadata.
+
+        Args:
+            limit: Maximum number of entries to return
+
+        Returns:
+            List of dictionaries containing entry metadata
+        """
+        entries = []
+        
+        try:
+            # Try to get entries from backend if available
+            if self.backend and hasattr(self.backend, 'get_recent_entries'):
+                entries = self.backend.get_recent_entries(limit)
+            elif self.path_manager:
+                # Fallback to legacy file-based approach
+                cache_dir = self.path_manager.get_cache_directory()
+                if cache_dir.exists():
+                    # Look for .json files since that's what CachePathManager creates
+                    cache_files = list(cache_dir.glob("*.json"))
+                    # Sort by modification time (newest first)
+                    cache_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                    
+                    for cache_file in cache_files[:limit]:
+                        try:
+                            # Read cache entry metadata
+                            entry_data = self._read_cache_entry_metadata(cache_file)
+                            if entry_data:
+                                entries.append(entry_data)
+                        except Exception as e:
+                            logger.debug(f"Error reading cache entry {cache_file}: {e}")
+                            continue
+        except Exception as e:
+            logger.warning(f"Error getting recent entries: {e}")
+        
+        return entries
+
+    def _read_cache_entry_metadata(self, cache_file: Path) -> Optional[Dict[str, Any]]:
+        """Read metadata from a cache file without loading the full content.
+
+        Args:
+            cache_file: Path to the cache file
+
+        Returns:
+            Dictionary containing entry metadata or None if error
+        """
+        try:
+            # Get basic file info
+            stat = cache_file.stat()
+            # Extract key from filename (remove .json extension)
+            key = cache_file.stem
+            
+            # Try to read the cache entry JSON to get TTL and other metadata
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                
+                # Extract metadata from the JSON
+                created_at = cache_data.get("created_at", 0)
+                ttl = cache_data.get("ttl", 0)
+                operation = cache_data.get("operation", "unknown")
+                
+                # Calculate age and remaining TTL
+                current_time = time.time()
+                age_seconds = current_time - created_at
+                remaining_ttl = ttl - age_seconds
+                
+                # Format TTL information
+                if remaining_ttl > 0:
+                    ttl_display = f"{remaining_ttl:.0f}s remaining"
+                else:
+                    ttl_display = "Expired"
+                
+                # Calculate age
+                if age_seconds < 60:
+                    age_display = f"{age_seconds:.0f}s ago"
+                elif age_seconds < 3600:
+                    age_display = f"{age_seconds/60:.0f}m ago"
+                else:
+                    age_display = f"{age_seconds/3600:.1f}h ago"
+                
+                return {
+                    "key": key,
+                    "operation": operation,
+                    "ttl": ttl_display,
+                    "age": age_display,
+                    "size": f"{stat.st_size} bytes",
+                    "modified": stat.st_mtime,
+                    "file_size": stat.st_size,
+                    "is_expired": remaining_ttl <= 0
+                }
+                
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                # If we can't read the JSON, return basic file info
+                logger.debug(f"Could not read cache entry metadata from {cache_file}: {e}")
+                pass
+            
+            # Fallback to basic file metadata
+            return {
+                "key": key,
+                "operation": "unknown",
+                "ttl": "Unknown",
+                "age": "Unknown",
+                "size": f"{stat.st_size} bytes",
+                "modified": stat.st_mtime,
+                "file_size": stat.st_size,
+                "is_expired": False
+            }
+            
+        except Exception as e:
+            logger.debug(f"Error reading cache entry metadata from {cache_file}: {e}")
+            return None
 
     def health_check(self) -> Dict[str, Any]:
         """Perform a health check on the cache system.

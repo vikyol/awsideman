@@ -424,8 +424,9 @@ class TestCachedOrganizationsClient:
         mock_cached_aws_client = Mock()
         mock_cached_aws_client_class.return_value = mock_cached_aws_client
 
-        expected_result = [{"Key": "Environment", "Value": "Production"}]
-        mock_cached_aws_client._execute_with_cache.return_value = expected_result
+        tags_from_cache = [{"Key": "Environment", "Value": "Production"}]
+        expected_result = {"Tags": tags_from_cache}
+        mock_cached_aws_client._execute_with_cache.return_value = tags_from_cache
 
         cached_org_client = CachedOrganizationsClient(
             self.mock_client_manager, self.mock_cache_manager

@@ -7,7 +7,7 @@ anomaly detection, and security event correlation for backup and restore operati
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -241,7 +241,7 @@ class SecurityMonitor:
 
     def _group_events_by_user(self, events: List[AuditEvent]) -> Dict[str, List[AuditEvent]]:
         """Group events by user ID within the alert threshold time window."""
-        cutoff_time = datetime.utcnow() - timedelta(minutes=self.alert_threshold_minutes)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=self.alert_threshold_minutes)
         recent_events = [e for e in events if e.timestamp >= cutoff_time]
 
         user_events = {}
@@ -267,7 +267,7 @@ class SecurityMonitor:
 
         return SecurityAlert(
             alert_id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type=event_type,
             threat_level=threat_level,
             user_id=user_id,
@@ -352,7 +352,7 @@ class SecurityMonitor:
             "resolved_alerts": total_alerts - active_alerts,
             "threat_level_distribution": threat_level_counts,
             "event_type_distribution": event_type_counts,
-            "last_updated": datetime.utcnow().isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
         }
 
 
@@ -548,7 +548,7 @@ class SecurityEventCorrelator:
         alerts = []
 
         # Filter events within correlation window
-        cutoff_time = datetime.utcnow() - timedelta(hours=self.correlation_window_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=self.correlation_window_hours)
         recent_events = [e for e in events if e.timestamp >= cutoff_time]
 
         # Look for privilege escalation patterns
@@ -598,7 +598,7 @@ class SecurityEventCorrelator:
                                     alert_id=str(
                                         hash(f"{user_id}_{failed.timestamp}_{success.timestamp}")
                                     ),
-                                    timestamp=datetime.utcnow(),
+                                    timestamp=datetime.now(timezone.utc),
                                     event_type=SecurityEventType.PRIVILEGE_ESCALATION,
                                     threat_level=ThreatLevel.HIGH,
                                     user_id=user_id,
@@ -637,8 +637,8 @@ class SecurityEventCorrelator:
             # If user created multiple backups and exported them
             if len(backup_events) >= 3 and len(export_events) >= 2:
                 alert = SecurityAlert(
-                    alert_id=str(hash(f"exfiltration_{user_id}_{datetime.utcnow()}")),
-                    timestamp=datetime.utcnow(),
+                    alert_id=str(hash(f"exfiltration_{user_id}_{datetime.now(timezone.utc)}")),
+                    timestamp=datetime.now(timezone.utc),
                     event_type=SecurityEventType.DATA_EXFILTRATION_ATTEMPT,
                     threat_level=ThreatLevel.CRITICAL,
                     user_id=user_id,
@@ -675,8 +675,8 @@ class SecurityEventCorrelator:
 
             if len(view_operations) > 20:  # Excessive viewing might indicate reconnaissance
                 alert = SecurityAlert(
-                    alert_id=str(hash(f"recon_{user_id}_{datetime.utcnow()}")),
-                    timestamp=datetime.utcnow(),
+                    alert_id=str(hash(f"recon_{user_id}_{datetime.now(timezone.utc)}")),
+                    timestamp=datetime.now(timezone.utc),
                     event_type=SecurityEventType.SUSPICIOUS_ACCESS_PATTERN,
                     threat_level=ThreatLevel.MEDIUM,
                     user_id=user_id,

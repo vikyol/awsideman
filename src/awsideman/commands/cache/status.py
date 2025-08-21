@@ -68,12 +68,23 @@ def _display_backend_health(backend) -> None:
     try:
         if hasattr(backend, "health_check"):
             health = backend.health_check()
-            if health.get("healthy", False):
-                console.print("[green]Backend Health:[/green] Healthy")
+            if isinstance(health, dict):
+                if health.get("healthy", False):
+                    console.print("[green]Backend Health:[/green] Healthy")
+                    if "message" in health:
+                        console.print(f"[dim]Status:[/dim] {health['message']}")
+                else:
+                    console.print("[red]Backend Health:[/red] Unhealthy")
+                    if "message" in health:
+                        console.print(f"[red]Error:[/red] {health['message']}")
+                    if "error" in health:
+                        console.print(f"[red]Details:[/red] {health['error']}")
             else:
-                console.print("[red]Backend Health:[/red] Unhealthy")
-                if "error" in health:
-                    console.print(f"[red]Error:[/red] {health['error']}")
+                # Fallback for boolean return values (legacy support)
+                if health:
+                    console.print("[green]Backend Health:[/green] Healthy")
+                else:
+                    console.print("[red]Backend Health:[/red] Unhealthy")
         else:
             console.print("[yellow]Backend Health:[/yellow] Unable to check")
     except Exception as e:
@@ -84,16 +95,45 @@ def _display_recent_cache_entries(cache_manager) -> None:
     """Display recent cache entries with expiration times."""
     try:
         console.print("\n[bold blue]Recent Cache Entries[/bold blue]")
-        console.print("-" * 30)
-
+        
         # Get recent entries (limit to first 10)
         entries = cache_manager.get_recent_entries(limit=10)
         if entries:
+            # Create a table for better organization
+            from rich.table import Table
+            table = Table(show_header=True, header_style="bold magenta")
+            table.add_column("Operation", style="cyan", ratio=2)
+            table.add_column("TTL", style="yellow", ratio=1)
+            table.add_column("Age", style="blue", ratio=1)
+            table.add_column("Size", style="green", ratio=1)
+            table.add_column("Key", style="dim", ratio=3)
+            
             for entry in entries:
-                key = entry.get("key", "Unknown")
+                operation = entry.get("operation", "Unknown")
                 ttl = entry.get("ttl", "Unknown")
+                age = entry.get("age", "Unknown")
                 size = entry.get("size", "Unknown")
-                console.print(f"[green]{key}[/green] - TTL: {ttl}, Size: {size}")
+                key = entry.get("key", "Unknown")
+                
+                # Truncate long keys for display
+                display_key = key #[:50] + "..." if len(key) > 50 else key
+                
+                # Color code based on expiration status
+                if entry.get("is_expired", False):
+                    row_style = "red"
+                else:
+                    row_style = "green"
+                
+                table.add_row(
+                    operation,
+                    ttl,
+                    age,
+                    size,
+                    display_key,
+                    style=row_style
+                )
+            
+            console.print(table)
         else:
             console.print("[yellow]No recent entries available[/yellow]")
     except Exception as e:

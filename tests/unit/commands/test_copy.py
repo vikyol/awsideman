@@ -289,9 +289,9 @@ class TestCopyCommand:
 
         result = self.runner.invoke(app, ["--from", "user:SourceUser", "--to", "user:TargetUser"])
 
-        # Verify error
+        # Verify error (the command tries to auto-discover and fails)
         assert result.exit_code == 1
-        assert "SSO instance ARN and identity store ID are required" in result.stdout
+        assert "Error discovering SSO information" in result.stdout
 
     def test_copy_missing_required_parameters(self):
         """Test copy with missing required parameters."""

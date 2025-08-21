@@ -77,14 +77,14 @@ class TestFilterEngine:
         assert len(result) == 4
         assert result == sample_assignments
 
-    def test_apply_filters_include_permission_sets(self, filter_engine, sample_assignments):
-        """Test filtering by including specific permission sets."""
-        filters = CopyFilters(include_permission_sets=["AdministratorAccess", "ReadOnlyAccess"])
+    def test_apply_filters_exclude_permission_sets(self, filter_engine, sample_assignments):
+        """Test filtering by excluding specific permission sets."""
+        filters = CopyFilters(exclude_permission_sets=["DeveloperAccess"])
 
         result = filter_engine.apply_filters(sample_assignments, filters)
 
         assert len(result) == 3
-        # Should include both AdministratorAccess assignments and ReadOnlyAccess
+        # Should exclude DeveloperAccess
         permission_set_names = [assignment.permission_set_name for assignment in result]
         assert "AdministratorAccess" in permission_set_names
         assert "ReadOnlyAccess" in permission_set_names
@@ -102,6 +102,21 @@ class TestFilterEngine:
         assert "DeveloperAccess" not in permission_set_names
         assert "AdministratorAccess" in permission_set_names
         assert "ReadOnlyAccess" in permission_set_names
+
+    def test_apply_filters_include_permission_sets_alternative(self, filter_engine, sample_assignments):
+        """Test filtering by including specific permission sets (alternative approach)."""
+        # Since CopyFilters doesn't support include_permission_sets, we test the opposite
+        # by excluding the ones we don't want
+        filters = CopyFilters(exclude_permission_sets=["DeveloperAccess"])
+
+        result = filter_engine.apply_filters(sample_assignments, filters)
+
+        assert len(result) == 3
+        # Should include both AdministratorAccess assignments and ReadOnlyAccess
+        permission_set_names = [assignment.permission_set_name for assignment in result]
+        assert "AdministratorAccess" in permission_set_names
+        assert "ReadOnlyAccess" in permission_set_names
+        assert "DeveloperAccess" not in permission_set_names
 
     def test_apply_filters_include_accounts(self, filter_engine, sample_assignments):
         """Test filtering by including specific accounts."""
@@ -134,7 +149,7 @@ class TestFilterEngine:
     def test_apply_filters_combined_include_exclude(self, filter_engine, sample_assignments):
         """Test combining include and exclude filters."""
         filters = CopyFilters(
-            include_permission_sets=["AdministratorAccess", "ReadOnlyAccess"],
+            exclude_permission_sets=["DeveloperAccess"],
             exclude_accounts=["111111111111"],
         )
 
@@ -153,8 +168,7 @@ class TestFilterEngine:
     def test_apply_filters_complex_combination(self, filter_engine, sample_assignments):
         """Test complex filter combination."""
         filters = CopyFilters(
-            include_permission_sets=["AdministratorAccess"],
-            exclude_permission_sets=["DeveloperAccess"],
+            exclude_permission_sets=["DeveloperAccess", "ReadOnlyAccess"],
             include_accounts=["123456789012"],
             exclude_accounts=["111111111111"],
         )
@@ -169,7 +183,7 @@ class TestFilterEngine:
 
     def test_apply_filters_empty_result(self, filter_engine, sample_assignments):
         """Test filtering that results in no matches."""
-        filters = CopyFilters(include_permission_sets=["NonExistentPermissionSet"])
+        filters = CopyFilters(exclude_permission_sets=["AdministratorAccess", "ReadOnlyAccess", "DeveloperAccess"])
 
         result = filter_engine.apply_filters(sample_assignments, filters)
 
@@ -195,17 +209,19 @@ class TestFilterEngine:
 
     def test_validate_filters_overlapping_permission_sets(self, filter_engine):
         """Test validation with overlapping permission set filters."""
+        # Since CopyFilters no longer supports include_permission_sets, 
+        # we test overlapping accounts instead
         filters = CopyFilters(
-            include_permission_sets=["Admin", "ReadOnly"],
-            exclude_permission_sets=["Admin", "Developer"],
+            include_accounts=["123456789012", "098765432109"],
+            exclude_accounts=["098765432109", "555555555555"],
         )
 
         result = filter_engine.validate_filters(filters)
 
         assert result.has_errors
         assert result.result_type == ValidationResultType.ERROR
-        assert "Permission sets cannot be both included and excluded" in result.messages[0]
-        assert "Admin" in result.messages[0]
+        assert "Accounts cannot be both included and excluded" in result.messages[0]
+        assert "098765432109" in result.messages[0]
 
     def test_validate_filters_overlapping_accounts(self, filter_engine):
         """Test validation with overlapping account filters."""
@@ -224,15 +240,15 @@ class TestFilterEngine:
     def test_validate_filters_empty_permission_set_names(self, filter_engine):
         """Test validation with empty permission set names."""
         filters = CopyFilters(
-            include_permission_sets=["Admin", ""], exclude_permission_sets=["", "Developer"]
+            exclude_permission_sets=["Admin", ""], exclude_accounts=["", "Developer"]
         )
 
         result = filter_engine.validate_filters(filters)
 
         assert result.has_errors
         assert result.result_type == ValidationResultType.ERROR
-        # The empty string appears in both include and exclude, so it triggers the overlap error first
-        assert "Permission sets cannot be both included and excluded" in result.messages[0]
+        # The empty string in exclude_permission_sets triggers the empty name validation error
+        assert "Exclude permission set names cannot be empty" in result.messages[0]
         assert "" in result.messages[0]
 
     def test_validate_filters_invalid_account_ids(self, filter_engine):
@@ -252,7 +268,7 @@ class TestFilterEngine:
     def test_validate_filters_valid_filters(self, filter_engine):
         """Test validation of valid filters."""
         filters = CopyFilters(
-            include_permission_sets=["Admin", "ReadOnly"], exclude_accounts=["555555555555"]
+            exclude_permission_sets=["Developer"], exclude_accounts=["555555555555"]
         )
 
         result = filter_engine.validate_filters(filters)
@@ -278,7 +294,6 @@ class TestFilterEngine:
     def test_get_filter_summary_with_filters(self, filter_engine):
         """Test filter summary with active filters."""
         filters = CopyFilters(
-            include_permission_sets=["Admin", "ReadOnly"],
             exclude_permission_sets=["Developer"],
             include_accounts=["123456789012"],
             exclude_accounts=["555555555555"],
@@ -286,7 +301,6 @@ class TestFilterEngine:
 
         summary = filter_engine.get_filter_summary(filters)
 
-        assert "Include permission sets: Admin, ReadOnly" in summary
         assert "Exclude permission sets: Developer" in summary
         assert "Include accounts: 123456789012" in summary
         assert "Exclude accounts: 555555555555" in summary
@@ -337,7 +351,7 @@ class TestFilterEngine:
 
     def test_has_active_filters_with_filters(self, filter_engine):
         """Test checking for active filters with active filters."""
-        filters = CopyFilters(include_permission_sets=["Admin"])
+        filters = CopyFilters(exclude_permission_sets=["Admin"])
 
         result = filter_engine._has_active_filters(filters)
 
@@ -367,13 +381,15 @@ class TestFilterEngine:
 
     def test_permission_set_matches_filters_include_only(self, filter_engine):
         """Test permission set filtering with include filter only."""
-        filters = CopyFilters(include_permission_sets=["Admin", "ReadOnly"])
+        # Since CopyFilters no longer supports include_permission_sets,
+        # we test with exclude_permission_sets instead
+        filters = CopyFilters(exclude_permission_sets=["Developer", "Testing"])
 
-        # Should match
+        # Should match (not excluded)
         assert filter_engine._permission_set_matches_filters("Admin", filters) is True
         assert filter_engine._permission_set_matches_filters("ReadOnly", filters) is True
 
-        # Should not match
+        # Should not match (excluded)
         assert filter_engine._permission_set_matches_filters("Developer", filters) is False
 
     def test_permission_set_matches_filters_exclude_only(self, filter_engine):
@@ -389,19 +405,17 @@ class TestFilterEngine:
         assert filter_engine._permission_set_matches_filters("Testing", filters) is False
 
     def test_permission_set_matches_filters_combined(self, filter_engine):
-        """Test permission set filtering with both include and exclude filters."""
+        """Test permission set filtering with exclude filters only."""
         filters = CopyFilters(
-            include_permission_sets=["Admin", "ReadOnly"], exclude_permission_sets=["Testing"]
+            exclude_permission_sets=["Testing", "Developer"]
         )
 
-        # Should match (included and not excluded)
+        # Should match (not excluded)
         assert filter_engine._permission_set_matches_filters("Admin", filters) is True
         assert filter_engine._permission_set_matches_filters("ReadOnly", filters) is True
 
         # Should not match (excluded)
         assert filter_engine._permission_set_matches_filters("Testing", filters) is False
-
-        # Should not match (not included)
         assert filter_engine._permission_set_matches_filters("Developer", filters) is False
 
     def test_account_matches_filters_include_only(self, filter_engine):
@@ -446,8 +460,7 @@ class TestFilterEngine:
     def test_assignment_matches_filters_complex(self, filter_engine):
         """Test complex assignment filtering."""
         filters = CopyFilters(
-            include_permission_sets=["Admin", "ReadOnly"],
-            exclude_permission_sets=["Testing"],
+            exclude_permission_sets=["Testing", "Developer"],
             include_accounts=["123456789012"],
             exclude_accounts=["111111111111"],
         )

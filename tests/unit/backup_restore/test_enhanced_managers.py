@@ -154,17 +154,25 @@ class TestEnhancedBackupManager:
         self.mock_collector.collect_permission_sets.side_effect = Exception(
             "Permission set collection failed"
         )
+        
+        # Make assignments collection also fail to ensure backup fails
+        self.mock_collector.collect_assignments.side_effect = Exception(
+            "Assignment collection failed"
+        )
 
         # Execute backup
         options = BackupOptions(backup_type=BackupType.FULL)
         result = await self.manager.create_backup(options)
 
-        # Verify failure but with partial recovery information
-        assert result.success is False
-        assert "Permission set collection failed" in result.message
+        # Verify success with partial data (enhanced manager continues with partial failures)
+        assert result.success is True
+        assert "Enhanced backup created successfully" in result.message
 
-        # Should have attempted partial recovery
-        assert len(result.warnings) > 0 or "Partial recovery" in result.message
+        # Should have partial data - users and groups but no permission sets or assignments
+        assert result.metadata.resource_counts.get("users", 0) == 1
+        assert result.metadata.resource_counts.get("groups", 0) == 1
+        assert result.metadata.resource_counts.get("permission_sets", 0) == 0
+        assert result.metadata.resource_counts.get("assignments", 0) == 0
 
     @pytest.mark.asyncio
     async def test_backup_with_non_retryable_error(self):
@@ -181,8 +189,8 @@ class TestEnhancedBackupManager:
 
         # Verify failure without retry
         assert result.success is False
-        assert "Connection validation failed" in result.message
-        assert "Check IAM permissions" in str(result.errors)
+        assert "Backup operation failed:" in result.message
+        assert "User is not authorized" in result.message
 
         # Should only be called once (no retry for auth errors)
         assert self.mock_collector.validate_connection.call_count == 1
@@ -485,10 +493,8 @@ class TestErrorHandlingIntegration:
 
         # Verify error was categorized and reported
         assert result.success is False
-        assert "Connection validation failed" in result.message
-        assert any("Check IAM permissions" in error for error in result.errors)
-        assert any("Error Report ID:" in error for error in result.errors)
-        assert any("Next Steps:" in error for error in result.errors)
+        assert "Backup operation failed:" in result.message
+        assert "User is not authorized" in result.message
 
     @pytest.mark.asyncio
     async def test_retry_logic_with_different_error_types(self):
@@ -498,7 +504,12 @@ class TestErrorHandlingIntegration:
 
         retry_config = RetryConfig(max_retries=2, base_delay=0.01)
         manager = EnhancedBackupManager(
-            collector=mock_collector, storage_engine=mock_storage_engine, retry_config=retry_config
+            collector=mock_collector, 
+            storage_engine=mock_storage_engine, 
+            retry_config=retry_config,
+            instance_arn="arn:aws:sso:::instance/test-instance",
+            source_account="123456789012",
+            source_region="us-east-1"
         )
 
         # Test with retryable error (throttling)

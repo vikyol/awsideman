@@ -210,7 +210,7 @@ class TestPermissionSetCloner:
         permission_set_cloner.client_manager.get_client.return_value = mock_sts_client
 
         permission_set_cloner._copy_policies_to_permission_set(
-            "target-arn", sample_permission_set_config
+            "target-arn", sample_permission_set_config, "test-operation-123"
         )
 
         # Verify AWS managed policy attachment

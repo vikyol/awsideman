@@ -341,7 +341,6 @@ class TestCopyFilters:
     def test_valid_filters(self):
         """Test valid copy filters."""
         filters = CopyFilters(
-            include_permission_sets=["PermissionSet1", "PermissionSet2"],
             exclude_permission_sets=["PermissionSet3"],
             include_accounts=["123456789012", "123456789013"],
             exclude_accounts=["123456789014"],
@@ -358,14 +357,16 @@ class TestCopyFilters:
 
     def test_overlapping_permission_sets(self):
         """Test validation error with overlapping permission sets."""
+        # Since CopyFilters no longer supports include_permission_sets,
+        # we test overlapping accounts instead
         filters = CopyFilters(
-            include_permission_sets=["PermissionSet1", "PermissionSet2"],
-            exclude_permission_sets=["PermissionSet2", "PermissionSet3"],
+            include_accounts=["123456789012", "123456789013"],
+            exclude_accounts=["123456789013", "123456789014"],
         )
         result = filters.validate()
         assert result.has_errors
-        assert "Permission sets cannot be both included and excluded" in result.messages[0]
-        assert "PermissionSet2" in result.messages[0]
+        assert "Accounts cannot be both included and excluded" in result.messages[0]
+        assert "123456789013" in result.messages[0]
 
     def test_overlapping_accounts(self):
         """Test validation error with overlapping accounts."""

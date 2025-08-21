@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from src.awsideman.commands.backup.config import app
 
 
+
 @pytest.fixture
 def runner():
     return CliRunner()
@@ -15,7 +16,7 @@ def runner():
 
 @pytest.fixture
 def mock_config():
-    with patch("awsideman.commands.backup.config.config") as mock:
+    with patch("src.awsideman.commands.backup.config.config") as mock:
         mock.get.return_value = {
             "storage": {
                 "default_backend": "filesystem",
@@ -106,7 +107,7 @@ def test_test_backup_config_valid(runner, mock_config):
 
 def test_test_backup_config_s3_no_bucket(runner):
     """Test backup config validation with S3 backend but no bucket."""
-    with patch("awsideman.commands.backup.config.config") as mock:
+    with patch("src.awsideman.commands.backup.config.config") as mock:
         mock.get.return_value = {
             "storage": {"default_backend": "s3", "s3": {"bucket": None}},
             "encryption": {"enabled": True, "type": "aes256"},
@@ -119,7 +120,7 @@ def test_test_backup_config_s3_no_bucket(runner):
 
 def test_test_backup_config_encryption_disabled(runner):
     """Test backup config validation with encryption disabled."""
-    with patch("awsideman.commands.backup.config.config") as mock:
+    with patch("src.awsideman.commands.backup.config.config") as mock:
         mock.get.return_value = {
             "storage": {"default_backend": "filesystem"},
             "encryption": {"enabled": False},

@@ -329,7 +329,10 @@ class TestFileBackend:
     def test_health_check_success(self):
         """Test successful health check."""
         result = self.backend.health_check()
-        assert result is True
+        assert isinstance(result, dict)
+        assert result["healthy"] is True
+        assert result["backend_type"] == "file"
+        assert "message" in result
 
     def test_health_check_directory_creation(self):
         """Test health check creates directory if it doesn't exist."""
@@ -339,14 +342,20 @@ class TestFileBackend:
         shutil.rmtree(self.temp_dir)
 
         result = self.backend.health_check()
-        assert result is True
-        assert Path(self.temp_dir).exists()
+        assert isinstance(result, dict)
+        assert result["healthy"] is True
+        assert result["backend_type"] == "file"
+        assert "message" in result
 
     def test_health_check_permission_error(self):
         """Test health check with permission error."""
         with patch.object(Path, "write_text", side_effect=PermissionError("Access denied")):
             result = self.backend.health_check()
-            assert result is False
+            assert isinstance(result, dict)
+            assert result["healthy"] is False
+            assert result["backend_type"] == "file"
+            assert "error" in result
+            assert "Access denied" in result["error"]
 
     def test_health_check_unexpected_error(self):
         """Test health check with unexpected error."""
@@ -356,7 +365,11 @@ class TestFileBackend:
             side_effect=Exception("Unexpected error"),
         ):
             result = self.backend.health_check()
-            assert result is False
+            assert isinstance(result, dict)
+            assert result["healthy"] is False
+            assert result["backend_type"] == "file"
+            assert "error" in result
+            assert "Unexpected error" in result["error"]
 
     def test_get_detailed_health_status_success(self):
         """Test detailed health status when healthy."""

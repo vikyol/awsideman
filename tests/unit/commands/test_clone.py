@@ -88,7 +88,6 @@ class TestCloneCommand:
             target_name="NewPermissionSet",
             target_description=None,
             preview=False,
-            dry_run=False,
         )
 
     @patch("src.awsideman.commands.clone.Config")
@@ -144,7 +143,6 @@ class TestCloneCommand:
             target_name="NewPermissionSet",
             target_description="Custom description",
             preview=False,
-            dry_run=False,
         )
 
     @patch("src.awsideman.commands.clone.Config")
@@ -219,13 +217,12 @@ class TestCloneCommand:
         assert result.exit_code == 0
         assert "Successfully cloned permission set" in result.stdout
 
-        # Verify cloner was called with dry_run=True
+        # Verify cloner was called (dry_run only affects rollback tracking, not the clone call)
         mock_cloner.clone_permission_set.assert_called_once_with(
             source_name="SourcePermissionSet",
             target_name="NewPermissionSet",
             target_description=None,
             preview=False,
-            dry_run=True,
         )
 
     @patch("src.awsideman.commands.clone.Config")
@@ -275,9 +272,9 @@ class TestCloneCommand:
             app, ["--name", "SourcePermissionSet", "--to", "NewPermissionSet"]
         )
 
-        # Verify error
+        # Verify error (the command tries to auto-discover and fails)
         assert result.exit_code == 1
-        assert "SSO instance ARN is required" in result.stdout
+        assert "Error discovering SSO information" in result.stdout
 
     def test_clone_missing_required_parameters(self):
         """Test clone with missing required parameters."""

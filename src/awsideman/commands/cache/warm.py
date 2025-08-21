@@ -1,10 +1,10 @@
 """Warm cache command for awsideman."""
 
-import shlex
-import subprocess
+import sys
 from typing import Optional
 
 import typer
+from typer.testing import CliRunner
 
 from .helpers import console, get_cache_manager
 
@@ -53,7 +53,7 @@ def warm_cache(
         console.print(f"[blue]Warming cache for command: {command}{profile_info}[/blue]")
 
         # Parse and validate the command
-        command_parts = shlex.split(command)
+        command_parts = command.split()
         if not command_parts:
             console.print("[red]Error: Empty command provided[/red]")
             raise typer.Exit(1)
@@ -71,45 +71,16 @@ def warm_cache(
             )
             raise typer.Exit(1)
 
-        # Build the full awsideman command (caching is now enabled by default)
-        full_command = ["awsideman"]
-
-        # Add the command group first
-        full_command.append(command_parts[0])
-
-        # Add profile option if specified (after the command group)
-        if profile:
-            full_command.extend(["--profile", profile])
-
-        # Add region option if specified (after the command group)
-        if region:
-            full_command.extend(["--region", region])
-
-        # Add the rest of the command arguments
-        if len(command_parts) > 1:
-            full_command.extend(command_parts[1:])
-
         # Execute the command to warm the cache
         console.print("[dim]Executing command to populate cache...[/dim]")
-        console.print(f"[dim]Full command: {' '.join(full_command)}[/dim]")
+        console.print(f"[dim]Full command: awsideman {' '.join(command_parts)}[/dim]")
 
         try:
-            # Run the command with output suppressed
-            result = subprocess.run(
-                full_command, capture_output=True, text=True, timeout=300  # 5 minute timeout
-            )
+            # Execute the command using Typer's CliRunner
+            _execute_command_with_cli_runner(command_parts, profile, region)
 
-            if result.returncode != 0:
-                console.print(f"[red]Error executing command: {result.stderr}[/red]")
-                raise typer.Exit(1)
-
-        except subprocess.TimeoutExpired:
-            console.print("[red]Error: Command timed out after 5 minutes[/red]")
-            raise typer.Exit(1)
-        except FileNotFoundError:
-            console.print(
-                "[red]Error: Could not find awsideman executable. Make sure it's installed and in PATH.[/red]"
-            )
+        except Exception as e:
+            console.print(f"[red]Error executing command: {e}[/red]")
             raise typer.Exit(1)
 
         # Get cache stats after warming
@@ -136,3 +107,62 @@ def warm_cache(
     except Exception as e:
         console.print(f"[red]Error warming cache: {e}[/red]")
         raise typer.Exit(1)
+
+
+def _execute_command_with_cli_runner(command_parts: list, profile: Optional[str], region: Optional[str]) -> None:
+    """Execute a command using Typer's CliRunner."""
+    command_group = command_parts[0]
+    subcommand = command_parts[1] if len(command_parts) > 1 else None
+    
+    # Build the command arguments for CliRunner
+    runner_args = [command_group]
+    if subcommand:
+        runner_args.append(subcommand)
+    
+    # Add profile and region options if specified
+    if profile:
+        runner_args.extend(["--profile", profile])
+    if region:
+        runner_args.extend(["--region", region])
+    
+    # Add any additional arguments from the original command
+    if len(command_parts) > 2:
+        runner_args.extend(command_parts[2:])
+    
+    try:
+        # Import the appropriate app based on command group
+        if command_group == "user":
+            from ..user import app as user_app
+            app = user_app
+        elif command_group == "group":
+            from ..group import app as group_app
+            app = group_app
+        elif command_group == "permission-set":
+            from ..permission_set import app as permission_set_app
+            app = permission_set_app
+        elif command_group == "assignment":
+            from ..assignment import app as assignment_app
+            app = assignment_app
+        elif command_group == "org":
+            from ..org import app as org_app
+            app = org_app
+        elif command_group == "profile":
+            from ..profile import app as profile_app
+            app = profile_app
+        elif command_group == "sso":
+            from ..sso import app as sso_app
+            app = sso_app
+        else:
+            raise ValueError(f"Unsupported command group: {command_group}")
+        
+        # Execute the command using CliRunner
+        runner = CliRunner()
+        result = runner.invoke(app, runner_args[1:])  # Skip the command group name
+        
+        if result.exit_code != 0:
+            raise RuntimeError(f"Command failed with exit code {result.exit_code}: {result.stdout}")
+            
+    except ImportError as e:
+        raise RuntimeError(f"Failed to import command module for {command_group}: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to execute command: {e}")

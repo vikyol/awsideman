@@ -1,0 +1,11 @@
+{
+  "admin": {
+    "user_id": "admin",
+    "username": "admin",
+    "roles": [
+      "backup_admin"
+    ],
+    "additional_permissions": [],
+    "active": true
+  }
+}

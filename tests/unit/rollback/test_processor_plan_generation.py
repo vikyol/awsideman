@@ -245,18 +245,17 @@ class TestRollbackProcessorPlanGeneration:
 
         # Assert
         assert result is not None
-        assert len(result.actions) == 2
+        assert len(result.actions) == 1  # Only one action since one account is already revoked
         assert len(result.warnings) == 1
         assert (
-            "Account 123456789013: Assignment already revoked, rollback may be unnecessary"
+            "Account 123456789013: Assignment already revoked, skipping rollback action"
             in result.warnings[0]
         )
 
-        # Check states
-        action1 = next(a for a in result.actions if a.account_id == "123456789012")
-        action2 = next(a for a in result.actions if a.account_id == "123456789013")
-        assert action1.current_state == AssignmentState.ASSIGNED
-        assert action2.current_state == AssignmentState.NOT_ASSIGNED
+        # Check states - only one action should remain
+        action = result.actions[0]
+        assert action.account_id == "123456789012"
+        assert action.current_state == AssignmentState.ASSIGNED
 
     def test_generate_plan_revoke_with_existing_assignment_warning(self):
         """Test plan generation for revoke operation with existing assignment warning."""
@@ -294,15 +293,14 @@ class TestRollbackProcessorPlanGeneration:
         # Assert
         assert result is not None
         assert result.rollback_type == RollbackActionType.ASSIGN
-        assert len(result.actions) == 1
+        assert len(result.actions) == 0  # No actions since assignment already exists
         assert len(result.warnings) == 1
         assert (
-            "Account 123456789012: Assignment already exists, rollback may conflict"
+            "Account 123456789012: Assignment already exists, skipping rollback action"
             in result.warnings[0]
         )
 
-        action = result.actions[0]
-        assert action.current_state == AssignmentState.ASSIGNED
+        # No actions to check since all were skipped
 
     def test_generate_plan_large_batch_duration_estimate(self):
         """Test plan generation with large batch duration estimation."""

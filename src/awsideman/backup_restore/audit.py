@@ -9,7 +9,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -215,7 +215,7 @@ class AuditLogger:
 
         event = AuditEvent(
             event_id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type=event_type,
             severity=severity,
             user_id=user_id,
@@ -261,7 +261,7 @@ class AuditLogger:
 
         event = AuditEvent(
             event_id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type=event_type,
             severity=severity,
             user_id=user_id,
@@ -515,7 +515,7 @@ class AuditLogger:
 
     def cleanup_old_logs(self) -> None:
         """Clean up audit logs older than retention period."""
-        cutoff_time = datetime.utcnow() - timedelta(days=self.retention_days)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
 
         # This is a simplified implementation
         # In production, this would be more sophisticated
