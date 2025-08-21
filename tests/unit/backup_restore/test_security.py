@@ -1,20 +1,16 @@
 """Tests for security monitoring and alerting functionality."""
 
-import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch
 
-import pytest
 
+from src.awsideman.backup_restore.audit import AuditEvent, AuditEventType, AuditSeverity
 from src.awsideman.backup_restore.security import (
     SecurityAlert,
-    ThreatLevel,
+    SecurityEventCorrelator,
     SecurityEventType,
     SecurityMonitor,
-    SecureDeletion,
-    SecurityEventCorrelator,
+    ThreatLevel,
 )
-from src.awsideman.backup_restore.audit import AuditEvent, AuditEventType, AuditSeverity
 
 
 class TestSecurityAlert:
@@ -77,36 +73,40 @@ class TestSecurityMonitor:
         # Create multiple failed access attempts
         events = []
         for i in range(5):
-            events.append(AuditEvent(
-                event_id=f"event-{i}",
-                timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
-                event_type=AuditEventType.ACCESS_DENIED,
-                severity=AuditSeverity.WARNING,
+            events.append(
+                AuditEvent(
+                    event_id=f"event-{i}",
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
+                    event_type=AuditEventType.ACCESS_DENIED,
+                    severity=AuditSeverity.WARNING,
+                    user_id="test-user",
+                    session_id=None,
+                    source_ip="192.168.1.100",
+                    resource_id=f"backup-{i}",
+                    resource_type="backup",
+                    operation="access_backup",
+                    details={"reason": "invalid_credentials"},
+                    success=False,
+                )
+            )
+
+        # Add one successful attempt
+        events.append(
+            AuditEvent(
+                event_id="event-success",
+                timestamp=datetime.now(timezone.utc),
+                event_type=AuditEventType.ACCESS_GRANTED,
+                severity=AuditSeverity.INFO,
                 user_id="test-user",
                 session_id=None,
                 source_ip="192.168.1.100",
-                resource_id=f"backup-{i}",
+                resource_id="backup-success",
                 resource_type="backup",
                 operation="access_backup",
-                details={"reason": "invalid_credentials"},
-                success=False,
-            ))
-
-        # Add one successful attempt
-        events.append(AuditEvent(
-            event_id="event-success",
-            timestamp=datetime.now(timezone.utc),
-            event_type=AuditEventType.ACCESS_GRANTED,
-            severity=AuditSeverity.INFO,
-            user_id="test-user",
-            session_id=None,
-            source_ip="192.168.1.100",
-            resource_id="backup-success",
-            resource_type="backup",
-            operation="access_backup",
-            details={"reason": "valid_credentials"},
-            success=True,
-        ))
+                details={"reason": "valid_credentials"},
+                success=True,
+            )
+        )
 
         alerts = self.monitor.analyze_audit_events(events)
         assert len(alerts) == 1
@@ -118,20 +118,22 @@ class TestSecurityMonitor:
         # Create unusual backup pattern
         events = []
         for i in range(10):
-            events.append(AuditEvent(
-                event_id=f"backup-{i}",
-                timestamp=datetime.now(timezone.utc) - timedelta(minutes=i * 2),
-                event_type=AuditEventType.BACKUP_CREATED,
-                severity=AuditSeverity.INFO,
-                user_id="backup-user",
-                session_id=None,
-                source_ip="10.0.0.10",
-                resource_id=f"backup-{i}",
-                resource_type="backup",
-                operation="create_backup",
-                details={"backup_size": "100MB", "type": "full"},
-                success=True,
-            ))
+            events.append(
+                AuditEvent(
+                    event_id=f"backup-{i}",
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=i * 2),
+                    event_type=AuditEventType.BACKUP_CREATED,
+                    severity=AuditSeverity.INFO,
+                    user_id="backup-user",
+                    session_id=None,
+                    source_ip="10.0.0.10",
+                    resource_id=f"backup-{i}",
+                    resource_type="backup",
+                    operation="create_backup",
+                    details={"backup_size": "100MB", "type": "full"},
+                    success=True,
+                )
+            )
 
         alerts = self.monitor.analyze_audit_events(events)
         assert len(alerts) == 1
@@ -143,25 +145,27 @@ class TestSecurityMonitor:
         # Create suspicious restore pattern with cross-account restores
         events = []
         for i in range(8):
-            events.append(AuditEvent(
-                event_id=f"restore-{i}",
-                timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
-                event_type=AuditEventType.RESTORE_STARTED,
-                severity=AuditSeverity.INFO,
-                user_id="restore-user",
-                session_id=None,
-                source_ip="10.0.0.20",
-                resource_id=f"backup-{i}",
-                resource_type="backup",
-                operation="restore_backup",
-                details={
-                    "backup_id": f"backup-{i}", 
-                    "restore_type": "full",
-                    "source_account": "123456789012",
-                    "target_account": "987654321098"  # Different account to trigger cross-account alert
-                },
-                success=True,
-            ))
+            events.append(
+                AuditEvent(
+                    event_id=f"restore-{i}",
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
+                    event_type=AuditEventType.RESTORE_STARTED,
+                    severity=AuditSeverity.INFO,
+                    user_id="restore-user",
+                    session_id=None,
+                    source_ip="10.0.0.20",
+                    resource_id=f"backup-{i}",
+                    resource_type="backup",
+                    operation="restore_backup",
+                    details={
+                        "backup_id": f"backup-{i}",
+                        "restore_type": "full",
+                        "source_account": "123456789012",
+                        "target_account": "987654321098",  # Different account to trigger cross-account alert
+                    },
+                    success=True,
+                )
+            )
 
         alerts = self.monitor.analyze_audit_events(events)
         assert len(alerts) == 1
@@ -174,37 +178,43 @@ class TestSecurityMonitor:
         events = []
         # Add backup events (need at least 3) - within 15 minute window
         for i in range(3):
-            events.append(AuditEvent(
-                event_id=f"backup-{i}",
-                timestamp=datetime.now(timezone.utc) - timedelta(minutes=i * 2),  # 0, 2, 4 minutes ago
-                event_type=AuditEventType.BACKUP_CREATED,
-                severity=AuditSeverity.INFO,
-                user_id="export-user",
-                session_id=None,
-                source_ip="10.0.0.30",
-                resource_id=f"backup-{i}",
-                resource_type="backup",
-                operation="create_backup",
-                details={"backup_size": "100MB", "backup_type": "full"},
-                success=True,
-            ))
-        
+            events.append(
+                AuditEvent(
+                    event_id=f"backup-{i}",
+                    timestamp=datetime.now(timezone.utc)
+                    - timedelta(minutes=i * 2),  # 0, 2, 4 minutes ago
+                    event_type=AuditEventType.BACKUP_CREATED,
+                    severity=AuditSeverity.INFO,
+                    user_id="export-user",
+                    session_id=None,
+                    source_ip="10.0.0.30",
+                    resource_id=f"backup-{i}",
+                    resource_type="backup",
+                    operation="create_backup",
+                    details={"backup_size": "100MB", "backup_type": "full"},
+                    success=True,
+                )
+            )
+
         # Add export events (need at least 2) - within 15 minute window
         for i in range(6):
-            events.append(AuditEvent(
-                event_id=f"export-{i}",
-                timestamp=datetime.now(timezone.utc) - timedelta(minutes=i * 1),  # 0, 1, 2, 3, 4, 5 minutes ago
-                event_type=AuditEventType.EXPORT_OPERATION,
-                severity=AuditSeverity.INFO,
-                user_id="export-user",
-                session_id=None,
-                source_ip="10.0.0.30",
-                resource_id=f"backup-{i}",
-                resource_type="backup",
-                operation="export_backup",
-                details={"export_size": "500MB", "format": "csv"},
-                success=True,
-            ))
+            events.append(
+                AuditEvent(
+                    event_id=f"export-{i}",
+                    timestamp=datetime.now(timezone.utc)
+                    - timedelta(minutes=i * 1),  # 0, 1, 2, 3, 4, 5 minutes ago
+                    event_type=AuditEventType.EXPORT_OPERATION,
+                    severity=AuditSeverity.INFO,
+                    user_id="export-user",
+                    session_id=None,
+                    source_ip="10.0.0.30",
+                    resource_id=f"backup-{i}",
+                    resource_type="backup",
+                    operation="export_backup",
+                    details={"export_size": "500MB", "format": "csv"},
+                    success=True,
+                )
+            )
 
         alerts = self.monitor.analyze_audit_events(events)
         assert len(alerts) == 1
@@ -214,20 +224,22 @@ class TestSecurityMonitor:
     def test_analyze_unauthorized_deletion(self):
         """Test detection of unauthorized deletion attempts."""
         # Create unauthorized deletion pattern
-        events = [AuditEvent(
-            event_id="delete-attempt",
-            timestamp=datetime.now(timezone.utc),
-            event_type=AuditEventType.BACKUP_DELETED,
-            severity=AuditSeverity.ERROR,
-            user_id="delete-user",
-            session_id=None,
-            source_ip="10.0.0.40",
-            resource_id="backup-123",
-            resource_type="backup",
-            operation="delete_backup",
-            details={"backup_id": "backup-123", "reason": "cleanup"},
-            success=False,
-        )]
+        events = [
+            AuditEvent(
+                event_id="delete-attempt",
+                timestamp=datetime.now(timezone.utc),
+                event_type=AuditEventType.BACKUP_DELETED,
+                severity=AuditSeverity.ERROR,
+                user_id="delete-user",
+                session_id=None,
+                source_ip="10.0.0.40",
+                resource_id="backup-123",
+                resource_type="backup",
+                operation="delete_backup",
+                details={"backup_id": "backup-123", "reason": "cleanup"},
+                success=False,
+            )
+        ]
 
         alerts = self.monitor.analyze_audit_events(events)
         assert len(alerts) == 1
@@ -302,17 +314,19 @@ class TestSecurityMonitor:
         # Create some test alerts
         alerts = []
         for i in range(5):
-            alerts.append(SecurityAlert(
-                alert_id=f"alert-{i}",
-                timestamp=datetime.now(timezone.utc),
-                event_type=SecurityEventType.SUSPICIOUS_ACCESS_PATTERN,
-                threat_level=ThreatLevel.HIGH,
-                user_id=f"user{i}",
-                resource_id=f"backup-{i}",
-                description=f"Test alert {i}",
-                details={},
-                resolved=False,
-            ))
+            alerts.append(
+                SecurityAlert(
+                    alert_id=f"alert-{i}",
+                    timestamp=datetime.now(timezone.utc),
+                    event_type=SecurityEventType.SUSPICIOUS_ACCESS_PATTERN,
+                    threat_level=ThreatLevel.HIGH,
+                    user_id=f"user{i}",
+                    resource_id=f"backup-{i}",
+                    description=f"Test alert {i}",
+                    details={},
+                    resolved=False,
+                )
+            )
 
         self.monitor.alerts = alerts
 
@@ -332,7 +346,7 @@ class TestSecurityEventCorrelator:
     def test_detect_privilege_escalation(self):
         """Test detection of privilege escalation patterns."""
         base_time = datetime.now(timezone.utc)
-        
+
         # Create events showing privilege escalation
         events = [
             AuditEvent(
@@ -373,43 +387,47 @@ class TestSecurityEventCorrelator:
     def test_detect_data_exfiltration(self):
         """Test detection of data exfiltration patterns."""
         base_time = datetime.now(timezone.utc)
-        
+
         # Create events showing data exfiltration (need 3+ backups AND 2+ exports)
         events = []
-        
+
         # Add backup events (need at least 3)
         for i in range(3):
-            events.append(AuditEvent(
-                event_id=f"backup-{i}",
-                timestamp=base_time - timedelta(minutes=45 + i * 5),
-                event_type=AuditEventType.BACKUP_CREATED,
-                severity=AuditSeverity.INFO,
-                user_id="user1",
-                session_id=None,
-                source_ip="192.168.1.100",
-                resource_id=f"backup-{i}",
-                resource_type="backup",
-                operation="create_backup",
-                details={"backup_size": "100MB", "backup_type": "full"},
-                success=True,
-            ))
-        
+            events.append(
+                AuditEvent(
+                    event_id=f"backup-{i}",
+                    timestamp=base_time - timedelta(minutes=45 + i * 5),
+                    event_type=AuditEventType.BACKUP_CREATED,
+                    severity=AuditSeverity.INFO,
+                    user_id="user1",
+                    session_id=None,
+                    source_ip="192.168.1.100",
+                    resource_id=f"backup-{i}",
+                    resource_type="backup",
+                    operation="create_backup",
+                    details={"backup_size": "100MB", "backup_type": "full"},
+                    success=True,
+                )
+            )
+
         # Add export events (need at least 2)
         for i in range(2):
-            events.append(AuditEvent(
-                event_id=f"export-{i}",
-                timestamp=base_time - timedelta(minutes=30 + i * 5),
-                event_type=AuditEventType.EXPORT_OPERATION,
-                severity=AuditSeverity.INFO,
-                user_id="user1",
-                session_id=None,
-                source_ip="192.168.1.100",
-                resource_id=f"backup-{i}",
-                resource_type="backup",
-                operation="export_backup",
-                details={"export_size": "500MB", "format": "json"},
-                success=True,
-            ))
+            events.append(
+                AuditEvent(
+                    event_id=f"export-{i}",
+                    timestamp=base_time - timedelta(minutes=30 + i * 5),
+                    event_type=AuditEventType.EXPORT_OPERATION,
+                    severity=AuditSeverity.INFO,
+                    user_id="user1",
+                    session_id=None,
+                    source_ip="192.168.1.100",
+                    resource_id=f"backup-{i}",
+                    resource_type="backup",
+                    operation="export_backup",
+                    details={"export_size": "500MB", "format": "json"},
+                    success=True,
+                )
+            )
 
         patterns = self.correlator.correlate_events(events)
         assert len(patterns) == 1
@@ -419,24 +437,26 @@ class TestSecurityEventCorrelator:
     def test_detect_reconnaissance(self):
         """Test detection of reconnaissance patterns."""
         base_time = datetime.now(timezone.utc)
-        
+
         # Create events showing reconnaissance (need more than 20 view/list operations)
         events = []
         for i in range(25):  # More than 20 to trigger reconnaissance alert
-            events.append(AuditEvent(
-                event_id=f"event-{i}",
-                timestamp=base_time - timedelta(minutes=i),
-                event_type=AuditEventType.ACCESS_GRANTED,
-                severity=AuditSeverity.INFO,
-                user_id="user1",
-                session_id=None,
-                source_ip="192.168.1.100",
-                resource_id=f"resource-{i}",
-                resource_type="backup",
-                operation="list_backups",  # This contains "list" to trigger reconnaissance detection
-                details={"resource_type": "backup", "count": 10},
-                success=True,
-            ))
+            events.append(
+                AuditEvent(
+                    event_id=f"event-{i}",
+                    timestamp=base_time - timedelta(minutes=i),
+                    event_type=AuditEventType.ACCESS_GRANTED,
+                    severity=AuditSeverity.INFO,
+                    user_id="user1",
+                    session_id=None,
+                    source_ip="192.168.1.100",
+                    resource_id=f"resource-{i}",
+                    resource_type="backup",
+                    operation="list_backups",  # This contains "list" to trigger reconnaissance detection
+                    details={"resource_type": "backup", "count": 10},
+                    success=True,
+                )
+            )
 
         patterns = self.correlator.correlate_events(events)
         assert len(patterns) == 1
@@ -446,7 +466,7 @@ class TestSecurityEventCorrelator:
     def test_correlate_events_time_window(self):
         """Test that correlation respects time windows."""
         base_time = datetime.now(timezone.utc)
-        
+
         # Create events outside correlation window
         events = [
             AuditEvent(
@@ -551,45 +571,49 @@ def test_security_monitor_integration():
 def test_security_event_correlation_complex_pattern():
     """Test complex security event correlation patterns."""
     correlator = SecurityEventCorrelator(correlation_window_hours=1)
-    
+
     base_time = datetime.now(timezone.utc)
-    
+
     # Create complex pattern: user accesses multiple resources, then exports data
     events = []
-    
+
     # Add backup events (need at least 3 for data exfiltration detection)
     for i in range(3):
-        events.append(AuditEvent(
-            event_id=f"backup-{i}",
-            timestamp=base_time - timedelta(minutes=45 + i * 5),
-            event_type=AuditEventType.BACKUP_CREATED,
-            severity=AuditSeverity.INFO,
-            user_id="user1",
-            session_id=None,
-            source_ip="192.168.1.100",
-            resource_id=f"backup-{i}",
-            resource_type="backup",
-            operation="create_backup",
-            details={"backup_size": "100MB", "backup_type": "full"},
-            success=True,
-        ))
-    
+        events.append(
+            AuditEvent(
+                event_id=f"backup-{i}",
+                timestamp=base_time - timedelta(minutes=45 + i * 5),
+                event_type=AuditEventType.BACKUP_CREATED,
+                severity=AuditSeverity.INFO,
+                user_id="user1",
+                session_id=None,
+                source_ip="192.168.1.100",
+                resource_id=f"backup-{i}",
+                resource_type="backup",
+                operation="create_backup",
+                details={"backup_size": "100MB", "backup_type": "full"},
+                success=True,
+            )
+        )
+
     # Add export events (need at least 2 for data exfiltration detection)
     for i in range(2):
-        events.append(AuditEvent(
-            event_id=f"export-{i}",
-            timestamp=base_time - timedelta(minutes=15 + i * 5),
-            event_type=AuditEventType.EXPORT_OPERATION,
-            severity=AuditSeverity.INFO,
-            user_id="user1",
-            session_id=None,
-            source_ip="192.168.1.100",
-            resource_id=f"backup-{i}",
-            resource_type="backup",
-            operation="export_backup",
-            details={"export_size": "1GB", "format": "json"},
-            success=True,
-        ))
+        events.append(
+            AuditEvent(
+                event_id=f"export-{i}",
+                timestamp=base_time - timedelta(minutes=15 + i * 5),
+                event_type=AuditEventType.EXPORT_OPERATION,
+                severity=AuditSeverity.INFO,
+                user_id="user1",
+                session_id=None,
+                source_ip="192.168.1.100",
+                resource_id=f"backup-{i}",
+                resource_type="backup",
+                operation="export_backup",
+                details={"export_size": "1GB", "format": "json"},
+                success=True,
+            )
+        )
 
     patterns = correlator.correlate_events(events)
     assert len(patterns) == 1

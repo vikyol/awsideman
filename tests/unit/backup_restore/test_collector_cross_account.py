@@ -211,7 +211,7 @@ class TestIdentityCenterCollectorCrossAccount:
         mock_target_collector.collect_groups = AsyncMock(return_value=[])
         mock_target_collector.collect_permission_sets = AsyncMock(return_value=[])
         mock_target_collector.collect_assignments = AsyncMock(return_value=[])
-        
+
         # Add missing client_manager attribute
         mock_client_manager = Mock()
         mock_client_manager.region = "us-east-1"
@@ -247,7 +247,7 @@ class TestIdentityCenterCollectorCrossAccount:
         mock_target_collector.collect_groups = AsyncMock(return_value=[])
         mock_target_collector.collect_permission_sets = AsyncMock(return_value=[])
         mock_target_collector.collect_assignments = AsyncMock(return_value=[])
-        
+
         # Add missing client_manager attribute
         mock_client_manager = Mock()
         mock_client_manager.region = "us-east-1"
@@ -285,7 +285,7 @@ class TestIdentityCenterCollectorCrossAccount:
         mock_target_collector.collect_groups = AsyncMock(return_value=[])
         mock_target_collector.collect_permission_sets = AsyncMock(return_value=[])
         mock_target_collector.collect_assignments = AsyncMock(return_value=[])
-        
+
         # Add missing client_manager attribute
         mock_client_manager = Mock()
         mock_client_manager.region = "us-east-1"
@@ -322,7 +322,7 @@ class TestIdentityCenterCollectorCrossAccount:
         mock_target_collector.collect_groups = AsyncMock(return_value=[])
         mock_target_collector.collect_permission_sets = AsyncMock(return_value=[])
         mock_target_collector.collect_assignments = AsyncMock(return_value=[])
-        
+
         # Add missing client_manager attribute
         mock_client_manager = Mock()
         mock_client_manager.region = "us-east-1"

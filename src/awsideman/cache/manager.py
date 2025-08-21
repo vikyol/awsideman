@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, List
+from typing import Any, Dict, List, Optional, Union
 
 from ..encryption.provider import EncryptionError, EncryptionProviderFactory
 from ..utils.config import Config
@@ -1434,10 +1434,10 @@ class CacheManager:
             List of dictionaries containing entry metadata
         """
         entries = []
-        
+
         try:
             # Try to get entries from backend if available
-            if self.backend and hasattr(self.backend, 'get_recent_entries'):
+            if self.backend and hasattr(self.backend, "get_recent_entries"):
                 entries = self.backend.get_recent_entries(limit)
             elif self.path_manager:
                 # Fallback to legacy file-based approach
@@ -1447,7 +1447,7 @@ class CacheManager:
                     cache_files = list(cache_dir.glob("*.json"))
                     # Sort by modification time (newest first)
                     cache_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                    
+
                     for cache_file in cache_files[:limit]:
                         try:
                             # Read cache entry metadata
@@ -1459,7 +1459,7 @@ class CacheManager:
                             continue
         except Exception as e:
             logger.warning(f"Error getting recent entries: {e}")
-        
+
         return entries
 
     def _read_cache_entry_metadata(self, cache_file: Path) -> Optional[Dict[str, Any]]:
@@ -1476,28 +1476,28 @@ class CacheManager:
             stat = cache_file.stat()
             # Extract key from filename (remove .json extension)
             key = cache_file.stem
-            
+
             # Try to read the cache entry JSON to get TTL and other metadata
             try:
                 with open(cache_file, "r", encoding="utf-8") as f:
                     cache_data = json.load(f)
-                
+
                 # Extract metadata from the JSON
                 created_at = cache_data.get("created_at", 0)
                 ttl = cache_data.get("ttl", 0)
                 operation = cache_data.get("operation", "unknown")
-                
+
                 # Calculate age and remaining TTL
                 current_time = time.time()
                 age_seconds = current_time - created_at
                 remaining_ttl = ttl - age_seconds
-                
+
                 # Format TTL information
                 if remaining_ttl > 0:
                     ttl_display = f"{remaining_ttl:.0f}s remaining"
                 else:
                     ttl_display = "Expired"
-                
+
                 # Calculate age
                 if age_seconds < 60:
                     age_display = f"{age_seconds:.0f}s ago"
@@ -1505,7 +1505,7 @@ class CacheManager:
                     age_display = f"{age_seconds/60:.0f}m ago"
                 else:
                     age_display = f"{age_seconds/3600:.1f}h ago"
-                
+
                 return {
                     "key": key,
                     "operation": operation,
@@ -1514,14 +1514,14 @@ class CacheManager:
                     "size": f"{stat.st_size} bytes",
                     "modified": stat.st_mtime,
                     "file_size": stat.st_size,
-                    "is_expired": remaining_ttl <= 0
+                    "is_expired": remaining_ttl <= 0,
                 }
-                
+
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 # If we can't read the JSON, return basic file info
                 logger.debug(f"Could not read cache entry metadata from {cache_file}: {e}")
                 pass
-            
+
             # Fallback to basic file metadata
             return {
                 "key": key,
@@ -1531,9 +1531,9 @@ class CacheManager:
                 "size": f"{stat.st_size} bytes",
                 "modified": stat.st_mtime,
                 "file_size": stat.st_size,
-                "is_expired": False
+                "is_expired": False,
             }
-            
+
         except Exception as e:
             logger.debug(f"Error reading cache entry metadata from {cache_file}: {e}")
             return None

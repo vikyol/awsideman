@@ -265,11 +265,11 @@ class TestStreamProcessor:
         """Create mock batch processor."""
         batch_processor = Mock(spec=BatchProcessor)
         batch_processor.process_assignments_parallel.return_value = ([], [])
-        
+
         # Mock context manager protocol
         batch_processor.__enter__ = Mock(return_value=batch_processor)
         batch_processor.__exit__ = Mock(return_value=None)
-        
+
         return batch_processor
 
     def test_stream_processor_small_list(self, mock_batch_processor):
@@ -371,11 +371,11 @@ class TestPerformanceOptimizer:
         optimizer = PerformanceOptimizer()
 
         # Create metrics with poor performance
-        from datetime import datetime, timezone, timedelta
-        
+        from datetime import datetime, timedelta, timezone
+
         start_time = datetime.now(timezone.utc)
         end_time = start_time + timedelta(seconds=60)
-        
+
         metrics = PerformanceMetrics(
             operation_id="test",
             start_time=start_time,
@@ -572,9 +572,9 @@ class TestPerformanceBenchmarks:
         # Cache hits should be at least as fast as misses (allowing for measurement noise)
         # Use a more generous threshold for very small timing differences
         threshold = 1.5 if avg_miss_time < 1e-6 else 1.1
-        assert avg_hit_time <= avg_miss_time * threshold, (
-            f"Cache hit time ({avg_hit_time:.6f}s) should be <= miss time ({avg_miss_time:.6f}s) * {threshold}"
-        )
+        assert (
+            avg_hit_time <= avg_miss_time * threshold
+        ), f"Cache hit time ({avg_hit_time:.6f}s) should be <= miss time ({avg_miss_time:.6f}s) * {threshold}"
 
     @pytest.mark.slow
     def test_parallel_vs_sequential_processing(self):

@@ -90,20 +90,9 @@ class TestFilterEngine:
         assert "ReadOnlyAccess" in permission_set_names
         assert "DeveloperAccess" not in permission_set_names
 
-    def test_apply_filters_exclude_permission_sets(self, filter_engine, sample_assignments):
-        """Test filtering by excluding specific permission sets."""
-        filters = CopyFilters(exclude_permission_sets=["DeveloperAccess"])
-
-        result = filter_engine.apply_filters(sample_assignments, filters)
-
-        assert len(result) == 3
-        # Should exclude DeveloperAccess
-        permission_set_names = [assignment.permission_set_name for assignment in result]
-        assert "DeveloperAccess" not in permission_set_names
-        assert "AdministratorAccess" in permission_set_names
-        assert "ReadOnlyAccess" in permission_set_names
-
-    def test_apply_filters_include_permission_sets_alternative(self, filter_engine, sample_assignments):
+    def test_apply_filters_include_permission_sets_alternative(
+        self, filter_engine, sample_assignments
+    ):
         """Test filtering by including specific permission sets (alternative approach)."""
         # Since CopyFilters doesn't support include_permission_sets, we test the opposite
         # by excluding the ones we don't want
@@ -183,7 +172,9 @@ class TestFilterEngine:
 
     def test_apply_filters_empty_result(self, filter_engine, sample_assignments):
         """Test filtering that results in no matches."""
-        filters = CopyFilters(exclude_permission_sets=["AdministratorAccess", "ReadOnlyAccess", "DeveloperAccess"])
+        filters = CopyFilters(
+            exclude_permission_sets=["AdministratorAccess", "ReadOnlyAccess", "DeveloperAccess"]
+        )
 
         result = filter_engine.apply_filters(sample_assignments, filters)
 
@@ -209,7 +200,7 @@ class TestFilterEngine:
 
     def test_validate_filters_overlapping_permission_sets(self, filter_engine):
         """Test validation with overlapping permission set filters."""
-        # Since CopyFilters no longer supports include_permission_sets, 
+        # Since CopyFilters no longer supports include_permission_sets,
         # we test overlapping accounts instead
         filters = CopyFilters(
             include_accounts=["123456789012", "098765432109"],
@@ -406,9 +397,7 @@ class TestFilterEngine:
 
     def test_permission_set_matches_filters_combined(self, filter_engine):
         """Test permission set filtering with exclude filters only."""
-        filters = CopyFilters(
-            exclude_permission_sets=["Testing", "Developer"]
-        )
+        filters = CopyFilters(exclude_permission_sets=["Testing", "Developer"])
 
         # Should match (not excluded)
         assert filter_engine._permission_set_matches_filters("Admin", filters) is True

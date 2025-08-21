@@ -95,7 +95,12 @@ class TestPreviewGenerator:
         """Test successful assignment copy preview generation."""
         # Mock the internal methods that PreviewGenerator actually calls
         preview_generator.assignment_retriever._fetch_entity_assignments.side_effect = [
-            [{"permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123", "account_id": "123456789012"}],  # First call for source
+            [
+                {
+                    "permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123",
+                    "account_id": "123456789012",
+                }
+            ],  # First call for source
             [],  # Second call for target
         ]
         preview_generator.assignment_retriever._enrich_assignments.side_effect = [
@@ -122,7 +127,12 @@ class TestPreviewGenerator:
         """Test assignment copy preview with filters applied."""
         # Mock the internal methods that PreviewGenerator actually calls
         preview_generator.assignment_retriever._fetch_entity_assignments.side_effect = [
-            [{"permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123", "account_id": "123456789012"}],  # First call for source
+            [
+                {
+                    "permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123",
+                    "account_id": "123456789012",
+                }
+            ],  # First call for source
             [],  # Second call for target
         ]
         preview_generator.assignment_retriever._enrich_assignments.side_effect = [
@@ -148,8 +158,18 @@ class TestPreviewGenerator:
         """Test assignment copy preview with duplicate assignments."""
         # Mock the internal methods that PreviewGenerator actually calls
         preview_generator.assignment_retriever._fetch_entity_assignments.side_effect = [
-            [{"permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123", "account_id": "123456789012"}],  # First call for source
-            [{"permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123", "account_id": "123456789012"}],  # Second call for target (duplicate)
+            [
+                {
+                    "permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123",
+                    "account_id": "123456789012",
+                }
+            ],  # First call for source
+            [
+                {
+                    "permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123",
+                    "account_id": "123456789012",
+                }
+            ],  # Second call for target (duplicate)
         ]
         preview_generator.assignment_retriever._enrich_assignments.side_effect = [
             sample_assignments,  # First call for source
@@ -169,11 +189,13 @@ class TestPreviewGenerator:
         # Mock the internal methods to avoid the iteration error
         preview_generator.assignment_retriever._fetch_entity_assignments.return_value = []
         preview_generator.assignment_retriever._enrich_assignments.return_value = []
-        
+
         # The PreviewGenerator doesn't validate entity types, so this should not raise an error
         # It will just return an empty preview since no assignments are found
-        preview = preview_generator.preview_assignment_copy("user-123", "INVALID", "user-456", "USER")
-        
+        preview = preview_generator.preview_assignment_copy(
+            "user-123", "INVALID", "user-456", "USER"
+        )
+
         assert preview["operation_type"] == "assignment_copy"
         assert preview["copy_summary"]["total_source_assignments"] == 0
         assert preview["copy_summary"]["assignments_to_copy"] == 0
@@ -238,7 +260,12 @@ class TestPreviewGenerator:
         """Test successful bulk operations preview."""
         # Mock the internal methods that PreviewGenerator actually calls
         preview_generator.assignment_retriever._fetch_entity_assignments.side_effect = [
-            [{"permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123", "account_id": "123456789012"}],  # First call for source
+            [
+                {
+                    "permission_set_arn": "arn:aws:sso:::permissionSet/test/ps-123",
+                    "account_id": "123456789012",
+                }
+            ],  # First call for source
             [],  # Second call for target
         ]
         preview_generator.assignment_retriever._enrich_assignments.side_effect = [
@@ -296,7 +323,7 @@ class TestPreviewGenerator:
         preview_generator.assignment_retriever._fetch_entity_assignments.side_effect = Exception(
             "API Error"
         )
-    
+
         operations = [
             {
                 "type": "assignment_copy",
@@ -306,9 +333,9 @@ class TestPreviewGenerator:
                 "target_entity_type": "USER",
             }
         ]
-    
+
         preview = preview_generator.preview_bulk_operations(operations)
-    
+
         # The error is caught and handled gracefully, so it returns success with empty results
         assert preview["operation_summaries"][0]["status"] == "success"
         assert preview["overall_impact"]["total_assignments_to_copy"] == 0

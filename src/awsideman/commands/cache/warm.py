@@ -1,6 +1,5 @@
 """Warm cache command for awsideman."""
 
-import sys
 from typing import Optional
 
 import typer
@@ -109,59 +108,68 @@ def warm_cache(
         raise typer.Exit(1)
 
 
-def _execute_command_with_cli_runner(command_parts: list, profile: Optional[str], region: Optional[str]) -> None:
+def _execute_command_with_cli_runner(
+    command_parts: list, profile: Optional[str], region: Optional[str]
+) -> None:
     """Execute a command using Typer's CliRunner."""
     command_group = command_parts[0]
     subcommand = command_parts[1] if len(command_parts) > 1 else None
-    
+
     # Build the command arguments for CliRunner
     runner_args = [command_group]
     if subcommand:
         runner_args.append(subcommand)
-    
+
     # Add profile and region options if specified
     if profile:
         runner_args.extend(["--profile", profile])
     if region:
         runner_args.extend(["--region", region])
-    
+
     # Add any additional arguments from the original command
     if len(command_parts) > 2:
         runner_args.extend(command_parts[2:])
-    
+
     try:
         # Import the appropriate app based on command group
         if command_group == "user":
             from ..user import app as user_app
+
             app = user_app
         elif command_group == "group":
             from ..group import app as group_app
+
             app = group_app
         elif command_group == "permission-set":
             from ..permission_set import app as permission_set_app
+
             app = permission_set_app
         elif command_group == "assignment":
             from ..assignment import app as assignment_app
+
             app = assignment_app
         elif command_group == "org":
             from ..org import app as org_app
+
             app = org_app
         elif command_group == "profile":
             from ..profile import app as profile_app
+
             app = profile_app
         elif command_group == "sso":
             from ..sso import app as sso_app
+
             app = sso_app
         else:
             raise ValueError(f"Unsupported command group: {command_group}")
-        
+
         # Execute the command using CliRunner
         runner = CliRunner()
         result = runner.invoke(app, runner_args[1:])  # Skip the command group name
-        
+
         if result.exit_code != 0:
             raise RuntimeError(f"Command failed with exit code {result.exit_code}: {result.stdout}")
-            
+
     except ImportError as e:
         raise RuntimeError(f"Failed to import command module for {command_group}: {e}")
     except Exception as e:

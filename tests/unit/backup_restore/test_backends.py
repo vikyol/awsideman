@@ -427,23 +427,23 @@ class TestS3StorageBackend:
         pytest.importorskip("aioboto3")
 
         backend = S3StorageBackend(bucket_name="test-bucket")
-        
-                # Create proper session and client mocks
+
+        # Create proper session and client mocks
         session = Mock()
         client = AsyncMock()
         client.put_object.return_value = {}
-        
+
         # Create async context manager mock
         async_context = AsyncMock()
         async_context.__aenter__.return_value = client
-        
+
         # Mock the session to return a client when client() is called
         session.client.return_value = async_context
-        
+
         # Mock the session creation
         with patch.object(backend, "_create_session") as mock_create_session:
             mock_create_session.return_value = session
-            
+
             key = "test/data.bin"
             data = b"test data"
 

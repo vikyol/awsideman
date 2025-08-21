@@ -4,12 +4,11 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
-import pytest
 
 from src.awsideman.backup_restore.audit import (
     AuditEvent,
-    AuditLogger,
     AuditEventType,
+    AuditLogger,
     AuditSeverity,
 )
 
@@ -124,6 +123,7 @@ class TestAuditLogger:
     def setup_method(self):
         """Set up test fixtures."""
         from pathlib import Path
+
         self.logger = AuditLogger(
             log_file=Path("/tmp/test_audit.log"),
             enable_console=False,
@@ -149,26 +149,25 @@ class TestAuditLogger:
         )
 
         # Test console logging (which is enabled by default)
-        with patch("builtins.print") as mock_print:
-            # Create a new logger instance with console enabled
-            test_logger = AuditLogger(
-                log_file=None,  # No file logging
-                enable_console=True,
-                enable_structured=True,
-                retention_days=30,
-            )
+        # Create a new logger instance with console enabled
+        test_logger = AuditLogger(
+            log_file=None,  # No file logging
+            enable_console=True,
+            enable_structured=True,
+            retention_days=30,
+        )
 
-            test_logger.log_event(event)
+        test_logger.log_event(event)
 
-            # Verify that the event was logged (console logging should work)
-            # The actual logging goes through the logging system, not print
-            # So we just verify the method completes without error
-            assert event.event_id == "test-123"
+        # Verify that the event was logged (console logging should work)
+        # The actual logging goes through the logging system
+        # So we just verify the method completes without error
+        assert event.event_id == "test-123"
 
     def test_log_backup_operation(self):
         """Test logging backup operations."""
         # Mock the logger's info method to capture the log message
-        with patch.object(self.logger.logger, 'info') as mock_info:
+        with patch.object(self.logger.logger, "info") as mock_info:
             self.logger.log_backup_operation(
                 operation="create_full_backup",
                 backup_id="backup-123",
@@ -186,7 +185,7 @@ class TestAuditLogger:
     def test_log_restore_operation(self):
         """Test logging restore operations."""
         # Mock the logger's info method to capture the log message
-        with patch.object(self.logger.logger, 'info') as mock_info:
+        with patch.object(self.logger.logger, "info") as mock_info:
             self.logger.log_restore_operation(
                 operation="restore_backup",
                 backup_id="backup-123",
@@ -266,45 +265,49 @@ class TestAuditLogger:
         with patch("builtins.open", create=True) as mock_open:
             mock_file = Mock()
             mock_open.return_value.__enter__.return_value = mock_file
-            
+
             # Mock file reading (first open call for reading)
-            mock_file.__iter__ = Mock(return_value=iter([
-                json.dumps(
-                    AuditEvent(
-                        event_id="old-event",
-                        timestamp=datetime.now(timezone.utc) - timedelta(days=2),
-                        event_type=AuditEventType.BACKUP_CREATED,
-                        severity=AuditSeverity.INFO,
-                        user_id="old-user",
-                        session_id=None,
-                        source_ip=None,
-                        resource_id="old-backup",
-                        resource_type="backup",
-                        operation="create_backup",
-                        details={},
-                        success=True,
-                    ).to_dict()
+            mock_file.__iter__ = Mock(
+                return_value=iter(
+                    [
+                        json.dumps(
+                            AuditEvent(
+                                event_id="old-event",
+                                timestamp=datetime.now(timezone.utc) - timedelta(days=2),
+                                event_type=AuditEventType.BACKUP_CREATED,
+                                severity=AuditSeverity.INFO,
+                                user_id="old-user",
+                                session_id=None,
+                                source_ip=None,
+                                resource_id="old-backup",
+                                resource_type="backup",
+                                operation="create_backup",
+                                details={},
+                                success=True,
+                            ).to_dict()
+                        )
+                        + "\n",
+                        json.dumps(
+                            AuditEvent(
+                                event_id="recent-event",
+                                timestamp=datetime.now(timezone.utc),
+                                event_type=AuditEventType.BACKUP_CREATED,
+                                severity=AuditSeverity.INFO,
+                                user_id="recent-user",
+                                session_id=None,
+                                source_ip=None,
+                                resource_id="recent-backup",
+                                resource_type="backup",
+                                operation="create_backup",
+                                details={},
+                                success=True,
+                            ).to_dict()
+                        )
+                        + "\n",
+                    ]
                 )
-                + "\n",
-                json.dumps(
-                    AuditEvent(
-                        event_id="recent-event",
-                        timestamp=datetime.now(timezone.utc),
-                        event_type=AuditEventType.BACKUP_CREATED,
-                        severity=AuditSeverity.INFO,
-                        user_id="recent-user",
-                        session_id=None,
-                        source_ip=None,
-                        resource_id="recent-backup",
-                        resource_type="backup",
-                        operation="create_backup",
-                        details={},
-                        success=True,
-                    ).to_dict()
-                )
-                + "\n",
-            ]))
-            
+            )
+
             # Mock file writing (second open call for writing)
             mock_file.write = Mock()
 

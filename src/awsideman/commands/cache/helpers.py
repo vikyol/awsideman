@@ -51,28 +51,34 @@ def get_cache_manager() -> CacheManager:
         # Try to load advanced cache configuration from config file
         from ...cache.config import AdvancedCacheConfig
         from ...utils.config import Config
-        
+
         config = Config()
-        cache_config_data = config.get_cache_config()
-        
+
         # Check if we have advanced cache configuration
         all_config_data = config.get_all()
         if "cache" in all_config_data and isinstance(all_config_data["cache"], dict):
             cache_section = all_config_data["cache"]
-            
+
             # If we have advanced settings, use AdvancedCacheConfig
-            if any(key in cache_section for key in [
-                "backend_type", "encryption_enabled", "encryption_type", 
-                "dynamodb_table_name", "dynamodb_region", "dynamodb_profile"
-            ]):
+            if any(
+                key in cache_section
+                for key in [
+                    "backend_type",
+                    "encryption_enabled",
+                    "encryption_type",
+                    "dynamodb_table_name",
+                    "dynamodb_region",
+                    "dynamodb_profile",
+                ]
+            ):
                 logger.debug("Loading advanced cache configuration")
                 advanced_config = AdvancedCacheConfig.from_config_file()
                 return CacheManager(config=advanced_config)
-        
+
         # Fall back to basic configuration
         logger.debug("Using basic cache configuration")
         return CacheManager()
-        
+
     except Exception as e:
         logger.warning(f"Failed to load advanced cache configuration, using defaults: {e}")
         return CacheManager()

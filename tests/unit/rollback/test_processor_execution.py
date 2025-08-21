@@ -1,6 +1,6 @@
 """Tests for RollbackProcessor execution engine - Ultra Simplified Version."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from src.awsideman.rollback.models import (
     AssignmentState,

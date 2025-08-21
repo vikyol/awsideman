@@ -1,6 +1,7 @@
 """Tests for the org account command."""
 
 from typer.testing import CliRunner
+import re
 
 from src.awsideman.commands.org import app
 
@@ -69,9 +70,13 @@ def test_account_command_options():
     runner = CliRunner()
     result = runner.invoke(app, ["account", "--help"])
     assert result.exit_code == 0
-    assert "--json" in result.output
-    assert "--no-cache" in result.output
-    assert "--profile" in result.output
+    
+    # Strip ANSI color codes for more reliable string matching
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    
+    assert "--json" in clean_output
+    assert "--no-cache" in clean_output
+    assert "--profile" in clean_output
 
 
 def test_account_command_short_profile_option():

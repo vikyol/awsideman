@@ -377,7 +377,9 @@ class TestTemplateStorageManager:
         mock_template.get_total_assignments.return_value = 2
 
         with patch.object(storage_manager, "list_templates", return_value=[mock_template_info]):
-            with patch.object(storage_manager, "_load_template_from_path", return_value=mock_template):
+            with patch.object(
+                storage_manager, "_load_template_from_path", return_value=mock_template
+            ):
                 with patch("pathlib.Path.exists", return_value=True):
                     with patch("pathlib.Path.stat") as mock_stat:
                         mock_stat.return_value.st_size = 1024

@@ -8,7 +8,6 @@ from typer.testing import CliRunner
 from src.awsideman.commands.backup.config import app
 
 
-
 @pytest.fixture
 def runner():
     return CliRunner()

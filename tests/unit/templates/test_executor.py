@@ -456,9 +456,7 @@ class TestTemplateExecutor:
     def test_get_permission_set_arn_success(self, executor):
         """Test successful permission set ARN retrieval."""
         mock_client = MagicMock()
-        mock_client.list_permission_sets.return_value = {
-            "PermissionSets": ["arn:permission-set"]
-        }
+        mock_client.list_permission_sets.return_value = {"PermissionSets": ["arn:permission-set"]}
         mock_client.describe_permission_set.return_value = {
             "PermissionSet": {"Name": "DeveloperAccess"}
         }
@@ -470,9 +468,7 @@ class TestTemplateExecutor:
     def test_get_permission_set_arn_not_found(self, executor):
         """Test permission set ARN retrieval when not found."""
         mock_client = MagicMock()
-        mock_client.list_permission_sets.return_value = {
-            "PermissionSets": ["arn:permission-set"]
-        }
+        mock_client.list_permission_sets.return_value = {"PermissionSets": ["arn:permission-set"]}
         mock_client.describe_permission_set.return_value = {
             "PermissionSet": {"Name": "DifferentName"}
         }

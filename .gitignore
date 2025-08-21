@@ -9,6 +9,7 @@ __pycache__/
 # AI Prompts
 .prompts
 .cursor
+.kiro
 
 # Distribution / packaging
 .Python

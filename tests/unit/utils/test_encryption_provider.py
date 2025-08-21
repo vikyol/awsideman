@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from unittest.mock import patch
 
 from src.awsideman.encryption.provider import (
     EncryptionError,
@@ -194,12 +195,17 @@ class TestEncryptionProviderFactory:
 
     def test_create_aes_provider_missing_key_manager(self):
         """Test creating AES provider without key_manager works automatically."""
-        # Now creates a KeyManager automatically instead of raising an error
-        provider = EncryptionProviderFactory.create_provider("aes256")
+        # Mock keyring to avoid CI environment issues
+        with patch("src.awsideman.encryption.key_manager.keyring") as mock_keyring:
+            # Provide a proper base64-encoded 32-byte key
+            mock_keyring.get_password.return_value = "6t2yIfWjSMKHcbX5p7CjYfFwMDNdVnteH1RD3Sbds2A="
+            
+            # Now creates a KeyManager automatically instead of raising an error
+            provider = EncryptionProviderFactory.create_provider("aes256")
 
-        assert provider.get_encryption_type() == "aes256"
-        # Should have created a key manager automatically
-        assert hasattr(provider, "key_manager")
+            assert provider.get_encryption_type() == "aes256"
+            # Should have created a key manager automatically
+            assert hasattr(provider, "key_manager")
 
     def test_create_aes_provider_with_key_manager(self):
         """Test creating AES provider with key manager."""

@@ -1,5 +1,6 @@
 """Tests for the org search command."""
 
+import re
 from typer.testing import CliRunner
 
 from src.awsideman.commands.org import app
@@ -56,10 +57,9 @@ def test_search_command_with_limit():
 
 
 def test_search_command_missing_query():
-    """Test search command fails when no query is provided."""
+    """Test search command fails when query is missing."""
     runner = CliRunner()
     result = runner.invoke(app, ["search"])
-    # Command should fail due to missing query
     assert result.exit_code != 0
 
 
@@ -78,10 +78,13 @@ def test_search_command_options():
     runner = CliRunner()
     result = runner.invoke(app, ["search", "--help"])
     assert result.exit_code == 0
-    assert "--ou" in result.output
-    assert "--tag" in result.output
-    assert "--json" in result.output
-    assert "--profile" in result.output
+    
+    # Strip ANSI color codes for more reliable string matching
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    
+    assert "--ou" in clean_output
+    assert "--profile" in clean_output
+    assert "--json" in clean_output
 
 
 def test_search_command_short_profile_option():

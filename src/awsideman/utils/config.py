@@ -175,10 +175,10 @@ class Config:
         try:
             with open(config_file_yaml, "r", encoding="utf-8") as f:
                 self.config_data = yaml.safe_load(f) or {}
-            
+
             # Post-process configuration to expand tilde paths
             self._expand_tilde_paths()
-            
+
         except yaml.YAMLError as e:
             console.print(
                 f"[red]Error: Configuration file {config_file_yaml} is not valid YAML: {e}[/red]"
@@ -194,18 +194,24 @@ class Config:
             # Expand tilde paths in cache configuration
             if "cache" in self.config_data and isinstance(self.config_data["cache"], dict):
                 cache_config = self.config_data["cache"]
-                if "file_cache_dir" in cache_config and isinstance(cache_config["file_cache_dir"], str):
-                    cache_config["file_cache_dir"] = str(Path(cache_config["file_cache_dir"]).expanduser())
-            
+                if "file_cache_dir" in cache_config and isinstance(
+                    cache_config["file_cache_dir"], str
+                ):
+                    cache_config["file_cache_dir"] = str(
+                        Path(cache_config["file_cache_dir"]).expanduser()
+                    )
+
             # Expand tilde paths in other configuration sections that might have paths
             for section_name, section_data in self.config_data.items():
                 if isinstance(section_data, dict):
                     for key, value in section_data.items():
                         if isinstance(value, str) and value.startswith("~"):
                             section_data[key] = str(Path(value).expanduser())
-                            
+
         except Exception as e:
-            console.print(f"[yellow]Warning: Could not expand tilde paths in configuration: {e}[/yellow]")
+            console.print(
+                f"[yellow]Warning: Could not expand tilde paths in configuration: {e}[/yellow]"
+            )
 
     def _load_and_migrate_json_config(self):
         """Load JSON config and migrate to YAML format."""

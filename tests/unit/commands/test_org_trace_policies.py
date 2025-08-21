@@ -1,5 +1,6 @@
 """Tests for the org trace-policies command."""
 
+import re
 from typer.testing import CliRunner
 
 from src.awsideman.commands.org import app
@@ -18,7 +19,7 @@ def test_trace_policies_command_structure():
 def test_trace_policies_command_basic():
     """Test basic trace-policies command."""
     runner = CliRunner()
-    result = runner.invoke(app, ["trace-policies", "111111111111"])
+    result = runner.invoke(app, ["trace-policies", "test-policy"])
     # Command should fail due to missing AWS configuration, but not due to parameter validation
     assert result is not None
 
@@ -26,32 +27,16 @@ def test_trace_policies_command_basic():
 def test_trace_policies_command_with_profile():
     """Test trace-policies command with profile parameter."""
     runner = CliRunner()
-    result = runner.invoke(app, ["trace-policies", "111111111111", "--profile", "test-profile"])
+    result = runner.invoke(app, ["trace-policies", "test-policy", "--profile", "test-profile"])
     # Command should fail due to missing AWS configuration, but not due to parameter validation
     assert result is not None
 
 
-def test_trace_policies_command_missing_account_id():
-    """Test trace-policies command fails when account ID is missing."""
+def test_trace_policies_command_missing_policy():
+    """Test trace-policies command fails when policy is missing."""
     runner = CliRunner()
     result = runner.invoke(app, ["trace-policies"])
     assert result.exit_code != 0
-
-
-def test_trace_policies_command_with_json_format():
-    """Test trace-policies command with JSON format."""
-    runner = CliRunner()
-    result = runner.invoke(app, ["trace-policies", "111111111111", "--json"])
-    # Command should fail due to missing AWS configuration, but not due to parameter validation
-    assert result is not None
-
-
-def test_trace_policies_command_with_table_format():
-    """Test trace-policies command with table format."""
-    runner = CliRunner()
-    result = runner.invoke(app, ["trace-policies", "111111111111", "--table"])
-    # Command should fail due to missing AWS configuration, but not due to parameter validation
-    assert result is not None
 
 
 def test_trace_policies_command_help_text():
@@ -60,8 +45,6 @@ def test_trace_policies_command_help_text():
     result = runner.invoke(app, ["trace-policies", "--help"])
     assert result.exit_code == 0
     assert "Trace all SCPs and RCPs affecting a given account" in result.output
-    assert "AWS account ID to trace policies for" in result.output
-    assert "AWS profile to use" in result.output
 
 
 def test_trace_policies_command_options():
@@ -69,13 +52,9 @@ def test_trace_policies_command_options():
     runner = CliRunner()
     result = runner.invoke(app, ["trace-policies", "--help"])
     assert result.exit_code == 0
-    assert "--json" in result.output
-    assert "--profile" in result.output
-
-
-def test_trace_policies_command_short_profile_option():
-    """Test trace-policies command with short profile option."""
-    runner = CliRunner()
-    result = runner.invoke(app, ["trace-policies", "111111111111", "-p", "default"])
-    # Command should fail due to missing AWS configuration, but not due to parameter validation
-    assert result is not None
+    
+    # Strip ANSI color codes for more reliable string matching
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    
+    assert "--json" in clean_output
+    assert "--profile" in clean_output

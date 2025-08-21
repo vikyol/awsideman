@@ -154,7 +154,7 @@ class TestEnhancedBackupManager:
         self.mock_collector.collect_permission_sets.side_effect = Exception(
             "Permission set collection failed"
         )
-        
+
         # Make assignments collection also fail to ensure backup fails
         self.mock_collector.collect_assignments.side_effect = Exception(
             "Assignment collection failed"
@@ -504,12 +504,12 @@ class TestErrorHandlingIntegration:
 
         retry_config = RetryConfig(max_retries=2, base_delay=0.01)
         manager = EnhancedBackupManager(
-            collector=mock_collector, 
-            storage_engine=mock_storage_engine, 
+            collector=mock_collector,
+            storage_engine=mock_storage_engine,
             retry_config=retry_config,
             instance_arn="arn:aws:sso:::instance/test-instance",
             source_account="123456789012",
-            source_region="us-east-1"
+            source_region="us-east-1",
         )
 
         # Test with retryable error (throttling)

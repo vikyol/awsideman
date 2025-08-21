@@ -95,44 +95,38 @@ def _display_recent_cache_entries(cache_manager) -> None:
     """Display recent cache entries with expiration times."""
     try:
         console.print("\n[bold blue]Recent Cache Entries[/bold blue]")
-        
+
         # Get recent entries (limit to first 10)
         entries = cache_manager.get_recent_entries(limit=10)
         if entries:
             # Create a table for better organization
             from rich.table import Table
+
             table = Table(show_header=True, header_style="bold magenta")
             table.add_column("Operation", style="cyan", ratio=2)
             table.add_column("TTL", style="yellow", ratio=1)
             table.add_column("Age", style="blue", ratio=1)
             table.add_column("Size", style="green", ratio=1)
             table.add_column("Key", style="dim", ratio=3)
-            
+
             for entry in entries:
                 operation = entry.get("operation", "Unknown")
                 ttl = entry.get("ttl", "Unknown")
                 age = entry.get("age", "Unknown")
                 size = entry.get("size", "Unknown")
                 key = entry.get("key", "Unknown")
-                
+
                 # Truncate long keys for display
-                display_key = key #[:50] + "..." if len(key) > 50 else key
-                
+                display_key = key  # [:50] + "..." if len(key) > 50 else key
+
                 # Color code based on expiration status
                 if entry.get("is_expired", False):
                     row_style = "red"
                 else:
                     row_style = "green"
-                
-                table.add_row(
-                    operation,
-                    ttl,
-                    age,
-                    size,
-                    display_key,
-                    style=row_style
-                )
-            
+
+                table.add_row(operation, ttl, age, size, display_key, style=row_style)
+
             console.print(table)
         else:
             console.print("[yellow]No recent entries available[/yellow]")
