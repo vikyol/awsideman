@@ -5,8 +5,6 @@ Tests basic restore logic without complex AWS interactions.
 """
 
 
-
-
 class TestRestoreIntegration:
     """Test cases for restore functionality."""
 

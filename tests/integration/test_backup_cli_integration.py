@@ -5,8 +5,6 @@ Tests basic backup logic without complex AWS interactions.
 """
 
 
-
-
 class TestBackupIntegration:
     """Test cases for backup functionality."""
 

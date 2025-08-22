@@ -1,6 +1,7 @@
 """Tests for the org tree command."""
 
 import re
+
 from typer.testing import CliRunner
 
 from src.awsideman.commands.org import app
@@ -71,10 +72,10 @@ def test_tree_command_format_options():
     runner = CliRunner()
     result = runner.invoke(app, ["tree", "--help"])
     assert result.exit_code == 0
-    
+
     # Strip ANSI color codes for more reliable string matching
-    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
-    
+    clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+
     assert "--flat" in clean_output
     assert "--profile" in clean_output
 

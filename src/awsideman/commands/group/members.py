@@ -44,7 +44,7 @@ def _list_members_internal(
         if not validate_non_empty(group_identifier, "Group identifier"):
             raise typer.Exit(1)
 
-        if not validate_limit(limit):
+        if limit and not validate_limit(limit):
             raise typer.Exit(1)
 
         # Validate the profile and get profile data

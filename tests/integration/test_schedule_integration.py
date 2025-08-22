@@ -5,8 +5,6 @@ Tests basic schedule logic without complex AWS interactions.
 """
 
 
-
-
 class TestScheduleIntegration:
     """Test cases for schedule functionality."""
 

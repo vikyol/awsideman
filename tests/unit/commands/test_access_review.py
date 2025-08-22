@@ -87,7 +87,7 @@ def test_export_account_success(runner, mock_config, mock_client_manager):
         "Emails": [{"Value": "test@example.com"}],
     }
 
-    result = runner.invoke(app, ["export-account", "123456789012"])
+    result = runner.invoke(app, ["account", "123456789012"])
 
     assert result.exit_code == 0
     assert "Exporting permissions for account: 123456789012" in result.stdout
@@ -102,7 +102,7 @@ def test_export_account_invalid_profile(runner):
             "profiles": {},
         }.get(key, default)
 
-        result = runner.invoke(app, ["export-account", "123456789012"])
+        result = runner.invoke(app, ["account", "123456789012"])
 
         assert result.exit_code == 1
         assert "No profile specified and no default profile set" in result.stdout
@@ -159,7 +159,7 @@ def test_export_principal_success(runner, mock_config, mock_client_manager):
         "Emails": [{"Value": "test@example.com"}],
     }
 
-    result = runner.invoke(app, ["export-principal", "testuser"])
+    result = runner.invoke(app, ["principal", "testuser"])
 
     assert result.exit_code == 0
     assert "Exporting permissions for principal: testuser" in result.stdout
@@ -171,7 +171,7 @@ def test_export_principal_not_found(runner, mock_config, mock_client_manager):
     mock_client_manager["identitystore"].list_users.return_value = {"Users": []}
     mock_client_manager["identitystore"].list_groups.return_value = {"Groups": []}
 
-    result = runner.invoke(app, ["export-principal", "nonexistent"])
+    result = runner.invoke(app, ["principal", "nonexistent"])
 
     assert result.exit_code == 1
     assert "Principal 'nonexistent' not found" in result.stdout
@@ -222,7 +222,7 @@ def test_export_permission_set_success(runner, mock_config, mock_client_manager)
         assignment_paginator,
     ]
 
-    result = runner.invoke(app, ["export-permission-set", "TestPermissionSet"])
+    result = runner.invoke(app, ["permission-set", "TestPermissionSet"])
 
     assert result.exit_code == 0
     assert "Exporting assignments for permission set: TestPermissionSet" in result.stdout
@@ -235,7 +235,7 @@ def test_export_permission_set_not_found(runner, mock_config, mock_client_manage
     ps_paginator.paginate.return_value = [{"PermissionSets": []}]
     mock_client_manager["sso_admin"].get_paginator.return_value = ps_paginator
 
-    result = runner.invoke(app, ["export-permission-set", "NonExistent"])
+    result = runner.invoke(app, ["permission-set", "NonExistent"])
 
     assert result.exit_code == 1
     assert "Permission set 'NonExistent' not found" in result.stdout
@@ -274,7 +274,7 @@ def test_json_output_format(runner, mock_config, mock_client_manager):
         "Emails": [{"Value": "test@example.com"}],
     }
 
-    result = runner.invoke(app, ["export-account", "123456789012", "--format", "json"])
+    result = runner.invoke(app, ["account", "123456789012", "--format", "json"])
 
     assert result.exit_code == 0
     assert '"account_id": "123456789012"' in result.stdout
@@ -316,7 +316,7 @@ def test_csv_output_format(runner, mock_config, mock_client_manager, tmp_path):
 
     output_file = tmp_path / "test_output.csv"
     result = runner.invoke(
-        app, ["export-account", "123456789012", "--format", "csv", "--output", str(output_file)]
+        app, ["account", "123456789012", "--format", "csv", "--output", str(output_file)]
     )
 
     assert result.exit_code == 0
@@ -339,7 +339,7 @@ def test_aws_error_handling(runner, mock_config, mock_client_manager):
     # Make the paginator raise the error
     mock_client_manager["sso_admin"].get_paginator.side_effect = client_error
 
-    result = runner.invoke(app, ["export-account", "123456789012"])
+    result = runner.invoke(app, ["account", "123456789012"])
 
     assert result.exit_code == 1
     assert "AWS Error (AccessDenied)" in result.stdout

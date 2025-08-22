@@ -42,7 +42,7 @@ def _list_groups_internal(
         if filter and not validate_filter(filter):
             raise typer.Exit(1)
 
-        if not validate_limit(limit):
+        if limit and not validate_limit(limit):
             raise typer.Exit(1)
         # Validate the profile and get profile data
         profile_name, profile_data = validate_profile(profile)

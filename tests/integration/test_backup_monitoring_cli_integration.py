@@ -5,8 +5,6 @@ Tests basic backup monitoring logic without complex AWS interactions.
 """
 
 
-
-
 class TestBackupMonitoringIntegration:
     """Test cases for backup monitoring functionality."""
 

@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
-
 from src.awsideman.backup_restore.audit import (
     AuditEvent,
     AuditEventType,

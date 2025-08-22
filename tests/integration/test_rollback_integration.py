@@ -5,8 +5,6 @@ Tests basic rollback logic without complex AWS interactions.
 """
 
 
-
-
 class TestRollbackIntegration:
     """Test cases for rollback functionality."""
 

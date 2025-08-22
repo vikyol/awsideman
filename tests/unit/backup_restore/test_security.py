@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta, timezone
 
-
 from src.awsideman.backup_restore.audit import AuditEvent, AuditEventType, AuditSeverity
 from src.awsideman.backup_restore.security import (
     SecurityAlert,

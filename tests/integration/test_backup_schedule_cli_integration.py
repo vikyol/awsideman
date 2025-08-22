@@ -5,8 +5,6 @@ Tests basic backup schedule logic without complex AWS interactions.
 """
 
 
-
-
 class TestBackupScheduleIntegration:
     """Test cases for backup schedule functionality."""
 

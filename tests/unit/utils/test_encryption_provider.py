@@ -1,9 +1,9 @@
 """Tests for encryption provider interface and implementations."""
 
 import json
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from src.awsideman.encryption.provider import (
     EncryptionError,
@@ -199,7 +199,7 @@ class TestEncryptionProviderFactory:
         with patch("src.awsideman.encryption.key_manager.keyring") as mock_keyring:
             # Provide a proper base64-encoded 32-byte key
             mock_keyring.get_password.return_value = "6t2yIfWjSMKHcbX5p7CjYfFwMDNdVnteH1RD3Sbds2A="
-            
+
             # Now creates a KeyManager automatically instead of raising an error
             provider = EncryptionProviderFactory.create_provider("aes256")
 

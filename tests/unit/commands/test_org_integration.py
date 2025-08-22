@@ -1,6 +1,7 @@
 """Tests for org command integration."""
 
 import re
+
 from typer.testing import CliRunner
 
 from src.awsideman.commands.org import app
@@ -74,11 +75,11 @@ def test_org_commands_consistency():
 def test_org_commands_profile_consistency():
     """Test that all org commands support profile option consistently."""
     runner = CliRunner()
-    
+
     # Test that account command supports profile
     result = runner.invoke(app, ["account", "--help"])
     assert result.exit_code == 0
-    
+
     # Strip ANSI color codes for more reliable string matching
-    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
     assert "--profile" in clean_output

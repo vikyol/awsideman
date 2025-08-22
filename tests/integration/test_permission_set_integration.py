@@ -1,8 +1,6 @@
 """Unit tests for permission set commands."""
 
 
-
-
 class TestPermissionSetCommands:
     """Test permission set command functions."""
 

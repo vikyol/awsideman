@@ -60,7 +60,7 @@ def validate_sso_instance(profile_data: dict) -> tuple[str, str]:
     return instance_arn, identity_store_id
 
 
-@app.command("export-account")
+@app.command("account")
 def export_account(
     account_id: str = typer.Argument(..., help="AWS account ID to review"),
     output_format: str = typer.Option(
@@ -126,7 +126,7 @@ def export_account(
         raise typer.Exit(1)
 
 
-@app.command("export-principal")
+@app.command("principal")
 def export_principal(
     principal_name: str = typer.Argument(..., help="Principal name (user or group)"),
     principal_type: Optional[str] = typer.Option(
@@ -184,9 +184,33 @@ def export_principal(
                 sso_admin_client, instance_arn, principal_id, resolved_type, client_manager
             )
 
+        # For users, also get inherited assignments from group memberships
+        inherited_assignments = []
+        if resolved_type == "USER":
+            inherited_assignments = _get_user_inherited_assignments(
+                sso_admin_client,
+                identitystore_client,
+                instance_arn,
+                identity_store_id,
+                principal_id,
+                account_id,
+                client_manager,
+            )
+
+        # Mark direct assignments
+        for assignment in assignments:
+            assignment["inheritance_source"] = "DIRECT"
+
+        # Combine direct and inherited assignments
+        all_assignments = assignments + inherited_assignments
+
+        # Resolve account names for all assignments
+        if not account_id:  # Only resolve names when searching across all accounts
+            all_assignments = _resolve_account_names(all_assignments, client_manager)
+
         # Enrich assignments with details
         enriched_assignments = []
-        for assignment in assignments:
+        for assignment in all_assignments:
             enriched = _enrich_assignment(
                 sso_admin_client, identitystore_client, instance_arn, identity_store_id, assignment
             )
@@ -195,14 +219,33 @@ def export_principal(
 
         # Generate output
         if output_format == "json":
+            # Separate direct and inherited assignments for better JSON structure
+            direct_assignments = [
+                a for a in enriched_assignments if a.get("inheritance_source") == "DIRECT"
+            ]
+            inherited_assignments = [
+                a for a in enriched_assignments if a.get("inheritance_source") == "GROUP"
+            ]
+
             output_data = {
                 "principal_name": principal_name,
                 "principal_id": principal_id,
                 "principal_type": resolved_type,
                 "export_timestamp": datetime.now(timezone.utc).isoformat(),
                 "total_assignments": len(enriched_assignments),
+                "direct_assignments_count": len(direct_assignments),
+                "inherited_assignments_count": len(inherited_assignments),
                 "assignments": enriched_assignments,
             }
+
+            # Add inheritance summary for users
+            if resolved_type == "USER" and inherited_assignments:
+                groups_with_permissions = set()
+                for assignment in inherited_assignments:
+                    if assignment.get("inheritance_group_name"):
+                        groups_with_permissions.add(assignment["inheritance_group_name"])
+                output_data["inherited_from_groups"] = list(groups_with_permissions)
+
             _output_json(output_data, output_file)
         elif output_format == "csv":
             _output_csv(
@@ -213,7 +256,24 @@ def export_principal(
                 enriched_assignments, f"Permissions for {resolved_type}: {principal_name}"
             )
 
-        console.print(f"[green]Found {len(enriched_assignments)} permission assignments[/green]")
+        # Generate summary
+        direct_count = len(
+            [a for a in enriched_assignments if a.get("inheritance_source") == "DIRECT"]
+        )
+        inherited_count = len(
+            [a for a in enriched_assignments if a.get("inheritance_source") == "GROUP"]
+        )
+
+        if resolved_type == "USER" and inherited_count > 0:
+            console.print(
+                f"[green]Found {len(enriched_assignments)} total permission assignments[/green]"
+            )
+            console.print(f"[blue]  • {direct_count} direct assignments[/blue]")
+            console.print(f"[blue]  • {inherited_count} inherited from group memberships[/blue]")
+        else:
+            console.print(
+                f"[green]Found {len(enriched_assignments)} permission assignments[/green]"
+            )
 
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code", "Unknown")
@@ -225,7 +285,7 @@ def export_principal(
         raise typer.Exit(1)
 
 
-@app.command("export-permission-set")
+@app.command("permission-set")
 def export_permission_set(
     permission_set_name: str = typer.Argument(..., help="Permission set name"),
     account_id: Optional[str] = typer.Option(
@@ -281,6 +341,10 @@ def export_permission_set(
             assignments = _get_permission_set_assignments(
                 sso_admin_client, instance_arn, permission_set_arn, client_manager
             )
+
+        # Resolve account names for all assignments
+        if not account_id:  # Only resolve names when searching across all accounts
+            assignments = _resolve_account_names(assignments, client_manager)
 
         # Enrich assignments with details
         enriched_assignments = []
@@ -422,7 +486,9 @@ def _get_principal_assignments(
         for page in paginator.paginate():
             accounts.extend(page.get("Accounts", []))
 
-        console.print(f"[blue]Searching across {len(accounts)} accounts in organization...[/blue]")
+        console.print(
+            f"[blue]Searching {principal_type} across {len(accounts)} accounts in organization...[/blue]"
+        )
     except Exception as e:
         # If Organizations access fails, we can't enumerate all accounts
         console.print(
@@ -434,14 +500,30 @@ def _get_principal_assignments(
     for account in accounts:
         account_id = account["Id"]
         try:
-            paginator = sso_admin_client.get_paginator("list_account_assignments")
-            for page in paginator.paginate(InstanceArn=instance_arn, AccountId=account_id):
-                for assignment in page.get("AccountAssignments", []):
-                    if (
-                        assignment["PrincipalId"] == principal_id
-                        and assignment["PrincipalType"] == principal_type
-                    ):
-                        assignments.append(assignment)
+            # Get all permission sets first
+            ps_paginator = sso_admin_client.get_paginator("list_permission_sets")
+            permission_sets = []
+
+            for page in ps_paginator.paginate(InstanceArn=instance_arn):
+                permission_sets.extend(page.get("PermissionSets", []))
+
+            # For each permission set, check if this principal has assignments in the account
+            for permission_set_arn in permission_sets:
+                try:
+                    response = sso_admin_client.list_account_assignments(
+                        InstanceArn=instance_arn,
+                        AccountId=account_id,
+                        PermissionSetArn=permission_set_arn,
+                    )
+                    for assignment in response.get("AccountAssignments", []):
+                        if (
+                            assignment["PrincipalId"] == principal_id
+                            and assignment["PrincipalType"] == principal_type
+                        ):
+                            assignments.append(assignment)
+                except Exception:
+                    # Skip permission sets that cause errors
+                    continue
         except Exception:
             # Skip accounts we can't access
             continue
@@ -493,11 +575,12 @@ def _get_permission_set_assignments(
     for account in accounts:
         account_id = account["Id"]
         try:
-            paginator = sso_admin_client.get_paginator("list_account_assignments")
-            for page in paginator.paginate(InstanceArn=instance_arn, AccountId=account_id):
-                for assignment in page.get("AccountAssignments", []):
-                    if assignment["PermissionSetArn"] == permission_set_arn:
-                        assignments.append(assignment)
+            response = sso_admin_client.list_account_assignments(
+                InstanceArn=instance_arn,
+                AccountId=account_id,
+                PermissionSetArn=permission_set_arn,
+            )
+            assignments.extend(response.get("AccountAssignments", []))
         except Exception:
             # Skip accounts we can't access
             continue
@@ -555,6 +638,119 @@ def _resolve_permission_set(
     return None
 
 
+def _get_user_group_memberships(
+    identitystore_client, identity_store_id: str, user_id: str
+) -> List[Dict[str, Any]]:
+    """Get all groups that a user is a member of."""
+    groups = []
+
+    try:
+        # List all groups and check if the user is a member of each
+        paginator = identitystore_client.get_paginator("list_groups")
+        for page in paginator.paginate(IdentityStoreId=identity_store_id):
+            for group in page.get("Groups", []):
+                group_id = group["GroupId"]
+
+                # Check if user is a member of this group
+                try:
+                    memberships_response = identitystore_client.list_group_memberships(
+                        IdentityStoreId=identity_store_id, GroupId=group_id
+                    )
+
+                    for membership in memberships_response.get("GroupMemberships", []):
+                        member_id = membership.get("MemberId", {})
+                        if member_id.get("UserId") == user_id:
+                            groups.append(
+                                {
+                                    "GroupId": group_id,
+                                    "DisplayName": group.get("DisplayName", ""),
+                                    "Description": group.get("Description", ""),
+                                }
+                            )
+                            break
+                except Exception:
+                    # Skip groups we can't access
+                    continue
+    except Exception:
+        # If we can't list groups, return empty list
+        pass
+
+    return groups
+
+
+def _get_user_inherited_assignments(
+    sso_admin_client,
+    identitystore_client,
+    instance_arn: str,
+    identity_store_id: str,
+    user_id: str,
+    account_id: Optional[str],
+    client_manager: AWSClientManager,
+) -> List[Dict[str, Any]]:
+    """Get all assignments inherited from group memberships."""
+    inherited_assignments = []
+
+    # Get all groups the user is a member of
+    user_groups = _get_user_group_memberships(identitystore_client, identity_store_id, user_id)
+
+    for group in user_groups:
+        group_id = group["GroupId"]
+        group_name = group["DisplayName"]
+
+        # Get assignments for this group
+        if account_id:
+            group_assignments = _get_principal_assignments_for_account(
+                sso_admin_client, instance_arn, group_id, "GROUP", account_id
+            )
+        else:
+            group_assignments = _get_principal_assignments(
+                sso_admin_client, instance_arn, group_id, "GROUP", client_manager
+            )
+
+        # Mark these assignments as inherited
+        for assignment in group_assignments:
+            inherited_assignment = assignment.copy()
+            inherited_assignment["inheritance_source"] = "GROUP"
+            inherited_assignment["inheritance_group_id"] = group_id
+            inherited_assignment["inheritance_group_name"] = group_name
+            inherited_assignments.append(inherited_assignment)
+
+    return inherited_assignments
+
+
+def _resolve_account_names(
+    assignments: List[Dict[str, Any]], client_manager: AWSClientManager
+) -> List[Dict[str, Any]]:
+    """Resolve account names for assignments using AWS Organizations."""
+    try:
+        # Get organizations client to resolve account names
+        org_client = client_manager.get_raw_organizations_client()
+
+        # Create a mapping of account IDs to names
+        account_name_map = {}
+
+        # Get all accounts from organizations
+        paginator = org_client.get_paginator("list_accounts")
+        for page in paginator.paginate():
+            for account in page.get("Accounts", []):
+                account_name_map[account["Id"]] = account["Name"]
+
+        # Update assignments with account names
+        for assignment in assignments:
+            account_id = assignment.get("AccountId")
+            if account_id and account_id in account_name_map:
+                assignment["account_name"] = account_name_map[account_id]
+            else:
+                assignment["account_name"] = account_id  # Fallback to account ID
+
+        return assignments
+    except Exception:
+        # If we can't resolve account names, leave them as account IDs
+        for assignment in assignments:
+            assignment["account_name"] = assignment.get("AccountId")
+        return assignments
+
+
 def _enrich_assignment(
     sso_admin_client,
     identitystore_client,
@@ -594,12 +790,17 @@ def _enrich_assignment(
             except Exception:
                 enriched["principal_name"] = assignment["PrincipalId"]
 
-        # Add account name if possible
-        enriched["account_name"] = assignment["AccountId"]  # Default to account ID
-
         # Add status (assume ACTIVE for now, could be enhanced with provisioning status)
         enriched["status"] = "ACTIVE"
         enriched["export_timestamp"] = datetime.now(timezone.utc).isoformat()
+
+        # Preserve inheritance information if present
+        if "inheritance_source" in assignment:
+            enriched["inheritance_source"] = assignment["inheritance_source"]
+        if "inheritance_group_id" in assignment:
+            enriched["inheritance_group_id"] = assignment["inheritance_group_id"]
+        if "inheritance_group_name" in assignment:
+            enriched["inheritance_group_name"] = assignment["inheritance_group_name"]
 
         return enriched
 
@@ -626,6 +827,9 @@ def _output_csv(
         console.print("[yellow]No assignments to export[/yellow]")
         return
 
+    # Check if we have inheritance information
+    has_inheritance = any("inheritance_source" in assignment for assignment in assignments)
+
     # Define CSV columns
     columns = [
         "account_id",
@@ -639,6 +843,16 @@ def _output_csv(
         "status",
         "export_timestamp",
     ]
+
+    # Add inheritance columns if needed
+    if has_inheritance:
+        columns.extend(
+            [
+                "inheritance_source",
+                "inheritance_group_id",
+                "inheritance_group_name",
+            ]
+        )
 
     # Prepare CSV data
     csv_data = []
@@ -655,6 +869,13 @@ def _output_csv(
             "status": assignment.get("status", ""),
             "export_timestamp": assignment.get("export_timestamp", ""),
         }
+
+        # Add inheritance information if present
+        if has_inheritance:
+            row["inheritance_source"] = assignment.get("inheritance_source", "DIRECT")
+            row["inheritance_group_id"] = assignment.get("inheritance_group_id", "")
+            row["inheritance_group_name"] = assignment.get("inheritance_group_name", "")
+
         csv_data.append(row)
 
     # Write CSV
@@ -674,12 +895,17 @@ def _output_table(assignments: List[Dict[str, Any]], title: str):
         console.print("[yellow]No assignments found[/yellow]")
         return
 
+    # Check if we have inheritance information
+    has_inheritance = any("inheritance_source" in assignment for assignment in assignments)
+
     # Create Rich table
     table = Table(title=title, show_header=True, header_style="bold magenta")
     table.add_column("Account", style="cyan")
     table.add_column("Principal", style="green")
     table.add_column("Type", style="yellow")
     table.add_column("Permission Set", style="blue")
+    if has_inheritance:
+        table.add_column("Source", style="magenta")
     table.add_column("Status", style="red")
 
     for assignment in assignments:
@@ -692,12 +918,30 @@ def _output_table(assignments: List[Dict[str, Any]], title: str):
         )
         status_display = assignment.get("status", "UNKNOWN")
 
-        table.add_row(
+        # Determine inheritance source display
+        inheritance_display = ""
+        if has_inheritance:
+            inheritance_source = assignment.get("inheritance_source", "DIRECT")
+            if inheritance_source == "DIRECT":
+                inheritance_display = "Direct"
+            elif inheritance_source == "GROUP":
+                group_name = assignment.get("inheritance_group_name", "Unknown Group")
+                inheritance_display = f"Group: {group_name}"
+            else:
+                inheritance_display = inheritance_source
+
+        row_data = [
             account_display,
             principal_display,
             assignment["PrincipalType"],
             permission_set_display,
-            status_display,
-        )
+        ]
+
+        if has_inheritance:
+            row_data.append(inheritance_display)
+
+        row_data.append(status_display)
+
+        table.add_row(*row_data)
 
     console.print(table)
