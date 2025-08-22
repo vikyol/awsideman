@@ -6,6 +6,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 
+from ..aws_clients.manager import AWSClientManager
 from .config import Config
 
 console = Console()
@@ -242,16 +243,18 @@ def validate_profile(profile_name: Optional[str] = None) -> tuple[str, dict]:
     return profile_name, profiles[profile_name]
 
 
-def validate_sso_instance(profile_data: dict) -> tuple[str, str]:
+def validate_sso_instance(profile_data: dict, profile_name: str = None) -> tuple[str, str]:
     """
     Validate the SSO instance configuration and return instance ARN and identity store ID.
 
     This function checks if the specified profile has an SSO instance configured.
-    It handles cases where no SSO instance is configured for the profile and provides
-    helpful guidance on how to configure an SSO instance.
+    If no SSO instance is configured, it attempts to auto-detect one when there's only
+    one available in the AWS account. This implements the "lazy human" approach where
+    awsideman automatically configures itself when possible.
 
     Args:
         profile_data: Profile data dictionary containing configuration
+        profile_name: Profile name for auto-detection (optional)
 
     Returns:
         Tuple of (instance_arn, identity_store_id)
@@ -263,14 +266,83 @@ def validate_sso_instance(profile_data: dict) -> tuple[str, str]:
     instance_arn = profile_data.get("sso_instance_arn")
     identity_store_id = profile_data.get("identity_store_id")
 
-    # Check if both the instance ARN and identity store ID are available
-    if not instance_arn or not identity_store_id:
-        console.print("[red]Error: No SSO instance configured for this profile.[/red]")
-        console.print(
-            "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance."
-        )
-        console.print("You can find available SSO instances with 'awsideman sso list'.")
-        raise typer.Exit(1)
+    # If both are configured, return them immediately
+    if instance_arn and identity_store_id:
+        return instance_arn, identity_store_id
 
-    # Return the instance ARN and identity store ID
-    return instance_arn, identity_store_id
+    # If not configured, try to auto-detect
+    if profile_name:
+        try:
+            console.print("[blue]No SSO instance configured. Attempting auto-detection...[/blue]")
+
+            # Create AWS client manager to discover SSO instances
+            region = profile_data.get("region")
+            aws_client = AWSClientManager(profile=profile_name, region=region)
+
+            # List available SSO instances
+            sso_client = aws_client.get_identity_center_client()
+            response = sso_client.list_instances()
+            instances = response.get("Instances", [])
+
+            if not instances:
+                console.print("[red]Error: No SSO instances found in AWS account.[/red]")
+                console.print(
+                    "[yellow]Make sure your AWS profile has access to AWS Identity Center.[/yellow]"
+                )
+                raise typer.Exit(1)
+
+            if len(instances) == 1:
+                # Auto-configure the single instance
+                instance = instances[0]
+                auto_instance_arn = instance["InstanceArn"]
+                auto_identity_store_id = instance["IdentityStoreId"]
+
+                console.print(
+                    f"[green]Auto-detected single SSO instance: {auto_instance_arn}[/green]"
+                )
+                console.print(f"[green]Identity Store ID: {auto_identity_store_id}[/green]")
+
+                # Auto-save the configuration for future use
+                try:
+                    profiles = config.get("profiles", {})
+                    if profile_name in profiles:
+                        profiles[profile_name]["sso_instance_arn"] = auto_instance_arn
+                        profiles[profile_name]["identity_store_id"] = auto_identity_store_id
+                        config.set("profiles", profiles)
+                        console.print(
+                            f"[green]Auto-configured SSO instance for profile '{profile_name}'[/green]"
+                        )
+                except Exception as e:
+                    console.print(
+                        f"[yellow]Warning: Could not save auto-configuration: {str(e)}[/yellow]"
+                    )
+                    console.print("[yellow]Configuration will be lost after this session.[/yellow]")
+
+                return auto_instance_arn, auto_identity_store_id
+
+            else:
+                # Multiple instances found - user must choose
+                console.print(
+                    f"[red]Error: Found {len(instances)} SSO instances. Auto-detection not possible.[/red]"
+                )
+                console.print("[yellow]Available instances:[/yellow]")
+                for i, instance in enumerate(instances, 1):
+                    instance_id = instance["InstanceArn"].split("/")[-1]
+                    console.print(f"[yellow]  {i}. Instance ID: {instance_id}[/yellow]")
+                console.print(
+                    "\n[yellow]Please use 'awsideman sso set <instance_arn> <identity_store_id>' to configure one.[/yellow]"
+                )
+                console.print("[yellow]You can find full ARNs with 'awsideman sso list'.[/yellow]")
+                raise typer.Exit(1)
+
+        except Exception as e:
+            console.print(f"[red]Error during SSO instance auto-detection: {str(e)}[/red]")
+            console.print("[yellow]Falling back to manual configuration.[/yellow]")
+
+    # If auto-detection failed or profile_name not provided, show manual configuration message
+    console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+    console.print(
+        "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance."
+    )
+    console.print("You can find available SSO instances with 'awsideman sso list'.")
+    raise typer.Exit(1)

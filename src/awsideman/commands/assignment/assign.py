@@ -25,6 +25,79 @@ from .helpers import console, log_individual_operation
 config = Config()
 
 
+def _get_all_accounts(aws_client: AWSClientManager) -> list:
+    """Get all accounts from AWS Organizations."""
+    try:
+        orgs_client = aws_client.get_raw_organizations_client()
+        accounts = []
+
+        paginator = orgs_client.get_paginator("list_accounts")
+        for page in paginator.paginate():
+            page_accounts = page.get("Accounts", [])
+            for account in page_accounts:
+                if account.get("Status") == "ACTIVE":
+                    # Create AccountInfo object
+                    from ...utils.models import AccountInfo
+
+                    account_info = AccountInfo(
+                        account_id=account["Id"],
+                        account_name=account.get("Name", "Unknown"),
+                        email=account.get("Email", ""),
+                        status=account.get("Status", ""),
+                        tags={},
+                        ou_path=[],
+                    )
+                    accounts.append(account_info)
+
+        return accounts
+    except Exception as e:
+        console.print(f"[red]Error getting accounts: {str(e)}[/red]")
+        raise
+
+
+def _get_accounts_by_tag(aws_client: AWSClientManager, tag_key: str, tag_value: str) -> list:
+    """Get accounts by tag filter."""
+    try:
+        orgs_client = aws_client.get_raw_organizations_client()
+        accounts = []
+
+        paginator = orgs_client.get_paginator("list_accounts")
+        for page in paginator.paginate():
+            page_accounts = page.get("Accounts", [])
+            for account in page_accounts:
+                if account.get("Status") == "ACTIVE":
+                    # Get account tags
+                    try:
+                        tags_response = orgs_client.list_tags_for_resource(ResourceId=account["Id"])
+                        account_tags = {
+                            tag["Key"]: tag["Value"] for tag in tags_response.get("Tags", [])
+                        }
+
+                        # Check if account matches the tag filter
+                        if account_tags.get(tag_key) == tag_value:
+                            from ...utils.models import AccountInfo
+
+                            account_info = AccountInfo(
+                                account_id=account["Id"],
+                                account_name=account.get("Name", "Unknown"),
+                                email=account.get("Email", ""),
+                                status=account.get("Status", ""),
+                                tags=account_tags,
+                                ou_path=[],
+                            )
+                            accounts.append(account_info)
+                    except Exception as e:
+                        console.print(
+                            f"[yellow]Warning: Could not get tags for account {account['Id']}: {str(e)}[/yellow]"
+                        )
+                        continue
+
+        return accounts
+    except Exception as e:
+        console.print(f"[red]Error getting accounts by tag: {str(e)}[/red]")
+        raise
+
+
 def assign_permission_set(
     permission_set_name: str = typer.Argument(..., help="Permission set name"),
     principal_name: str = typer.Argument(..., help="Principal name (user or group)"),
@@ -157,7 +230,7 @@ def assign_permission_set(
             )
         elif account_filter:
             # Use account filter (existing multi-account assignment logic)
-            return _execute_multi_account_assignment(
+            return assign_multi_account_with_filter(
                 permission_set_name=permission_set_name,
                 principal_name=principal_name,
                 account_filter=account_filter,
@@ -180,6 +253,215 @@ def assign_permission_set(
                 continue_on_error=continue_on_error,
                 profile=profile,
             )
+
+
+def assign_multi_account_with_filter(
+    permission_set_name: str,
+    principal_name: str,
+    account_filter: str,
+    principal_type: str = "USER",
+    dry_run: bool = False,
+    batch_size: int = 10,
+    continue_on_error: bool = True,
+    profile: Optional[str] = None,
+) -> None:
+    """Assign a permission set to a principal across accounts matching a filter.
+
+    Args:
+        permission_set_name: Name of the permission set to assign
+        principal_name: Name of the principal (user or group)
+        account_filter: Account filter string (* for all accounts, or tag:Key=Value)
+        principal_type: Type of principal (USER or GROUP)
+        dry_run: Whether to preview operations without making changes
+        batch_size: Number of accounts to process concurrently
+        continue_on_error: Whether to continue processing on individual account failures
+        profile: AWS profile to use
+    """
+    # Validate inputs
+    if not permission_set_name.strip():
+        console.print("[red]Error: Permission set name cannot be empty.[/red]")
+        raise typer.Exit(1)
+
+    if not principal_name.strip():
+        console.print("[red]Error: Principal name cannot be empty.[/red]")
+        raise typer.Exit(1)
+
+    if not account_filter.strip():
+        console.print("[red]Error: Account filter cannot be empty.[/red]")
+        raise typer.Exit(1)
+
+    # Validate principal type
+    if principal_type.upper() not in ["USER", "GROUP"]:
+        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
+        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
+        raise typer.Exit(1)
+
+    principal_type = principal_type.upper()
+
+    # Validate batch size
+    if batch_size <= 0:
+        console.print("[red]Error: Batch size must be greater than 0.[/red]")
+        raise typer.Exit(1)
+
+    try:
+        # Validate profile and get profile data
+        profile_name, profile_data = validate_profile(profile)
+
+        # Validate SSO instance and get instance ARN and identity store ID
+        instance_arn, identity_store_id = validate_sso_instance(profile_data, profile_name)
+
+        # Create AWS client manager
+        aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Resolve accounts based on filter
+        console.print(f"[blue]Resolving accounts using filter: {account_filter}[/blue]")
+
+        if account_filter == "*":
+            # Get all accounts from AWS Organizations
+            accounts = _get_all_accounts(aws_client)
+        elif account_filter.startswith("tag:"):
+            # Parse tag filter (format: tag:Key=Value)
+            tag_parts = account_filter[4:].split("=", 1)
+            if len(tag_parts) != 2:
+                console.print("[red]Error: Invalid tag filter format. Use 'tag:Key=Value'[/red]")
+                raise typer.Exit(1)
+
+            tag_key, tag_value = tag_parts
+            accounts = _get_accounts_by_tag(aws_client, tag_key, tag_value)
+        else:
+            console.print(f"[red]Error: Unsupported account filter format: {account_filter}[/red]")
+            console.print(
+                "[yellow]Supported formats: '*' for all accounts, 'tag:Key=Value' for tag-based filtering[/yellow]"
+            )
+            raise typer.Exit(1)
+
+        if not accounts:
+            console.print("[yellow]No accounts found matching the filter criteria.[/yellow]")
+            return
+
+        console.print(f"[green]Found {len(accounts)} account(s) matching filter criteria.[/green]")
+
+        # Show preview of accounts if requested or if there are many accounts
+        if dry_run or len(accounts) > 5:
+            console.print("\n[bold]Accounts to be processed:[/bold]")
+            for i, account in enumerate(accounts[:10]):  # Show first 10
+                console.print(f"  {i+1}. {account.get_display_name()}")
+
+            if len(accounts) > 10:
+                console.print(f"  ... and {len(accounts) - 10} more accounts")
+
+        # Create multi-account assignment
+        from ...bulk.multi_account_batch import MultiAccountAssignment
+
+        multi_assignment = MultiAccountAssignment(
+            permission_set_name=permission_set_name,
+            principal_name=principal_name,
+            principal_type=principal_type,
+            accounts=accounts,
+            operation="assign",
+        )
+
+        # Validate assignment
+        validation_errors = multi_assignment.validate()
+        if validation_errors:
+            console.print("[red]Error: Assignment validation failed.[/red]")
+            for error in validation_errors:
+                console.print(f"  • {error}")
+            raise typer.Exit(1)
+
+        # Show confirmation unless dry run
+        if not dry_run:
+            console.print(
+                f"\n[bold yellow]⚠️  You are about to assign a permission set across {len(accounts)} account(s)[/bold yellow]"
+            )
+            console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+            console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+            console.print("  Operation: [blue]ASSIGN[/blue]")
+            console.print(f"  Filter: [blue]{account_filter}[/blue]")
+            console.print(f"  Batch Size: {batch_size}")
+            console.print(f"  Continue on Error: {'Yes' if continue_on_error else 'No'}")
+
+            confirm = typer.confirm("\nAre you sure you want to proceed?")
+            if not confirm:
+                console.print("[yellow]Multi-account assignment cancelled.[/yellow]")
+                return
+
+        # Create performance-optimized batch processor
+        batch_processor, perf_config = create_performance_optimized_processor(
+            aws_client_manager=aws_client, account_count=len(accounts), operation_type="assign"
+        )
+        batch_processor.set_resource_resolver(instance_arn, identity_store_id)
+
+        # Show performance info for large operations
+        if len(accounts) > 10:
+            console.print(f"[dim]Using optimized settings for {len(accounts)} accounts:[/dim]")
+            console.print(
+                f"[dim]  • Processing {perf_config.max_concurrent_accounts} accounts concurrently[/dim]"
+            )
+            console.print(f"[dim]  • Batch size: {perf_config.batch_size}[/dim]")
+            console.print(
+                f"[dim]  • Expected time: ~{len(accounts) * 1.2:.0f} seconds (vs ~{len(accounts) * 2.7:.0f}s unoptimized)[/dim]"
+            )
+
+        # Process multi-account operation
+        console.print(
+            f"\n[blue]{'Previewing' if dry_run else 'Processing'} multi-account assignment...[/blue]"
+        )
+
+        import asyncio
+
+        results = asyncio.run(
+            batch_processor.process_multi_account_operation(
+                accounts=accounts,
+                permission_set_name=permission_set_name,
+                principal_name=principal_name,
+                principal_type=principal_type,
+                operation="assign",
+                instance_arn=instance_arn,
+                dry_run=dry_run,
+                continue_on_error=continue_on_error,
+            )
+        )
+
+        # Display final results summary
+        console.print(f"\n[bold]{'Preview' if dry_run else 'Assignment'} Summary:[/bold]")
+        stats = results.get_summary_stats()
+
+        console.print(f"  Total Accounts: {stats['total_accounts']}")
+        console.print(
+            f"  Successful: [green]{stats['successful_count']}[/green] ({stats['success_rate']:.1f}%)"
+        )
+
+        if stats["failed_count"] > 0:
+            console.print(
+                f"  Failed: [red]{stats['failed_count']}[/red] ({stats['failure_rate']:.1f}%)"
+            )
+
+        if stats["skipped_count"] > 0:
+            console.print(f"  Skipped: [yellow]{stats['skipped_count']}[/yellow]")
+
+        console.print(f"  Duration: {stats['duration_seconds']:.1f} seconds")
+
+        # Show failed accounts if any
+        if results.failed_accounts:
+            console.print(
+                f"\n[bold red]Failed Accounts ({len(results.failed_accounts)}):[/bold red]"
+            )
+            for failed_account in results.failed_accounts:
+                console.print(
+                    f"  • {failed_account.account_name} ({failed_account.account_id}): {failed_account.error_message}"
+                )
+
+        # Show performance recommendations if applicable
+        if len(accounts) > 50:
+            display_performance_recommendations(len(accounts), stats["duration_seconds"])
+
+    except ClientError as e:
+        handle_aws_error(e, "MultiAccountAssign")
+    except Exception as e:
+        from ...utils.error_handler import handle_network_error
+
+        handle_network_error(e)
 
 
 def assign_single_account(
@@ -856,8 +1138,4 @@ def assign_multi_account_advanced(
         handle_network_error(e)
 
 
-def _execute_multi_account_assignment(*args, **kwargs):
-    """Stub for multi-account assignment execution - to be implemented."""
-    from .. import assignment as original_assignment
-
-    return original_assignment._execute_multi_account_assignment(*args, **kwargs)
+# Removed the stub function - replaced with proper implementation above
