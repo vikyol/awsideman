@@ -59,6 +59,21 @@ class DynamoDBBackend(CacheBackend):
                 session_kwargs = {}
                 if self.profile:
                     session_kwargs["profile_name"] = self.profile
+                elif not self.profile:
+                    # Auto-configure profile if none specified
+                    try:
+                        from ...utils.config import Config
+
+                        config = Config()
+                        default_profile = config.get("default_profile")
+                        if default_profile:
+                            session_kwargs["profile_name"] = default_profile
+                            logger.debug(
+                                f"Auto-configured DynamoDB client to use default profile: {default_profile}"
+                            )
+                    except Exception as e:
+                        logger.debug(f"Could not auto-configure default profile: {e}")
+
                 if self.region:
                     session_kwargs["region_name"] = self.region
 
@@ -81,6 +96,21 @@ class DynamoDBBackend(CacheBackend):
                 session_kwargs = {}
                 if self.profile:
                     session_kwargs["profile_name"] = self.profile
+                elif not self.profile:
+                    # Auto-configure profile if none specified
+                    try:
+                        from ...utils.config import Config
+
+                        config = Config()
+                        default_profile = config.get("default_profile")
+                        if default_profile:
+                            session_kwargs["profile_name"] = default_profile
+                            logger.debug(
+                                f"Auto-configured DynamoDB table resource to use default profile: {default_profile}"
+                            )
+                    except Exception as e:
+                        logger.debug(f"Could not auto-configure default profile: {e}")
+
                 if self.region:
                     session_kwargs["region_name"] = self.region
 
@@ -331,10 +361,21 @@ class DynamoDBBackend(CacheBackend):
                 table_description = self.client.describe_table(TableName=self.table_name)
                 table_info = table_description["Table"]
 
+                # Get real-time item count using scan (ItemCount from describe_table is not real-time)
+                try:
+                    scan_response = self.client.scan(TableName=self.table_name, Select="COUNT")
+                    real_time_item_count = scan_response.get("Count", 0)
+                    logger.debug(f"Real-time item count: {real_time_item_count}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to get real-time item count, using describe_table value: {e}"
+                    )
+                    real_time_item_count = table_info.get("ItemCount", 0)
+
                 stats.update(
                     {
                         "table_status": table_info.get("TableStatus", "UNKNOWN"),
-                        "item_count": table_info.get("ItemCount", 0),
+                        "item_count": real_time_item_count,
                         "table_size_bytes": table_info.get("TableSizeBytes", 0),
                         "creation_date": table_info.get("CreationDateTime"),
                         "billing_mode": table_info.get("BillingModeSummary", {}).get(
@@ -1175,3 +1216,123 @@ class DynamoDBBackend(CacheBackend):
                 backend_type="dynamodb",
                 original_error=e,
             )
+
+    def get_recent_entries(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get recent cache entries from DynamoDB.
+
+        Args:
+            limit: Maximum number of entries to return
+
+        Returns:
+            List of dictionaries containing entry metadata
+        """
+        try:
+            # Ensure table exists before attempting operations
+            self._ensure_table_exists()
+
+            # Scan the table to get recent entries, sorted by creation time
+            response = self.table.scan(
+                ProjectionExpression="cache_key, operation, created_at, #ttl, original_size, is_compressed, is_chunked",
+                ExpressionAttributeNames={"#ttl": "ttl"},  # ttl is a reserved word
+                Limit=limit * 2,  # Get more items to account for filtering
+            )
+
+            items = response.get("Items", [])
+            if not items:
+                return []
+
+            # Convert and sort items by creation time (newest first)
+            entries = []
+            current_time = int(time.time())
+
+            for item in items:
+                try:
+                    created_at = int(item.get("created_at", 0))
+                    ttl_value = item.get("ttl")
+
+                    # Calculate age
+                    age_seconds = current_time - created_at
+                    if age_seconds < 60:
+                        age = f"{age_seconds}s"
+                    elif age_seconds < 3600:
+                        age = f"{age_seconds // 60}m"
+                    else:
+                        age = f"{age_seconds // 3600}h"
+
+                    # Format TTL
+                    ttl_display = "None"
+                    is_expired = False
+                    if ttl_value:
+                        ttl_int = int(ttl_value)
+                        if ttl_int > current_time:
+                            remaining = ttl_int - current_time
+                            if remaining < 60:
+                                ttl_display = f"{remaining}s"
+                            elif remaining < 3600:
+                                ttl_display = f"{remaining // 60}m"
+                            else:
+                                ttl_display = f"{remaining // 3600}h"
+                        else:
+                            ttl_display = "Expired"
+                            is_expired = True
+
+                    # Format size
+                    original_size = item.get("original_size", 0)
+                    logger.debug(
+                        f"Original size value: {original_size}, type: {type(original_size)}"
+                    )
+
+                    # Handle both int/float and Decimal types (DynamoDB may return Decimal)
+                    if isinstance(original_size, (int, float)):
+                        size_value = original_size
+                    elif hasattr(original_size, "__float__"):  # Handle Decimal type
+                        size_value = float(original_size)
+                    else:
+                        logger.debug(
+                            f"Unexpected original_size type: {type(original_size)}, value: {original_size}"
+                        )
+                        size_value = 0
+
+                    if size_value > 0:
+                        if size_value < 1024:
+                            size_display = f"{int(size_value)}B"
+                        elif size_value < 1024 * 1024:
+                            size_display = f"{size_value / 1024:.1f}KB"
+                        else:
+                            size_display = f"{size_value / (1024 * 1024):.1f}MB"
+                    else:
+                        size_display = "0B"
+
+                    # Skip chunk entries for cleaner display
+                    cache_key = item.get("cache_key", "")
+                    if "#chunk#" in cache_key:
+                        continue
+
+                    entry = {
+                        "key": cache_key,
+                        "operation": item.get("operation", "Unknown"),
+                        "age": age,
+                        "ttl": ttl_display,
+                        "size": size_display,
+                        "created_at": created_at,
+                        "is_expired": is_expired,
+                        "is_compressed": item.get("is_compressed", False),
+                        "is_chunked": item.get("is_chunked", False),
+                    }
+                    entries.append(entry)
+
+                except Exception as e:
+                    logger.debug(f"Error processing cache entry: {e}")
+                    continue
+
+            # Sort by creation time (newest first) and limit results
+            entries.sort(key=lambda x: x["created_at"], reverse=True)
+            return entries[:limit]
+
+        except ClientError as e:
+            logger.warning(f"Failed to get recent entries from DynamoDB: {e}")
+            return []
+        except Exception as e:
+            logger.warning(f"Unexpected error getting recent entries: {e}")
+            return []

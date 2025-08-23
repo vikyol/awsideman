@@ -1,13 +1,17 @@
 """Configuration management commands for awsideman."""
 
+from typing import Optional
+
 import typer
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
 
-from ..utils.config import CONFIG_FILE_JSON, CONFIG_FILE_YAML, Config
+from ..utils.config import Config
 
-app = typer.Typer(help="Manage awsideman configuration settings.")
+app = typer.Typer(
+    help="Manage awsideman configuration settings including profiles, cache, backup, rollback, and templates."
+)
 console = Console()
 
 
@@ -17,6 +21,9 @@ def show_config(
         None, "--section", "-s", help="Show specific configuration section (profiles, cache, etc.)"
     ),
     format: str = typer.Option("table", "--format", "-f", help="Output format: table, yaml, json"),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", help="Show cache configuration for specific profile"
+    ),
 ):
     """Show current configuration."""
     config = Config()
@@ -26,6 +33,11 @@ def show_config(
         console.print(
             "[yellow]No configuration found. Use 'awsideman profile add' or 'awsideman cache' commands to configure.[/yellow]"
         )
+        return
+
+    # Handle profile-specific cache configuration display
+    if profile and section == "cache":
+        _show_profile_cache_section(config_data, profile)
         return
 
     # Filter by section if specified
@@ -59,73 +71,6 @@ def show_config(
         _display_config_table(config_data)
 
 
-@app.command("migrate")
-def migrate_config(
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Force migration even if YAML config exists"
-    ),
-    backup: bool = typer.Option(True, "--backup/--no-backup", help="Create backup of JSON config"),
-):
-    """Migrate configuration from JSON to YAML format."""
-    config = Config()
-
-    # Check if migration is needed
-    if not CONFIG_FILE_JSON.exists():
-        console.print("[yellow]No JSON configuration file found. Nothing to migrate.[/yellow]")
-        return
-
-    if CONFIG_FILE_YAML.exists() and not force:
-        console.print(
-            "[yellow]YAML configuration already exists. Use --force to overwrite.[/yellow]"
-        )
-        return
-
-    console.print("[blue]Migrating configuration from JSON to YAML...[/blue]")
-
-    try:
-        # Load JSON config
-        import json
-
-        with open(CONFIG_FILE_JSON, "r") as f:
-            json_data = json.load(f)
-
-        # Migrate structure
-        yaml_data = config._migrate_json_to_yaml_structure(json_data)
-
-        # Save as YAML
-        config.config_data = yaml_data
-        config.save_config()
-
-        # Create backup if requested
-        if backup:
-            backup_file = CONFIG_FILE_JSON.with_suffix(".json.backup")
-            CONFIG_FILE_JSON.rename(backup_file)
-            console.print(f"[green]JSON configuration backed up to: {backup_file}[/green]")
-        else:
-            CONFIG_FILE_JSON.unlink()
-            console.print("[green]JSON configuration file removed[/green]")
-
-        console.print(
-            f"[green]✓ Configuration successfully migrated to: {CONFIG_FILE_YAML}[/green]"
-        )
-
-        # Show summary of migrated data
-        console.print("\n[bold blue]Migration Summary:[/bold blue]")
-        if "profiles" in yaml_data:
-            profile_count = len(yaml_data["profiles"])
-            console.print(f"  • Migrated {profile_count} profile(s)")
-
-        if "default_profile" in yaml_data:
-            console.print(f"  • Default profile: {yaml_data['default_profile']}")
-
-        if "cache" in yaml_data:
-            console.print("  • Cache configuration migrated")
-
-    except Exception as e:
-        console.print(f"[red]Migration failed: {e}[/red]")
-        raise typer.Exit(1)
-
-
 @app.command("path")
 def show_config_path():
     """Show the path to the configuration file."""
@@ -146,6 +91,67 @@ def show_config_path():
         console.print("[dim]Run 'awsideman config migrate' to migrate to YAML[/dim]")
     else:
         console.print("[green]Migration needed:[/green] No")
+
+
+@app.command("set")
+def set_config(
+    key_value: str = typer.Argument(
+        ..., help="Configuration key=value pair (e.g., cache.enabled=true)"
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", help="AWS profile to set configuration for (for cache settings)"
+    ),
+):
+    """Set a configuration value using key=value format.
+
+    Examples:
+    - awsideman config set cache.enabled=true
+    - awsideman config set cache.default_ttl=7200
+    - awsideman config set cache.max_size_mb=200
+    - awsideman config set cache.backend_type=dynamodb --profile prod
+    """
+    config = Config()
+
+    # Parse key=value format
+    if "=" not in key_value:
+        console.print(
+            "[red]Error: Invalid format. Use 'key=value' (e.g., cache.enabled=true)[/red]"
+        )
+        raise typer.Exit(1)
+
+    key, value = key_value.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+
+    if not key or not value:
+        console.print("[red]Error: Both key and value are required[/red]")
+        raise typer.Exit(1)
+
+    try:
+        # Parse the value based on common patterns
+        parsed_value = _parse_config_value(value)
+
+        # Handle profile-specific cache configuration
+        if profile and key.startswith("cache."):
+            _set_profile_cache_config(config, profile, key, parsed_value)
+        else:
+            # Set the configuration value normally
+            _set_config_value(config, key, parsed_value)
+
+        console.print(f"[green]✓ Configuration '{key}' set to '{parsed_value}'[/green]")
+        if profile:
+            console.print(f"[green]Applied to profile: {profile}[/green]")
+
+        # Show updated configuration
+        console.print(f"\n[blue]Updated configuration for '{key}':[/blue]")
+        if profile and key.startswith("cache."):
+            _show_profile_cache_config(config, profile, key)
+        else:
+            _show_single_config_value(config, key)
+
+    except Exception as e:
+        console.print(f"[red]Error setting configuration: {e}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command("validate")
@@ -264,193 +270,13 @@ def validate_config():
         console.print("[green]Configuration is valid with no warnings.[/green]")
 
 
-@app.command("templates")
-def manage_template_config(
-    action: str = typer.Argument(..., help="Action to perform: show, set, reset"),
-    key: str = typer.Option(None, "--key", "-k", help="Configuration key to set"),
-    value: str = typer.Option(None, "--value", "-v", help="Value to set for the key"),
-):
-    """Manage template configuration settings."""
-    config = Config()
-
-    if action == "show":
-        _show_template_config(config)
-    elif action == "set":
-        if not key or not value:
-            console.print("[red]Error: Both --key and --value are required for 'set' action.[/red]")
-            raise typer.Exit(1)
-        _set_template_config(config, key, value)
-    elif action == "reset":
-        _reset_template_config(config)
-    else:
-        console.print(f"[red]Error: Unknown action '{action}'. Use: show, set, or reset.[/red]")
-        raise typer.Exit(1)
-
-
-def _show_template_config(config: Config):
-    """Display current template configuration."""
-    template_config = config.get_template_config()
-
-    console.print("[bold blue]Template Configuration[/bold blue]")
-
-    table = Table()
-    table.add_column("Setting", style="cyan")
-    table.add_column("Value", style="green")
-    table.add_column("Default", style="yellow")
-
-    # Show current values with defaults
-    table.add_row(
-        "Storage Directory",
-        template_config.get("storage_directory", "Not set"),
-        "~/.awsideman/templates",
-    )
-    table.add_row("Default Format", template_config.get("default_format", "Not set"), "yaml")
-
-    # Validation settings
-    validation = template_config.get("validation", {})
-    table.add_row("Strict Mode", str(validation.get("strict_mode", "Not set")), "true")
-    table.add_row("Require Metadata", str(validation.get("require_metadata", "Not set")), "false")
-
-    # Execution settings
-    execution = template_config.get("execution", {})
-    table.add_row("Default Dry Run", str(execution.get("default_dry_run", "Not set")), "false")
-    table.add_row("Parallel Execution", str(execution.get("parallel_execution", "Not set")), "true")
-    table.add_row("Batch Size", str(execution.get("batch_size", "Not set")), "10")
-
-    console.print(table)
-
-    # Show additional information
-    console.print(
-        f"\n[blue]Current template directory:[/blue] {template_config.get('storage_directory', '~/.awsideman/templates')}"
-    )
-
-    # Check if directory exists and is accessible
-    import pathlib
-
-    template_dir = pathlib.Path(
-        template_config.get("storage_directory", "~/.awsideman/templates")
-    ).expanduser()
-    if template_dir.exists():
-        console.print("[green]✓ Directory exists and is accessible[/green]")
-        try:
-            template_count = len(
-                list(template_dir.glob("*.yaml")) + list(template_dir.glob("*.json"))
-            )
-            console.print(f"[blue]Found {template_count} template file(s)[/blue]")
-        except Exception:
-            console.print("[yellow]Could not count template files[/yellow]")
-    else:
-        console.print(f"[yellow]Directory does not exist: {template_dir}[/yellow]")
-        console.print(
-            "[blue]Use 'awsideman config templates set storage_directory <path>' to set it.[/blue]"
-        )
-
-
-def _set_template_config(config: Config, key: str, value: str):
-    """Set a template configuration value."""
-    valid_keys = [
-        "storage_directory",
-        "default_format",
-        "strict_mode",
-        "require_metadata",
-        "default_dry_run",
-        "parallel_execution",
-        "batch_size",
-    ]
-
-    if key not in valid_keys:
-        console.print(f"[red]Error: Invalid key '{key}'.[/red]")
-        console.print(f"Valid keys: {', '.join(valid_keys)}")
-        raise typer.Exit(1)
-
-    # Validate value based on key
-    if key == "default_format":
-        if value not in ["yaml", "json"]:
-            console.print(
-                f"[red]Error: '{value}' is not a valid format. Use 'yaml' or 'json'.[/red]"
-            )
-            raise typer.Exit(1)
-    elif key in ["strict_mode", "require_metadata", "default_dry_run", "parallel_execution"]:
-        if value.lower() not in ["true", "false", "1", "0"]:
-            console.print(
-                f"[red]Error: '{value}' is not a valid boolean value. Use 'true' or 'false'.[/red]"
-            )
-            raise typer.Exit(1)
-        # Convert to boolean
-        value = value.lower() in ["true", "1"]
-    elif key == "batch_size":
-        try:
-            batch_size = int(value)
-            if batch_size < 1 or batch_size > 1000:
-                console.print("[red]Error: Batch size must be between 1 and 1000.[/red]")
-                raise typer.Exit(1)
-            value = batch_size
-        except ValueError:
-            console.print(f"[red]Error: '{value}' is not a valid integer.[/red]")
-            raise typer.Exit(1)
-    elif key == "storage_directory":
-        # Validate directory path
-        import pathlib
-
-        try:
-            dir_path = pathlib.Path(value).expanduser()
-            if dir_path.exists() and not dir_path.is_dir():
-                console.print(f"[red]Error: '{value}' exists but is not a directory.[/red]")
-                raise typer.Exit(1)
-        except Exception as e:
-            console.print(f"[red]Error: Invalid directory path '{value}': {e}[/red]")
-            raise typer.Exit(1)
-
-    # Get current template config
-    current_config = config.get_template_config()
-
-    # Update the appropriate section
-    if key in ["strict_mode", "require_metadata"]:
-        if "validation" not in current_config:
-            current_config["validation"] = {}
-        current_config["validation"][key] = value
-    elif key in ["default_dry_run", "parallel_execution", "batch_size"]:
-        if "execution" not in current_config:
-            current_config["execution"] = {}
-        current_config["execution"][key] = value
-    else:
-        current_config[key] = value
-
-    # Set the configuration
-    try:
-        config.set_template_config(current_config)
-        console.print(f"[green]✓ Template configuration '{key}' set to '{value}'[/green]")
-
-        # Show updated configuration
-        console.print("\n[blue]Updated template configuration:[/blue]")
-        _show_template_config(config)
-
-    except Exception as e:
-        console.print(f"[red]Error setting template configuration: {e}[/red]")
-        raise typer.Exit(1)
-
-
-def _reset_template_config(config: Config):
-    """Reset template configuration to defaults."""
-    try:
-        from ..utils.config import DEFAULT_TEMPLATE_CONFIG
-
-        config.set_template_config(DEFAULT_TEMPLATE_CONFIG)
-
-        console.print("[green]✓ Template configuration reset to defaults[/green]")
-
-        # Show updated configuration
-        console.print("\n[blue]Current template configuration:[/blue]")
-        _show_template_config(config)
-
-    except Exception as e:
-        console.print(f"[red]Error resetting template configuration: {e}[/red]")
-        raise typer.Exit(1)
-
-
 def _display_config_table(config_data: dict):
     """Display configuration data in table format."""
     for section_name, section_data in config_data.items():
+        # Skip backup section as it's handled in the cache section
+        if section_name == "backup":
+            continue
+
         console.print(f"\n[bold blue]{section_name.title()} Configuration[/bold blue]")
 
         if section_name == "profiles" and isinstance(section_data, dict):
@@ -503,67 +329,104 @@ def _display_config_table(config_data: dict):
 
                 console.print(ttl_table)
 
-        elif section_name == "templates" and isinstance(section_data, dict):
-            # Special handling for template config
-            table = Table()
-            table.add_column("Setting", style="cyan")
-            table.add_column("Value", style="green")
-            table.add_column("Default", style="yellow")
+            # Show backup configuration right after cache
+            backup_config = config_data.get("backup", {})
+            if backup_config:
+                console.print("\n[bold blue]Backup Configuration[/bold blue]")
+                backup_table = Table()
+                backup_table.add_column("Section", style="cyan")
+                backup_table.add_column("Setting", style="green")
+                backup_table.add_column("Value", style="yellow")
 
-            # Show template settings with defaults
-            defaults = {
-                "storage_directory": "~/.awsideman/templates",
-                "default_format": "yaml",
-                "strict_mode": "true",
-                "require_metadata": "false",
-                "default_dry_run": "false",
-                "parallel_execution": "true",
-                "batch_size": "10",
-            }
+                # Storage configuration
+                storage_config = backup_config.get("storage", {})
+                backup_table.add_row(
+                    "Storage",
+                    "Default Backend",
+                    storage_config.get("default_backend", "filesystem"),
+                )
 
-            # Show top-level settings
-            for key in ["storage_directory", "default_format"]:
-                if key in section_data:
-                    table.add_row(key, str(section_data[key]), defaults.get(key, "Not set"))
+                filesystem_config = storage_config.get("filesystem", {})
+                backup_table.add_row(
+                    "Storage",
+                    "Filesystem Path",
+                    filesystem_config.get("path", "~/.awsideman/backups"),
+                )
 
-            # Show validation settings
-            if "validation" in section_data and isinstance(section_data["validation"], dict):
-                validation = section_data["validation"]
-                for key in ["strict_mode", "require_metadata"]:
-                    if key in validation:
-                        table.add_row(
-                            f"validation.{key}", str(validation[key]), defaults.get(key, "Not set")
-                        )
+                s3_config = storage_config.get("s3", {})
+                backup_table.add_row(
+                    "Storage", "S3 Bucket", s3_config.get("bucket", "Not configured")
+                )
+                backup_table.add_row("Storage", "S3 Prefix", s3_config.get("prefix", "backups"))
+                backup_table.add_row(
+                    "Storage", "S3 Region", s3_config.get("region", "Profile default")
+                )
 
-            # Show execution settings
-            if "execution" in section_data and isinstance(section_data["execution"], dict):
-                execution = section_data["execution"]
-                for key in ["default_dry_run", "parallel_execution", "batch_size"]:
-                    if key in execution:
-                        table.add_row(
-                            f"execution.{key}", str(execution[key]), defaults.get(key, "Not set")
-                        )
+                # Encryption configuration
+                encryption_config = backup_config.get("encryption", {})
+                backup_table.add_row(
+                    "Encryption", "Enabled", str(encryption_config.get("enabled", True))
+                )
+                backup_table.add_row("Encryption", "Type", encryption_config.get("type", "aes256"))
 
-            console.print(table)
+                # Compression configuration
+                compression_config = backup_config.get("compression", {})
+                backup_table.add_row(
+                    "Compression", "Enabled", str(compression_config.get("enabled", True))
+                )
+                backup_table.add_row("Compression", "Type", compression_config.get("type", "gzip"))
 
-            # Show template directory status
-            if "storage_directory" in section_data:
-                import pathlib
+                # Default settings
+                defaults_config = backup_config.get("defaults", {})
+                backup_table.add_row(
+                    "Defaults", "Backup Type", defaults_config.get("backup_type", "full")
+                )
+                backup_table.add_row(
+                    "Defaults",
+                    "Include Inactive Users",
+                    str(defaults_config.get("include_inactive_users", False)),
+                )
+                backup_table.add_row(
+                    "Defaults", "Resource Types", defaults_config.get("resource_types", "all")
+                )
 
-                template_dir = pathlib.Path(section_data["storage_directory"]).expanduser()
-                if template_dir.exists():
-                    try:
-                        template_count = len(
-                            list(template_dir.glob("*.yaml")) + list(template_dir.glob("*.json"))
-                        )
-                        console.print(f"\n[blue]Template directory: {template_dir}[/blue]")
-                        console.print(f"[green]Found {template_count} template file(s)[/green]")
-                    except Exception:
-                        console.print(f"\n[blue]Template directory: {template_dir}[/blue]")
-                        console.print("[yellow]Could not count template files[/yellow]")
-                else:
-                    console.print(f"\n[blue]Template directory: {template_dir}[/blue]")
-                    console.print("[yellow]Directory does not exist[/yellow]")
+                # Retention policy
+                retention_config = backup_config.get("retention", {})
+                backup_table.add_row(
+                    "Retention", "Keep Daily", str(retention_config.get("keep_daily", 7))
+                )
+                backup_table.add_row(
+                    "Retention", "Keep Weekly", str(retention_config.get("keep_weekly", 4))
+                )
+                backup_table.add_row(
+                    "Retention", "Keep Monthly", str(retention_config.get("keep_monthly", 12))
+                )
+                backup_table.add_row(
+                    "Retention", "Auto Cleanup", str(retention_config.get("auto_cleanup", True))
+                )
+
+                # Performance settings
+                performance_config = backup_config.get("performance", {})
+                backup_table.add_row(
+                    "Performance",
+                    "Deduplication Enabled",
+                    str(performance_config.get("deduplication_enabled", True)),
+                )
+                backup_table.add_row(
+                    "Performance",
+                    "Parallel Processing",
+                    str(performance_config.get("parallel_processing_enabled", True)),
+                )
+                backup_table.add_row(
+                    "Performance",
+                    "Resource Monitoring",
+                    str(performance_config.get("resource_monitoring_enabled", True)),
+                )
+                backup_table.add_row(
+                    "Performance", "Max Workers", str(performance_config.get("max_workers", 8))
+                )
+
+                console.print(backup_table)
 
         else:
             # Generic handling for other sections
@@ -578,3 +441,234 @@ def _display_config_table(config_data: dict):
                 console.print(table)
             else:
                 console.print(f"  {section_data}")
+
+
+def _parse_config_value(value: str):
+    """Parse configuration value string into appropriate Python type."""
+    value = value.strip().lower()
+
+    # Boolean values
+    if value in ["true", "false", "1", "0", "yes", "no", "on", "off"]:
+        return value in ["true", "1", "yes", "on"]
+
+    # Integer values
+    try:
+        return int(value)
+    except ValueError:
+        pass
+
+    # Float values
+    try:
+        return float(value)
+    except ValueError:
+        pass
+
+    # String values (default)
+    return value
+
+
+def _set_config_value(config: Config, key: str, value):
+    """Set a configuration value using dot notation."""
+    config_data = config.get_all()
+
+    # Parse dot notation (e.g., "cache.enabled" -> ["cache", "enabled"])
+    key_parts = key.split(".")
+
+    if len(key_parts) == 1:
+        # Top-level key
+        config_data[key] = value
+    else:
+        # Nested key
+        current = config_data
+        for part in key_parts[:-1]:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        current[key_parts[-1]] = value
+
+    # Save the configuration
+    config.config_data = config_data
+    config.save_config()
+
+
+def _show_single_config_value(config: Config, key: str):
+    """Show a single configuration value."""
+    config_data = config.get_all()
+
+    # Parse dot notation
+    key_parts = key.split(".")
+    current = config_data
+
+    try:
+        for part in key_parts:
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                console.print(f"[yellow]Key '{key}' not found in configuration.[/yellow]")
+                return
+
+        # Display the value
+        if isinstance(current, dict):
+            console.print(f"[blue]Section '{key}':[/blue]")
+            table = Table()
+            table.add_column("Setting", style="cyan")
+            table.add_column("Value", style="green")
+
+            for k, v in current.items():
+                table.add_row(k, str(v))
+            console.print(table)
+        else:
+            console.print(f"[blue]Value:[/blue] {current}")
+
+    except Exception as e:
+        console.print(f"[red]Error displaying configuration: {e}[/red]")
+
+
+def _set_profile_cache_config(config: Config, profile_name: str, key: str, value):
+    """Set profile-specific cache configuration."""
+    config_data = config.get_all()
+
+    # Ensure cache section exists
+    if "cache" not in config_data:
+        config_data["cache"] = {}
+
+    # Ensure profiles section exists in cache
+    if "profiles" not in config_data["cache"]:
+        config_data["cache"]["profiles"] = {}
+
+    # Ensure profile section exists
+    if profile_name not in config_data["cache"]["profiles"]:
+        config_data["cache"]["profiles"][profile_name] = {}
+
+    # Parse the cache key (e.g., "cache.backend_type" -> "backend_type")
+    cache_key = key.replace("cache.", "")
+
+    # Set the profile-specific cache value
+    config_data["cache"]["profiles"][profile_name][cache_key] = value
+
+    # Save the configuration
+    config.config_data = config_data
+    config.save_config()
+
+
+def _show_profile_cache_config(config: Config, profile_name: str, key: str):
+    """Show profile-specific cache configuration."""
+    config_data = config.get_all()
+
+    # Parse the cache key
+    cache_key = key.replace("cache.", "")
+
+    try:
+        # Get the profile-specific cache config
+        profile_cache_config = (
+            config_data.get("cache", {}).get("profiles", {}).get(profile_name, {})
+        )
+
+        if cache_key in profile_cache_config:
+            value = profile_cache_config[cache_key]
+            console.print(f"[blue]Profile '{profile_name}' cache setting '{cache_key}':[/blue]")
+            console.print(f"[green]Value:[/green] {value}")
+        else:
+            console.print(
+                f"[yellow]Cache setting '{cache_key}' not found for profile '{profile_name}'[/yellow]"
+            )
+
+        # Show all profile-specific cache settings
+        if profile_cache_config:
+            console.print(f"\n[blue]All cache settings for profile '{profile_name}':[/blue]")
+            table = Table()
+            table.add_column("Setting", style="cyan")
+            table.add_column("Value", style="green")
+
+            for k, v in profile_cache_config.items():
+                table.add_row(k, str(v))
+            console.print(table)
+        else:
+            console.print(
+                f"[yellow]No profile-specific cache settings found for '{profile_name}'[/yellow]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Error displaying profile cache configuration: {e}[/red]")
+
+
+def _show_profile_cache_section(config_data: dict, profile_name: str):
+    """Show profile-specific cache configuration section."""
+    console.print(f"\n[bold blue]Cache Configuration for Profile: {profile_name}[/bold blue]")
+    console.print("=" * 60)
+
+    cache_config = config_data.get("cache", {})
+    profile_cache_config = cache_config.get("profiles", {}).get(profile_name, {})
+
+    if not profile_cache_config:
+        console.print(
+            f"[yellow]No profile-specific cache configuration found for '{profile_name}'[/yellow]"
+        )
+        console.print("[blue]Using default cache configuration[/blue]")
+
+        # Show default cache config
+        default_cache = cache_config.copy()
+        if "profiles" in default_cache:
+            del default_cache["profiles"]
+
+        if default_cache:
+            _display_cache_config_table(default_cache, "Default Cache Configuration")
+        return
+
+    # Show profile-specific cache config
+    _display_cache_config_table(
+        profile_cache_config, f"Profile '{profile_name}' Cache Configuration"
+    )
+
+    # Show inheritance information
+    console.print("\n[blue]Inheritance from Default Configuration:[/blue]")
+    default_cache = cache_config.copy()
+    if "profiles" in default_cache:
+        del default_cache["profiles"]
+
+    inherited_settings = []
+    for key, value in default_cache.items():
+        if key not in profile_cache_config:
+            inherited_settings.append((key, value))
+
+    if inherited_settings:
+        table = Table()
+        table.add_column("Setting", style="cyan")
+        table.add_column("Value (inherited)", style="yellow")
+
+        for key, value in inherited_settings:
+            table.add_row(key, str(value))
+        console.print(table)
+    else:
+        console.print("[dim]All settings are profile-specific (no inheritance)[/dim]")
+
+
+def _display_cache_config_table(cache_config: dict, title: str):
+    """Display cache configuration in table format."""
+    console.print(f"\n[bold blue]{title}[/bold blue]")
+    console.print("-" * 40)
+
+    table = Table()
+    table.add_column("Setting", style="cyan")
+    table.add_column("Value", style="green")
+
+    for key, value in cache_config.items():
+        if key == "operation_ttls" and isinstance(value, dict):
+            # Show operation TTLs as a sub-table
+            table.add_row(key, f"{len(value)} operations configured")
+        else:
+            table.add_row(key, str(value))
+
+    console.print(table)
+
+    # Show operation TTLs if they exist
+    if "operation_ttls" in cache_config and isinstance(cache_config["operation_ttls"], dict):
+        console.print("\n[bold blue]Operation TTLs[/bold blue]")
+        ttl_table = Table()
+        ttl_table.add_column("Operation", style="cyan")
+        ttl_table.add_column("TTL (seconds)", style="green")
+
+        for operation, ttl in cache_config["operation_ttls"].items():
+            ttl_table.add_row(operation, str(ttl))
+
+        console.print(ttl_table)

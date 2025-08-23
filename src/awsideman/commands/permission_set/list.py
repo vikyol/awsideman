@@ -4,13 +4,20 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import typer
-from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
+from botocore.exceptions import ClientError
 from rich.table import Table
 
-from ...aws_clients.manager import AWSClientManager
-from ...utils.error_handler import handle_aws_error, handle_network_error, with_retry
 from ...utils.validators import validate_filter, validate_limit
-from .helpers import console, get_single_key, validate_profile, validate_sso_instance
+from ..common import (
+    cache_option,
+    extract_standard_params,
+    handle_aws_error,
+    profile_option,
+    region_option,
+    show_cache_info,
+    validate_profile_with_cache,
+)
+from .helpers import console, get_single_key, validate_sso_instance
 
 
 def _list_permission_sets_internal(
@@ -18,6 +25,9 @@ def _list_permission_sets_internal(
     limit: Optional[int] = None,
     next_token: Optional[str] = None,
     profile: Optional[str] = None,
+    region: Optional[str] = None,
+    enable_caching: bool = True,
+    verbose: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
     Internal implementation of list_permission_sets that can be called directly from tests.
@@ -39,21 +49,19 @@ def _list_permission_sets_internal(
         if not validate_limit(limit):
             raise typer.Exit(1)
 
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Validate profile and get AWS client with cache integration
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=enable_caching, region=region
+        )
 
         # Check if AWS_DEFAULT_REGION environment variable is set
-        if os.environ.get("AWS_DEFAULT_REGION"):
+        if os.environ.get("AWS_DEFAULT_REGION") and verbose:
             console.print(
                 f"[yellow]Warning: AWS_DEFAULT_REGION environment variable is set to '{os.environ.get('AWS_DEFAULT_REGION')}'. This may override the region in your profile.[/yellow]"
             )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         instance_arn, _ = validate_sso_instance(profile_data)
-
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
 
         # Get the SSO Admin client
         sso_admin_client = aws_client.get_client("sso-admin")
@@ -104,18 +112,11 @@ def _list_permission_sets_internal(
         permission_sets = []
         filtered_permission_sets = []
 
-        # Use with_retry decorator to handle transient errors
-        @with_retry(max_retries=3, delay=1.0)
-        def get_permission_set_details(instance_arn, permission_set_arn):
-            return sso_admin_client.describe_permission_set(
-                InstanceArn=instance_arn, PermissionSetArn=permission_set_arn
-            )
-
         for permission_set_arn in permission_set_arns:
             try:
-                # Get permission set details with retry logic
-                permission_set_response = get_permission_set_details(
-                    instance_arn, permission_set_arn
+                # Get permission set details
+                permission_set_response = sso_admin_client.describe_permission_set(
+                    InstanceArn=instance_arn, PermissionSetArn=permission_set_arn
                 )
                 permission_set = permission_set_response.get("PermissionSet", {})
 
@@ -221,7 +222,13 @@ def _list_permission_sets_internal(
                     console.print("\n[blue]Fetching next page...[/blue]\n")
                     # Call _list_permission_sets_internal recursively with the next token
                     return _list_permission_sets_internal(
-                        filter=filter, limit=limit, next_token=next_token, profile=profile
+                        filter=filter,
+                        limit=limit,
+                        next_token=next_token,
+                        profile=profile,
+                        region=region,
+                        enable_caching=enable_caching,
+                        verbose=verbose,
                     )
                 else:
                     console.print("\n[yellow]Pagination stopped.[/yellow]")
@@ -238,26 +245,15 @@ def _list_permission_sets_internal(
         # Return the filtered permission sets and final next token
         return filtered_permission_sets, final_next_token
 
-    except ClientError as e:
-        # Handle AWS API errors with improved error messages and guidance
-        handle_aws_error(e, operation="ListPermissionSets")
-        raise typer.Exit(1)
     except ValueError as e:
         # Handle filter format errors
         console.print(f"[red]Error: {str(e)}[/red]")
         console.print("[yellow]Filter format should be 'attribute=value'.[/yellow]")
         console.print("[yellow]Example: --filter Name=AdminAccess[/yellow]")
         raise typer.Exit(1)
-    except (ConnectionError, EndpointConnectionError) as e:
-        # Handle network-related errors
-        handle_network_error(e)
-        raise typer.Exit(1)
     except Exception as e:
-        # Handle other unexpected errors
-        console.print(f"[red]Error: {str(e)}[/red]")
-        console.print(
-            "[yellow]This is an unexpected error. Please report this issue if it persists.[/yellow]"
-        )
+        # Handle all other errors using common error handler
+        handle_aws_error(e, "listing permission sets", verbose=verbose)
         raise typer.Exit(1)
 
 
@@ -272,7 +268,10 @@ def list_permission_sets(
         None, "--limit", "-l", help="Maximum number of permission sets to return"
     ),
     next_token: Optional[str] = typer.Option(None, "--next-token", "-n", help="Pagination token"),
-    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """List all permission sets in the Identity Center.
 
@@ -295,4 +294,12 @@ def list_permission_sets(
         # Continue pagination from a previous request
         $ awsideman permission-set list --next-token ABCDEF123456
     """
-    return _list_permission_sets_internal(filter, limit, next_token, profile)
+    # Extract and process standard command parameters
+    profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+
+    # Show cache information if verbose
+    show_cache_info(verbose)
+
+    return _list_permission_sets_internal(
+        filter, limit, next_token, profile, region, enable_caching, verbose
+    )

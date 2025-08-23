@@ -1,7 +1,16 @@
 """Cache status command for awsideman."""
 
+from typing import Optional
+
 import typer
 
+from ..common import (
+    cache_option,
+    extract_standard_params,
+    profile_option,
+    region_option,
+    verbose_option,
+)
 from .helpers import console, get_cache_manager
 
 
@@ -27,20 +36,84 @@ def _display_backend_configuration(cache_manager) -> None:
 def _display_encryption_status(cache_manager) -> None:
     """Display encryption status and key information."""
     try:
-        encryption_provider = cache_manager.get_encryption_provider()
-        if encryption_provider:
-            console.print("[green]Encryption:[/green] Enabled")
-            console.print(f"[green]Provider:[/green] {type(encryption_provider).__name__}")
+        # Get encryption information from cache manager
+        if hasattr(cache_manager, "config") and cache_manager.config:
+            config = cache_manager.config
+            encryption_enabled = getattr(config, "encryption_enabled", False)
+            encryption_type = getattr(config, "encryption_type", "none")
 
-            # Display key information if available
-            if hasattr(encryption_provider, "get_key_info"):
-                key_info = encryption_provider.get_key_info()
-                if key_info:
-                    console.print(f"[green]Key Info:[/green] {key_info}")
+            console.print(
+                f"[green]Encryption:[/green] {'Enabled' if encryption_enabled else 'Disabled'}"
+            )
+            if encryption_enabled:
+                console.print(f"[green]Encryption Type:[/green] {encryption_type}")
         else:
-            console.print("[yellow]Encryption:[/yellow] Disabled")
+            console.print("[yellow]Encryption:[/yellow] Unable to retrieve")
     except Exception as e:
-        console.print(f"[yellow]Encryption Status:[/yellow] Unable to retrieve ({e})")
+        console.print(f"[yellow]Encryption:[/yellow] Unable to retrieve ({e})")
+
+
+def _display_cache_statistics(stats: dict, cache_manager=None) -> None:
+    """Display cache statistics."""
+    try:
+        # Display backend-specific statistics and health status
+        if stats.get("backend_type") == "file":
+            # File backend specific fields
+            console.print(f"[green]Valid Entries:[/green] {stats.get('valid_entries', 0)}")
+            console.print(f"[green]Expired Entries:[/green] {stats.get('expired_entries', 0)}")
+            console.print(f"[green]Corrupted Entries:[/green] {stats.get('corrupted_entries', 0)}")
+        elif stats.get("backend_type") == "dynamodb":
+            # DynamoDB backend specific fields
+            if "item_count" in stats:
+                console.print(f"[green]Table Items:[/green] {stats['item_count']}")
+            if "table_status" in stats:
+                console.print(f"[green]Table Status:[/green] {stats['table_status']}")
+            if "ttl_enabled" in stats:
+                console.print(
+                    f"[green]TTL Enabled:[/green] {'Yes' if stats['ttl_enabled'] else 'No'}"
+                )
+
+        # Display total size if available
+        if "total_size_mb" in stats and "total_size_bytes" in stats:
+            console.print(
+                f"[green]Total Size:[/green] {stats['total_size_mb']} MB ({stats['total_size_bytes']} bytes)"
+            )
+
+        # Display cache size management information
+        if cache_manager and hasattr(cache_manager, "get_cache_size_info"):
+            try:
+                size_info = cache_manager.get_cache_size_info()
+                usage_pct = size_info.get("usage_percentage", 0)
+
+                if size_info.get("is_over_limit", False):
+                    console.print(f"[red]Cache Usage:[/red] {usage_pct}% (OVER LIMIT)")
+                    console.print(
+                        f"[red]Over Limit By:[/red] {size_info.get('bytes_over_limit', 0)} bytes"
+                    )
+                elif usage_pct > 80:
+                    console.print(f"[yellow]Cache Usage:[/yellow] {usage_pct}% (HIGH)")
+                else:
+                    console.print(f"[green]Cache Usage:[/green] {usage_pct}%")
+
+                console.print(
+                    f"[green]Available Space:[/green] {size_info.get('available_space_mb', 0)} MB"
+                )
+            except Exception as e:
+                console.print(f"[yellow]Cache Usage:[/yellow] Unable to calculate ({e})")
+
+        # Display configuration settings
+        console.print("\n[bold blue]Configuration Settings[/bold blue]")
+        console.print("-" * 30)
+        console.print(
+            f"[green]Default TTL:[/green] {stats['default_ttl']} seconds ({stats['default_ttl'] // 60} minutes)"
+        )
+        console.print(f"[green]Max Cache Size:[/green] {stats['max_size_mb']} MB")
+
+        # Display total entries
+        console.print(f"[green]Total Entries:[/green] {stats['total_entries']}")
+
+    except Exception as e:
+        console.print(f"[yellow]Cache Statistics:[/yellow] Unable to retrieve ({e})")
 
 
 def _display_backend_statistics(cache_manager) -> None:
@@ -98,6 +171,7 @@ def _display_recent_cache_entries(cache_manager) -> None:
 
         # Get recent entries (limit to first 10)
         entries = cache_manager.get_recent_entries(limit=10)
+
         if entries:
             # Create a table for better organization
             from rich.table import Table
@@ -134,7 +208,12 @@ def _display_recent_cache_entries(cache_manager) -> None:
         console.print(f"[yellow]Recent Entries:[/yellow] Unable to retrieve ({e})")
 
 
-def cache_status():
+def cache_status(
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = verbose_option(),
+):
     """Display cache status and statistics.
 
     Shows information about the current cache including:
@@ -145,7 +224,34 @@ def cache_status():
     - Recent cache entries with expiration times
     """
     try:
-        cache_manager = get_cache_manager()
+        # Extract and process standard command parameters
+        profile_param, region_param, enable_caching = extract_standard_params(
+            profile, region, no_cache
+        )
+
+        # Get cache manager with profile-aware configuration
+        if profile_param:
+            # Create a cache manager with the specified profile
+            from ...cache.utilities import create_cache_manager, get_profile_cache_config
+
+            config = get_profile_cache_config(profile_param)
+            cache_manager = create_cache_manager(config)
+        else:
+            cache_manager = get_cache_manager()
+
+        # Show cache information if verbose (using the same cache manager)
+        if verbose:
+            # Get cache stats from the same cache manager for consistency
+            verbose_stats = cache_manager.get_cache_stats()
+            if verbose_stats.get("enabled", False):
+                backend_type = verbose_stats.get("backend_type", "unknown")
+                total_entries = verbose_stats.get("total_entries", 0)
+                console.print(
+                    f"[blue]Cache: {backend_type} backend, " f"{total_entries} entries[/blue]"
+                )
+            else:
+                console.print("[blue]Cache: Disabled[/blue]")
+
         stats = cache_manager.get_cache_stats()
 
         # Handle error case
@@ -155,6 +261,8 @@ def cache_status():
 
         # Display cache status header
         console.print("\n[bold blue]Cache Status[/bold blue]")
+        if profile_param:
+            console.print(f"[blue]Profile: {profile_param}[/blue]")
         console.print("=" * 50)
 
         # Display basic statistics
@@ -170,55 +278,12 @@ def cache_status():
         # Display encryption status and key information
         _display_encryption_status(cache_manager)
 
-        # Display backend-specific statistics and health status
-        _display_backend_statistics(cache_manager)
+        # Display cache statistics
+        _display_cache_statistics(stats, cache_manager)
 
-        # Display legacy cache information for backward compatibility
-        if hasattr(cache_manager, "path_manager") and cache_manager.path_manager:
-            console.print(f"[green]Cache Directory:[/green] {stats['cache_directory']}")
-
-        console.print(f"[green]Total Entries:[/green] {stats['total_entries']}")
-        console.print(f"[green]Valid Entries:[/green] {stats['valid_entries']}")
-        console.print(f"[green]Expired Entries:[/green] {stats['expired_entries']}")
-        console.print(
-            f"[green]Total Size:[/green] {stats['total_size_mb']} MB ({stats['total_size_bytes']} bytes)"
-        )
-
-        # Display cache size management information
-        try:
-            size_info = cache_manager.get_cache_size_info()
-            usage_pct = size_info.get("usage_percentage", 0)
-
-            if size_info.get("is_over_limit", False):
-                console.print(f"[red]Cache Usage:[/red] {usage_pct}% (OVER LIMIT)")
-                console.print(
-                    f"[red]Over Limit By:[/red] {size_info.get('bytes_over_limit', 0)} bytes"
-                )
-            elif usage_pct > 80:
-                console.print(f"[yellow]Cache Usage:[/yellow] {usage_pct}% (HIGH)")
-            else:
-                console.print(f"[green]Cache Usage:[/green] {usage_pct}%")
-
-            console.print(
-                f"[green]Available Space:[/green] {size_info.get('available_space_mb', 0)} MB"
-            )
-        except Exception as e:
-            console.print(f"[yellow]Cache Usage:[/yellow] Unable to calculate ({e})")
-
-        # Display configuration settings
-        console.print("\n[bold blue]Configuration Settings[/bold blue]")
-        console.print("-" * 30)
-        console.print(
-            f"[green]Default TTL:[/green] {stats['default_ttl']} seconds ({stats['default_ttl'] // 60} minutes)"
-        )
-        console.print(f"[green]Max Cache Size:[/green] {stats['max_size_mb']} MB")
-
-        # Display recent cache entries if any exist
-        if stats["total_entries"] > 0:
-            _display_recent_cache_entries(cache_manager)
-        else:
-            console.print("\n[yellow]No cache entries found.[/yellow]")
+        # Display recent cache entries
+        _display_recent_cache_entries(cache_manager)
 
     except Exception as e:
-        console.print(f"[red]Error displaying cache status: {e}[/red]")
+        console.print(f"[red]Error getting cache status: {e}[/red]")
         raise typer.Exit(1)

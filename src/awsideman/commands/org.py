@@ -8,13 +8,18 @@ from rich.console import Console
 from rich.table import Table
 from rich.tree import Tree
 
-from ..aws_clients.manager import (
-    AWSClientManager,
-    build_organization_hierarchy,
-    get_account_details,
-)
+from ..aws_clients.manager import build_organization_hierarchy, get_account_details
 from ..utils.config import Config
 from ..utils.models import NodeType, OrgNode
+from .common import (
+    cache_option,
+    extract_standard_params,
+    get_aws_client_manager,
+    handle_aws_error,
+    profile_option,
+    region_option,
+    show_cache_info,
+)
 
 app = typer.Typer(
     help="Manage AWS Organizations. Query organization structure, accounts, and policies."
@@ -68,10 +73,10 @@ def tree(
         False, "--flat", help="Display in flat format instead of tree format"
     ),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Disable caching for this command"),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Display the full AWS Organization hierarchy including roots, OUs, and accounts.
 
@@ -80,11 +85,21 @@ def tree(
     Caching is enabled by default for improved performance. Use --no-cache to disable.
     """
     try:
-        # Validate profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Extract and process standard command parameters
+        profile_param, region_param, enable_caching = extract_standard_params(
+            profile, region, no_cache
+        )
 
-        # Initialize AWS client manager and organizations client
-        client_manager = AWSClientManager(profile=profile_name, enable_caching=not no_cache)
+        # Show cache information if verbose
+        show_cache_info(verbose)
+
+        # Get AWS client manager with cache integration
+        client_manager = get_aws_client_manager(
+            profile=profile_param,
+            region=region_param,
+            enable_caching=enable_caching,
+            verbose=verbose,
+        )
         organizations_client = client_manager.get_organizations_client()
 
         # Build the organization hierarchy
@@ -101,7 +116,7 @@ def tree(
             _output_tree_visual(organization_tree)
 
     except Exception as e:
-        console.print(f"[red]Error: {str(e)}[/red]")
+        handle_aws_error(e, "building organization tree", verbose=verbose)
         raise typer.Exit(1)
 
 
@@ -109,10 +124,10 @@ def tree(
 def account(
     account_id: str = typer.Argument(..., help="AWS account ID to display details for"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Disable caching for this command"),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Display detailed information about a specific AWS account.
 
@@ -121,8 +136,13 @@ def account(
     Caching is enabled by default for improved performance. Use --no-cache to disable.
     """
     try:
-        # Validate profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Extract and process standard command parameters
+        profile_param, region_param, enable_caching = extract_standard_params(
+            profile, region, no_cache
+        )
+
+        # Show cache information if verbose
+        show_cache_info(verbose)
 
         # Validate account ID format (12-digit number)
         if not _is_valid_account_id(account_id):
@@ -131,8 +151,13 @@ def account(
             )
             raise typer.Exit(1)
 
-        # Initialize AWS client manager and organizations client
-        client_manager = AWSClientManager(profile=profile_name, enable_caching=not no_cache)
+        # Get AWS client manager with cache integration
+        client_manager = get_aws_client_manager(
+            profile=profile_param,
+            region=region_param,
+            enable_caching=enable_caching,
+            verbose=verbose,
+        )
         organizations_client = client_manager.get_organizations_client()
 
         # Get account details
@@ -158,9 +183,10 @@ def search(
     ou: Optional[str] = typer.Option(None, "--ou", help="Filter by organizational unit ID"),
     tag: Optional[str] = typer.Option(None, "--tag", help="Filter by tag in format 'Key=Value'"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Search for accounts by name or substring.
 
@@ -169,16 +195,26 @@ def search(
     Supports optional filtering by OU and tags.
     """
     try:
-        # Validate profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Extract and process standard command parameters
+        profile_param, region_param, enable_caching = extract_standard_params(
+            profile, region, no_cache
+        )
+
+        # Show cache information if verbose
+        show_cache_info(verbose)
 
         # Parse tag filter if provided
         tag_filter = None
         if tag:
             tag_filter = _parse_tag_filter(tag)
 
-        # Initialize AWS client manager and organizations client
-        client_manager = AWSClientManager(profile=profile_name)
+        # Get AWS client manager with cache integration
+        client_manager = get_aws_client_manager(
+            profile=profile_param,
+            region=region_param,
+            enable_caching=enable_caching,
+            verbose=verbose,
+        )
         organizations_client = client_manager.get_organizations_client()
 
         # Perform the search
@@ -208,7 +244,7 @@ def search(
             _output_search_results_table(matching_accounts, query)
 
     except Exception as e:
-        console.print(f"[red]Error: {str(e)}[/red]")
+        handle_aws_error(e, "searching accounts", verbose=verbose)
         raise typer.Exit(1)
 
 
@@ -216,9 +252,10 @@ def search(
 def trace_policies(
     account_id: str = typer.Argument(..., help="AWS account ID to trace policies for"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Trace all SCPs and RCPs affecting a given account.
 
@@ -227,8 +264,13 @@ def trace_policies(
     Distinguishes between SCPs and RCPs in the output.
     """
     try:
-        # Validate profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Extract and process standard command parameters
+        profile_param, region_param, enable_caching = extract_standard_params(
+            profile, region, no_cache
+        )
+
+        # Show cache information if verbose
+        show_cache_info(verbose)
 
         # Validate account ID format (12-digit number)
         if not _is_valid_account_id(account_id):
@@ -237,8 +279,13 @@ def trace_policies(
             )
             raise typer.Exit(1)
 
-        # Initialize AWS client manager and organizations client
-        client_manager = AWSClientManager(profile=profile_name)
+        # Get AWS client manager with cache integration
+        client_manager = get_aws_client_manager(
+            profile=profile_param,
+            region=region_param,
+            enable_caching=enable_caching,
+            verbose=verbose,
+        )
         organizations_client = client_manager.get_organizations_client()
 
         # Initialize policy resolver
@@ -259,7 +306,7 @@ def trace_policies(
             _output_policies_table(policies, account_id)
 
     except Exception as e:
-        console.print(f"[red]Error: {str(e)}[/red]")
+        handle_aws_error(e, "tracing policies", verbose=verbose)
         raise typer.Exit(1)
 
 

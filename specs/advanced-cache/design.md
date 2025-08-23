@@ -464,3 +464,207 @@ TTL: Enabled on 'ttl' attribute for automatic expiration
 - Implement hybrid backend
 - Add key rotation functionality
 - Create comprehensive CLI commands
+
+## Integration with Command System
+
+### Current Architecture Problem
+
+The current implementation has a fundamental architectural disconnect:
+
+1. **Cache System**: Exists as `CachedAwsClient` with proper caching functionality
+2. **Command System**: Uses `AWSClientManager` directly, bypassing the cache entirely
+3. **Cache Warming**: Executes commands via `CliRunner`, but commands don't use cached clients
+
+### Root Cause Analysis
+
+**What's happening:**
+- Cache warming command executes `awsideman user list` using CliRunner
+- CliRunner runs the command in a separate process
+- User list command uses `AWSClientManager` directly (not cached)
+- AWS API calls are made without caching
+- No cache entries are created
+- Cache warming reports "already warm" because no entries were added
+
+**What should happen:**
+- Commands should use cached AWS clients that intercept API calls
+- API responses should be cached automatically
+- Cache warming should populate the cache with real data
+
+### Solution: Integrated Cache Architecture
+
+The solution requires modifying the command system to use cached clients by default:
+
+#### 1. Enhanced AWSClientManager
+
+```python
+class AWSClientManager:
+    def __init__(self,
+                 profile: Optional[str] = None,
+                 region: Optional[str] = None,
+                 enable_caching: bool = True,
+                 cache_config: Optional[CacheConfig] = None):
+        self.profile = profile
+        self.region = region
+        self.enable_caching = enable_caching
+        self.cache_config = cache_config
+        self._cache_manager = None
+        self._cached_client = None
+
+    @property
+    def cache_manager(self) -> Optional[CacheManager]:
+        """Get or create cache manager if caching is enabled."""
+        if self.enable_caching and not self._cache_manager:
+            self._cache_manager = CacheManager(config=self.cache_config)
+        return self._cache_manager
+
+    @property
+    def cached_client(self) -> Optional[CachedAwsClient]:
+        """Get or create cached client if caching is enabled."""
+        if self.enable_caching and not self._cached_client:
+            self._cached_client = CachedAwsClient(self, self.cache_manager)
+        return self._cached_client
+
+    def get_organizations_client(self):
+        """Get Organizations client (cached if caching enabled)."""
+        if self.enable_caching and self.cached_client:
+            return self.cached_client.get_organizations_client()
+        else:
+            return OrganizationsClientWrapper(self)
+
+    def get_identity_center_client(self):
+        """Get Identity Center client (cached if caching enabled)."""
+        if self.enable_caching and self.cached_client:
+            return self.cached_client.get_identity_center_client()
+        else:
+            return IdentityCenterClientWrapper(self)
+
+    def get_identity_store_client(self):
+        """Get Identity Store client (cached if caching enabled)."""
+        if self.enable_caching and self.cached_client:
+            return self.cached_client.get_identity_store_client()
+        else:
+            return IdentityStoreClientWrapper(self)
+```
+
+#### 2. Global Cache Configuration
+
+```python
+# In utils/config.py or similar
+def get_default_cache_config() -> CacheConfig:
+    """Get default cache configuration from config file or environment."""
+    return AdvancedCacheConfig.from_config_file()
+
+def create_aws_client_manager(
+    profile: Optional[str] = None,
+    region: Optional[str] = None,
+    enable_caching: Optional[bool] = None,
+    cache_config: Optional[CacheConfig] = None
+) -> AWSClientManager:
+    """Factory function to create AWSClientManager with proper cache integration."""
+
+    # Use global cache configuration if not specified
+    if cache_config is None:
+        cache_config = get_default_cache_config()
+
+    # Enable caching by default unless explicitly disabled
+    if enable_caching is None:
+        enable_caching = cache_config.enabled
+
+    return AWSClientManager(
+        profile=profile,
+        region=region,
+        enable_caching=enable_caching,
+        cache_config=cache_config
+    )
+```
+
+#### 3. Command Integration
+
+Update all commands to use the factory function:
+
+```python
+# In commands/user/list.py
+def list_users(
+    filter: Optional[str] = None,
+    limit: Optional[int] = None,
+    next_token: Optional[str] = None,
+    profile: Optional[str] = None,
+    no_cache: bool = False,  # Add no-cache option
+):
+    """List all users in the Identity Store."""
+    try:
+        # Validate profile
+        profile_name, profile_data = validate_profile(profile)
+
+        # Create AWS client manager with caching
+        aws_client = create_aws_client_manager(
+            profile=profile_name,
+            region=profile_data.get("region"),
+            enable_caching=not no_cache
+        )
+
+        # Get identity store client (will be cached if caching enabled)
+        identity_store = aws_client.get_identity_store_client()
+
+        # Rest of the command logic remains the same...
+```
+
+#### 4. Cache Warming Integration
+
+The cache warming command will now work correctly because commands use cached clients:
+
+```python
+def warm_cache(command: str, profile: Optional[str] = None, region: Optional[str] = None):
+    """Warm up the cache by pre-executing a command."""
+    try:
+        cache_manager = get_cache_manager()
+
+        if not cache_manager.config.enabled:
+            console.print("[yellow]Cache is disabled. Cannot warm cache.[/yellow]")
+            return
+
+        # Get cache stats before warming
+        stats_before = cache_manager.get_cache_stats()
+        entries_before = stats_before.get("total_entries", 0)
+
+        # Execute the command (will now use cached clients)
+        _execute_command_with_cli_runner(command_parts, profile, region)
+
+        # Get cache stats after warming
+        stats_after = cache_manager.get_cache_stats()
+        entries_after = stats_after.get("total_entries", 0)
+
+        # Report results
+        new_entries = entries_after - entries_before
+        if new_entries > 0:
+            console.print(f"[green]✓ Cache warmed successfully! Added {new_entries} new cache entries.[/green]")
+        else:
+            console.print("[yellow]Cache was already warm for this command (no new entries added).[/yellow]")
+
+    except Exception as e:
+        console.print(f"[red]Error warming cache: {e}[/red]")
+        raise typer.Exit(1)
+```
+
+### Implementation Strategy
+
+#### Phase 1: Core Integration
+1. Modify `AWSClientManager` to support optional caching
+2. Create factory function for consistent client creation
+3. Update configuration system to support cache settings
+
+#### Phase 2: Command Updates
+1. Update all commands to use the factory function
+2. Add `--no-cache` option to all commands
+3. Ensure cache warming works with all command types
+
+#### Phase 3: Testing & Validation
+1. Test cache warming with different backends (file, DynamoDB)
+2. Verify cache hit/miss behavior
+3. Performance testing with and without caching
+
+This architectural change ensures that:
+- All commands use cached clients by default
+- Cache warming actually populates the cache
+- Users can disable caching per command if needed
+- The cache system works seamlessly with all backends

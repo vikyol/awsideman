@@ -5,17 +5,22 @@ from typing import Optional
 import typer
 from typer.testing import CliRunner
 
+from ..common import (
+    cache_option,
+    extract_standard_params,
+    profile_option,
+    region_option,
+    show_cache_info,
+)
 from .helpers import console, get_cache_manager
 
 
 def warm_cache(
     command: str = typer.Argument(..., help="Command to warm up (e.g., 'user list', 'group list')"),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", help="AWS profile to use for cache warming"
-    ),
-    region: Optional[str] = typer.Option(
-        None, "--region", help="AWS region to use for cache warming"
-    ),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Warm up the cache by pre-executing a command.
 
@@ -29,7 +34,25 @@ def warm_cache(
         awsideman cache warm "user list" --profile dev --region us-west-2
     """
     try:
-        cache_manager = get_cache_manager()
+        # Extract and process standard command parameters
+        profile_param, region_param, enable_caching = extract_standard_params(
+            profile, region, no_cache
+        )
+
+        # Show cache information if verbose
+        show_cache_info(verbose)
+
+        # Get cache manager with profile-aware configuration
+        if profile_param:
+            from ...cache.utilities import create_cache_manager, get_profile_cache_config
+
+            config = get_profile_cache_config(profile_param)
+            cache_manager = create_cache_manager(config)
+            console.print(
+                f"[blue]Using profile-specific cache configuration for: {profile_param}[/blue]"
+            )
+        else:
+            cache_manager = get_cache_manager()
 
         if not cache_manager.config.enabled:
             console.print("[yellow]Cache is disabled. Cannot warm cache.[/yellow]")
@@ -41,13 +64,13 @@ def warm_cache(
 
         # Show which profile/region is being used
         profile_info = ""
-        if profile:
-            profile_info += f" (profile: {profile}"
-            if region:
-                profile_info += f", region: {region}"
+        if profile_param:
+            profile_info += f" (profile: {profile_param}"
+            if region_param:
+                profile_info += f", region: {region_param}"
             profile_info += ")"
-        elif region:
-            profile_info = f" (region: {region})"
+        elif region_param:
+            profile_info = f" (region: {region_param})"
 
         console.print(f"[blue]Warming cache for command: {command}{profile_info}[/blue]")
 
@@ -74,34 +97,24 @@ def warm_cache(
         console.print("[dim]Executing command to populate cache...[/dim]")
         console.print(f"[dim]Full command: awsideman {' '.join(command_parts)}[/dim]")
 
-        try:
-            # Execute the command using Typer's CliRunner
-            _execute_command_with_cli_runner(command_parts, profile, region)
-
-        except Exception as e:
-            console.print(f"[red]Error executing command: {e}[/red]")
-            raise typer.Exit(1)
+        _execute_command_with_cli_runner(
+            command_parts, profile_param, region_param, enable_caching, verbose
+        )
 
         # Get cache stats after warming
         stats_after = cache_manager.get_cache_stats()
         entries_after = stats_after.get("total_entries", 0)
 
-        # Calculate the difference
+        # Report results
         new_entries = entries_after - entries_before
-
         if new_entries > 0:
             console.print(
                 f"[green]✓ Cache warmed successfully! Added {new_entries} new cache entries.[/green]"
             )
-        elif new_entries == 0:
+        else:
             console.print(
                 "[yellow]Cache was already warm for this command (no new entries added).[/yellow]"
             )
-        else:
-            # This shouldn't happen unless cache was cleared during execution
-            console.print("[yellow]Cache state changed during warm-up.[/yellow]")
-
-        console.print(f"[dim]Total cache entries: {entries_after}[/dim]")
 
     except Exception as e:
         console.print(f"[red]Error warming cache: {e}[/red]")
@@ -109,7 +122,11 @@ def warm_cache(
 
 
 def _execute_command_with_cli_runner(
-    command_parts: list, profile: Optional[str], region: Optional[str]
+    command_parts: list,
+    profile: Optional[str],
+    region: Optional[str],
+    enable_caching: bool,
+    verbose: bool,
 ) -> None:
     """Execute a command using Typer's CliRunner."""
     command_group = command_parts[0]
@@ -125,6 +142,12 @@ def _execute_command_with_cli_runner(
         runner_args.extend(["--profile", profile])
     if region:
         runner_args.extend(["--region", region])
+
+    # Add cache options for enhanced integration
+    if not enable_caching:
+        runner_args.append("--no-cache")
+    if verbose:
+        runner_args.append("--verbose")
 
     # Add any additional arguments from the original command
     if len(command_parts) > 2:

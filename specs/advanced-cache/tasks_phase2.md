@@ -6,14 +6,14 @@ This implementation plan addresses the cache integration issue where commands do
 
 ## Tasks
 
-- [ ] 1. Enhance AWSClientManager for cache integration
+- [x] 1. Enhance AWSClientManager for cache integration
   - Modify AWSClientManager to accept cache configuration parameters
   - Add properties for cache_manager and cached_client
   - Update client getter methods to return cached clients when caching is enabled
   - Maintain backward compatibility with existing code
   - _Requirements: Cache system integration, backward compatibility_
 
-- [ ] 2. Create cache configuration utilities
+- [x] 2. Create cache configuration utilities
   - Implement get_default_cache_config() function to load cache settings
   - Create create_aws_client_manager() factory function for consistent client creation
   - Add configuration loading from config files and environment variables
@@ -27,42 +27,42 @@ This implementation plan addresses the cache integration issue where commands do
   - Ensure consistent behavior across all command types
   - _Requirements: Command consistency, user control over caching_
 
-- [ ] 4. Update user commands to use cached clients
+- [x] 4. Update user commands to use cached clients
   - Modify src/awsideman/commands/user/list.py to use factory function
   - Add --no-cache option to user list command
   - Update other user commands (create, delete, etc.) to use cached clients
   - Test that user commands properly cache and retrieve data
   - _Requirements: User management caching, command integration_
 
-- [ ] 5. Update group commands to use cached clients
+- [x] 5. Update group commands to use cached clients
   - Modify group commands to use create_aws_client_manager factory
   - Add --no-cache option to all group commands
   - Ensure group membership operations are properly cached
   - Test group command caching behavior
   - _Requirements: Group management caching, command integration_
 
-- [ ] 6. Update organization commands to use cached clients
+- [x] 6. Update organization commands to use cached clients
   - Modify src/awsideman/commands/org.py to use cached clients
   - Update org tree command to properly cache organization hierarchy
   - Update org account and org search commands for caching
   - Test that org tree cache warming actually populates cache
   - _Requirements: Organization data caching, tree structure caching_
 
-- [ ] 7. Update permission set commands to use cached clients
+- [x] 7. Update permission set commands to use cached clients
   - Modify permission set commands to use factory function
   - Add caching support for permission set operations
   - Ensure permission set assignments are cached appropriately
   - Test permission set command caching
   - _Requirements: Permission set caching, assignment caching_
 
-- [ ] 8. Update assignment commands to use cached clients
+- [x] 8. Update assignment commands to use cached clients
   - Modify assignment commands to use cached clients
   - Add caching for assignment list and status operations
   - Ensure assignment operations work with cached data
   - Test assignment command caching behavior
   - _Requirements: Assignment operation caching, bulk operation support_
 
-- [ ] 9. Fix cache warming command integration
+- [x] 9. Fix cache warming command integration
   - Update cache warming to work with the new integrated architecture
   - Ensure cache warming actually populates cache entries
   - Fix the "already warm" message when cache is empty

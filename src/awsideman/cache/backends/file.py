@@ -30,6 +30,7 @@ class FileBackend(CacheBackend):
             cache_dir: Optional custom cache directory path.
                       Defaults to ~/.awsideman/cache/
         """
+        self.cache_dir = cache_dir
         self.path_manager = CachePathManager(cache_dir)
         self.backend_type = "file"
 
@@ -490,7 +491,16 @@ class FileBackend(CacheBackend):
         entries = []
 
         try:
-            cache_files = self.path_manager.list_cache_files()
+            # Get cache files either from path_manager or directly from cache directory
+            if self.path_manager:
+                cache_files = self.path_manager.list_cache_files()
+            else:
+                # Fallback: list cache files directly from cache directory
+                cache_dir = Path(self.cache_dir)
+                if not cache_dir.exists():
+                    return entries
+                cache_files = list(cache_dir.glob("*.json"))
+
             if not cache_files:
                 return entries
 
@@ -505,6 +515,62 @@ class FileBackend(CacheBackend):
 
                     # Try to read the cache entry JSON to get metadata
                     try:
+                        # First try to read as binary to detect if it's encrypted
+                        with open(cache_file, "rb") as f:
+                            file_content = f.read()
+
+                        # Check if it's the new encrypted format
+                        if len(file_content) >= 4:
+                            try:
+                                # Try to read metadata length
+                                metadata_length = int.from_bytes(file_content[:4], byteorder="big")
+                                if metadata_length > 0 and metadata_length < len(file_content):
+                                    # Try to parse metadata
+                                    metadata_json = file_content[4 : 4 + metadata_length]
+                                    metadata = json.loads(metadata_json.decode("utf-8"))
+
+                                    if metadata.get("encrypted", False):
+                                        # This is encrypted format - extract metadata from header
+                                        created_at = metadata.get("created_at", 0)
+                                        ttl = metadata.get("ttl", 0)
+                                        operation = metadata.get("operation", "unknown")
+
+                                        # Calculate age and remaining TTL
+                                        current_time = time.time()
+                                        age_seconds = current_time - created_at
+                                        remaining_ttl = ttl - age_seconds
+
+                                        # Format TTL information
+                                        if remaining_ttl > 0:
+                                            ttl_display = f"{remaining_ttl:.0f}s remaining"
+                                        else:
+                                            ttl_display = "Expired"
+
+                                        # Calculate age
+                                        if age_seconds < 60:
+                                            age_display = f"{age_seconds:.0f}s ago"
+                                        elif age_seconds < 3600:
+                                            age_display = f"{age_seconds/60:.0f}m ago"
+                                        else:
+                                            age_display = f"{age_seconds/3600:.1f}h ago"
+
+                                        entry = {
+                                            "key": key,
+                                            "operation": operation,
+                                            "ttl": ttl_display,
+                                            "age": age_display,
+                                            "size": f"{stat.st_size} bytes",
+                                            "modified": stat.st_mtime,
+                                            "file_size": stat.st_size,
+                                            "is_expired": remaining_ttl <= 0,
+                                        }
+                                        entries.append(entry)
+                                        continue  # Skip to next file
+                            except (ValueError, json.JSONDecodeError, KeyError, UnicodeDecodeError):
+                                # Not the new encrypted format, fall through to plain text
+                                pass
+
+                        # Try to read as plain text JSON
                         with open(cache_file, "r", encoding="utf-8") as f:
                             cache_data = json.load(f)
 
@@ -532,34 +598,32 @@ class FileBackend(CacheBackend):
                         else:
                             age_display = f"{age_seconds/3600:.1f}h ago"
 
-                        entries.append(
-                            {
-                                "key": key,
-                                "operation": operation,
-                                "ttl": ttl_display,
-                                "age": age_display,
-                                "size": f"{stat.st_size} bytes",
-                                "modified": stat.st_mtime,
-                                "file_size": stat.st_size,
-                                "is_expired": remaining_ttl <= 0,
-                            }
-                        )
+                        entry = {
+                            "key": key,
+                            "operation": operation,
+                            "ttl": ttl_display,
+                            "age": age_display,
+                            "size": f"{stat.st_size} bytes",
+                            "modified": stat.st_mtime,
+                            "file_size": stat.st_size,
+                            "is_expired": remaining_ttl <= 0,
+                        }
+                        entries.append(entry)
 
-                    except (json.JSONDecodeError, KeyError, TypeError) as e:
+                    except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError) as e:
                         # If we can't read the JSON, return basic file info
                         logger.debug(f"Could not read cache entry metadata from {cache_file}: {e}")
-                        entries.append(
-                            {
-                                "key": key,
-                                "operation": "unknown",
-                                "ttl": "Unknown",
-                                "age": "Unknown",
-                                "size": f"{stat.st_size} bytes",
-                                "modified": stat.st_mtime,
-                                "file_size": stat.st_size,
-                                "is_expired": False,
-                            }
-                        )
+                        entry = {
+                            "key": key,
+                            "operation": "unknown",
+                            "ttl": "Unknown",
+                            "age": "Unknown",
+                            "size": f"{stat.st_size} bytes",
+                            "modified": stat.st_mtime,
+                            "file_size": stat.st_size,
+                            "is_expired": False,
+                        }
+                        entries.append(entry)
 
                 except Exception as e:
                     logger.debug(f"Error reading cache entry metadata from {cache_file}: {e}")

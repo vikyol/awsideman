@@ -10,11 +10,19 @@ import typer
 from botocore.exceptions import ClientError
 from rich.table import Table
 
-from ...aws_clients.manager import AWSClientManager
 from ...bulk.resolver import ResourceResolver
 from ...utils.config import Config
-from ...utils.error_handler import handle_aws_error, handle_network_error
-from ...utils.validators import validate_profile, validate_sso_instance
+from ...utils.error_handler import handle_network_error
+from ...utils.validators import validate_sso_instance
+from ..common import (
+    cache_option,
+    extract_standard_params,
+    handle_aws_error,
+    profile_option,
+    region_option,
+    show_cache_info,
+    validate_profile_with_cache,
+)
 from .helpers import console, resolve_permission_set_info, resolve_principal_info
 
 config = Config()
@@ -40,7 +48,10 @@ def list_assignments(
     interactive: bool = typer.Option(
         True, "--interactive/--no-interactive", help="Enable/disable interactive pagination"
     ),
-    profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ) -> None:
     """List all permission set assignments.
 
@@ -67,8 +78,16 @@ def list_assignments(
         # List assignments with a specific limit
         $ awsideman assignment list --limit 10
     """
-    # Validate profile and get profile data
-    profile_name, profile_data = validate_profile(profile)
+    # Extract and process standard command parameters
+    profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+
+    # Show cache information if verbose
+    show_cache_info(verbose)
+
+    # Validate profile and get AWS client with cache integration
+    profile_name, profile_data, aws_client = validate_profile_with_cache(
+        profile=profile, enable_caching=enable_caching, region=region
+    )
 
     # Validate SSO instance and get instance ARN and identity store ID
     instance_arn, identity_store_id = validate_sso_instance(profile_data)
@@ -88,16 +107,12 @@ def list_assignments(
         console.print("[red]Error: Limit must be a positive integer.[/red]")
         raise typer.Exit(1)
 
-    # Create AWS client manager
-    aws_client = AWSClientManager(profile_name)
-
     # Get SSO admin client
     try:
         sso_admin_client = aws_client.get_sso_admin_client()
-    except ClientError as e:
-        handle_aws_error(e, "CreateSSOAdminClient")
     except Exception as e:
-        handle_network_error(e)
+        handle_aws_error(e, "creating SSO admin client", verbose=verbose)
+        raise typer.Exit(1)
 
     # Get identity store client
     try:

@@ -3,24 +3,34 @@
 from typing import Optional
 
 import typer
-from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
+from botocore.exceptions import ClientError
 from rich.panel import Panel
 from rich.table import Table
 
-from ...aws_clients.manager import AWSClientManager
-from ...utils.error_handler import handle_aws_error, handle_network_error, with_retry
+from ...utils.error_handler import with_retry
+from ..common import (
+    cache_option,
+    extract_standard_params,
+    handle_aws_error,
+    profile_option,
+    region_option,
+    show_cache_info,
+    validate_profile_with_cache,
+)
 from .helpers import (
     console,
     format_permission_set_for_display,
     resolve_permission_set_identifier,
-    validate_profile,
     validate_sso_instance,
 )
 
 
 def get_permission_set(
     identifier: str = typer.Argument(..., help="Permission set name or ARN"),
-    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Get detailed information about a specific permission set.
 
@@ -39,15 +49,19 @@ def get_permission_set(
         $ awsideman permission-set get AdminAccess --profile dev-account
     """
     try:
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Extract and process standard command parameters
+        profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+
+        # Show cache information if verbose
+        show_cache_info(verbose)
+
+        # Validate profile and get AWS client with cache integration
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=enable_caching, region=region
+        )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         instance_arn, identity_store_id = validate_sso_instance(profile_data)
-
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
 
         # Get the SSO admin client
         sso_admin_client = aws_client.get_client("sso-admin")
@@ -141,21 +155,10 @@ def get_permission_set(
 
             raise typer.Exit(1)
 
-    except ClientError as e:
-        # Handle AWS API errors with improved error messages and guidance
-        handle_aws_error(e, operation="GetPermissionSet")
-        raise typer.Exit(1)
-    except (ConnectionError, EndpointConnectionError) as e:
-        # Handle network-related errors
-        handle_network_error(e)
-        raise typer.Exit(1)
     except typer.Exit:
         # Re-raise typer.Exit without additional error messages
         raise
     except Exception as e:
-        # Handle other unexpected errors
-        console.print(f"[red]Error: {str(e)}[/red]")
-        console.print(
-            "[yellow]This is an unexpected error. Please report this issue if it persists.[/yellow]"
-        )
+        # Handle all other errors using common error handler
+        handle_aws_error(e, "getting permission set", verbose=verbose)
         raise typer.Exit(1)

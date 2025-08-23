@@ -4,11 +4,18 @@ import os
 from typing import Optional
 
 import typer
-from botocore.exceptions import ClientError
 from rich.table import Table
 
-from ...aws_clients.manager import AWSClientManager
-from .helpers import console, get_single_key, validate_profile, validate_sso_instance
+from ..common import (
+    cache_option,
+    extract_standard_params,
+    handle_aws_error,
+    profile_option,
+    region_option,
+    show_cache_info,
+    validate_profile_with_cache,
+)
+from .helpers import console, get_single_key, validate_sso_instance
 
 
 def list_users(
@@ -24,9 +31,10 @@ def list_users(
     next_token: Optional[str] = typer.Option(
         None, "--next-token", "-n", help="Pagination token (for internal use)"
     ),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """List all users in the Identity Store.
 
@@ -34,21 +42,25 @@ def list_users(
     Results can be filtered and paginated. Press ENTER to see the next page of results.
     """
     try:
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Extract and process standard command parameters
+        profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+
+        # Show cache information if verbose
+        show_cache_info(verbose)
+
+        # Validate profile and get AWS client with cache integration
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=enable_caching, region=region
+        )
 
         # Check if AWS_DEFAULT_REGION environment variable is set
-        if os.environ.get("AWS_DEFAULT_REGION"):
+        if os.environ.get("AWS_DEFAULT_REGION") and verbose:
             console.print(
                 f"[yellow]Warning: AWS_DEFAULT_REGION environment variable is set to '{os.environ.get('AWS_DEFAULT_REGION')}'. This may override the region in your profile.[/yellow]"
             )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         _, identity_store_id = validate_sso_instance(profile_data)
-
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
 
         # Get the identity store client
         identity_store = aws_client.get_identity_store_client()
@@ -152,7 +164,13 @@ def list_users(
                     console.print("\n[blue]Fetching next page...[/blue]\n")
                     # Call list_users recursively with the next token
                     return list_users(
-                        filter=filter, limit=limit, next_token=next_token, profile=profile
+                        filter=filter,
+                        limit=limit,
+                        next_token=next_token,
+                        profile=profile,
+                        region=region,
+                        no_cache=no_cache,
+                        verbose=verbose,
                     )
                 else:
                     console.print("\n[yellow]Pagination stopped.[/yellow]")
@@ -162,18 +180,12 @@ def list_users(
         # Return the users and next token for further processing
         return users, next_token
 
-    except ClientError as e:
-        # Handle AWS API errors
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_message = e.response.get("Error", {}).get("Message", str(e))
-        console.print(f"[red]Error ({error_code}): {error_message}[/red]")
-        raise typer.Exit(1)
     except ValueError as e:
         # Handle filter format errors
         console.print(f"[red]Error: {str(e)}[/red]")
         console.print("Filter format should be 'attribute=value'.")
         raise typer.Exit(1)
     except Exception as e:
-        # Handle other unexpected errors
-        console.print(f"[red]Error: {str(e)}[/red]")
+        # Handle all other errors using common error handler
+        handle_aws_error(e, "listing users", verbose=verbose)
         raise typer.Exit(1)

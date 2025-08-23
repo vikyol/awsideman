@@ -1232,6 +1232,19 @@ class CacheManager:
                 **backend_stats,
             }
 
+            # Ensure consistent total_entries field across all backends
+            if "total_entries" not in stats:
+                # Map backend-specific fields to total_entries
+                if "item_count" in stats:
+                    # DynamoDB backend uses item_count
+                    stats["total_entries"] = stats["item_count"]
+                elif "valid_entries" in stats:
+                    # File backend uses valid_entries
+                    stats["total_entries"] = stats["valid_entries"]
+                else:
+                    # Fallback to 0 if no entry count available
+                    stats["total_entries"] = 0
+
             # Add encryption provider info if available
             if self.encryption_provider:
                 stats["encryption_provider"] = self.encryption_provider.get_encryption_type()

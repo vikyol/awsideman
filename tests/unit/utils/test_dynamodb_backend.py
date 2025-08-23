@@ -352,6 +352,9 @@ class TestDynamoDBBackend:
             }
         }
 
+        # Mock the scan method for real-time item count
+        mock_client.scan.return_value = {"Count": 100}
+
         with patch.object(self.backend, "_is_ttl_enabled", return_value=True):
             stats = self.backend.get_stats()
 

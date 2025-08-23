@@ -64,6 +64,8 @@ class AWSClientManager:
         profile: Optional[str] = None,
         region: Optional[str] = None,
         enable_caching: bool = True,
+        cache_manager: Optional[Any] = None,
+        cache_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the AWS client manager.
@@ -72,10 +74,14 @@ class AWSClientManager:
             profile: AWS profile name to use
             region: AWS region to use
             enable_caching: Whether to enable caching for read operations (default: True)
+            cache_manager: Optional CacheManager instance for caching operations
+            cache_config: Optional cache configuration dictionary
         """
         self.profile = profile
         self.region = region
         self.enable_caching = enable_caching
+        self.cache_manager = cache_manager
+        self.cache_config = cache_config or {}
         self.session = None
         self._cached_client: Optional[Any] = None
         self._init_session()
@@ -104,6 +110,46 @@ class AWSClientManager:
                 )
 
         self.session = boto3.Session(**session_kwargs)
+
+    @classmethod
+    def with_cache_integration(
+        cls,
+        profile: Optional[str] = None,
+        region: Optional[str] = None,
+        enable_caching: bool = True,
+        cache_config: Optional[Dict[str, Any]] = None,
+    ) -> "AWSClientManager":
+        """
+        Create an AWS client manager with automatic cache integration.
+
+        This factory method automatically configures the cache manager
+        and provides a seamless integration experience.
+
+        Args:
+            profile: AWS profile name to use
+            region: AWS region to use
+            enable_caching: Whether to enable caching
+            cache_config: Optional cache configuration dictionary
+
+        Returns:
+            Configured AWSClientManager instance with cache integration
+        """
+        cache_manager = None
+        if enable_caching:
+            try:
+                from ..cache.utilities import create_cache_manager
+
+                cache_manager = create_cache_manager()
+                logger.debug("Auto-configured cache manager for AWS client manager")
+            except Exception as e:
+                logger.warning(f"Could not auto-configure cache manager: {e}")
+        return cls(
+            profile=profile,
+            region=region,
+            enable_caching=enable_caching,
+            cache_manager=cache_manager,
+            cache_config=cache_config,
+        )
 
     def get_client(self, service_name: str) -> Any:
         """
@@ -147,17 +193,22 @@ class AWSClientManager:
         return self.get_client("organizations")
 
     def get_cached_client(self) -> Any:
-        """
-        Get a cached AWS client wrapper.
-
-        Returns:
-            CachedAwsClient instance
-        """
+        """Get a cached AWS client wrapper."""
         if self._cached_client is None:
-            # Import here to avoid circular imports
             from .cached_client import CachedAwsClient
 
-            self._cached_client = CachedAwsClient(self)
+            if self.cache_manager is None:
+                try:
+                    from ..cache.utilities import create_cache_manager
+
+                    self.cache_manager = create_cache_manager()
+                    logger.debug("Auto-configured cache manager for AWS client")
+                except Exception as e:
+                    logger.warning(f"Could not auto-configure cache manager: {e}")
+                    from ..cache.manager import CacheManager
+
+                    self.cache_manager = CacheManager()
+            self._cached_client = CachedAwsClient(self, self.cache_manager)
         return self._cached_client
 
     def get_organizations_client(self) -> Any:
@@ -205,6 +256,57 @@ class AWSClientManager:
             SSO Admin client with or without caching based on enable_caching setting
         """
         return self.get_identity_center_client()
+
+    def get_cache_manager(self) -> Optional[Any]:
+        """
+        Get the cache manager instance used by this client manager.
+
+        Returns:
+            CacheManager instance if available, None otherwise
+        """
+        return self.cache_manager
+
+    def is_caching_enabled(self) -> bool:
+        """
+        Check if caching is enabled for this client manager.
+
+        Returns:
+            True if caching is enabled, False otherwise
+        """
+        return self.enable_caching and self.cache_manager is not None
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        Get cache statistics if caching is enabled.
+
+        Returns:
+            Dictionary containing cache statistics or empty dict if caching disabled
+        """
+        if not self.is_caching_enabled():
+            return {"caching_enabled": False}
+
+        try:
+            return self.cache_manager.get_cache_stats()
+        except Exception as e:
+            logger.warning(f"Failed to get cache stats: {e}")
+            return {"caching_enabled": True, "error": str(e)}
+
+    def clear_cache(self) -> bool:
+        """
+        Clear the cache if caching is enabled.
+
+        Returns:
+            True if cache was cleared, False if caching is disabled or operation failed
+        """
+        if not self.is_caching_enabled():
+            return False
+
+        try:
+            self.cache_manager.clear()
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to clear cache: {e}")
+            return False
 
 
 class OrganizationsClientWrapper:

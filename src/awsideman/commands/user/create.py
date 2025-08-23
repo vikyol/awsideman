@@ -7,13 +7,20 @@ from botocore.exceptions import ClientError
 from rich.panel import Panel
 from rich.table import Table
 
-from ...aws_clients.manager import AWSClientManager
 from ..cache.helpers import get_cache_manager
+from ..common import (
+    cache_option,
+    extract_standard_params,
+    handle_aws_error,
+    profile_option,
+    region_option,
+    show_cache_info,
+    validate_profile_with_cache,
+)
 from .helpers import (
     console,
     format_user_for_display,
     validate_email_format,
-    validate_profile,
     validate_sso_instance,
     validate_username_format,
 )
@@ -29,7 +36,10 @@ def create_user(
     last_name: Optional[str] = typer.Option(
         None, "--last-name", "-l", help="Last name of the user"
     ),
-    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Create a new user in AWS Identity Center.
 
@@ -61,15 +71,19 @@ def create_user(
             console.print("[yellow]Please provide a valid email address.[/yellow]")
             raise typer.Exit(1)
 
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Extract and process standard command parameters
+        profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+
+        # Show cache information if verbose
+        show_cache_info(verbose)
+
+        # Validate profile and get AWS client with cache integration
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=enable_caching, region=region
+        )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         _, identity_store_id = validate_sso_instance(profile_data)
-
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
 
         # Get the identity store client
         identity_store = aws_client.get_identity_store_client()
@@ -209,16 +223,7 @@ def create_user(
 
             raise typer.Exit(1)
 
-    except ClientError as e:
-        # Handle AWS API errors with improved error messages and guidance
-        console.print(
-            f"[red]AWS API Error: {e.response.get('Error', {}).get('Code', 'Unknown')} - {e.response.get('Error', {}).get('Message', str(e))}[/red]"
-        )
-        raise typer.Exit(1)
     except Exception as e:
-        # Handle other unexpected errors
-        console.print(f"[red]Error: {str(e)}[/red]")
-        console.print(
-            "[yellow]This is an unexpected error. Please report this issue if it persists.[/yellow]"
-        )
+        # Handle all errors using common error handler
+        handle_aws_error(e, "creating user", verbose=verbose)
         raise typer.Exit(1)

@@ -12,12 +12,118 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class ProfileCacheConfig:
+    """
+    Profile-specific cache configuration.
+
+    This allows each AWS profile to have its own cache configuration,
+    including different backend types, DynamoDB tables, and file paths.
+    """
+
+    # Profile name this configuration applies to
+    profile_name: str
+
+    # Backend configuration
+    backend_type: str = "file"  # "file", "dynamodb", "hybrid"
+
+    # DynamoDB configuration (only used if backend_type is "dynamodb" or "hybrid")
+    dynamodb_table_name: Optional[str] = None
+    dynamodb_region: Optional[str] = None
+    dynamodb_profile: Optional[str] = None
+
+    # File backend configuration (only used if backend_type is "file" or "hybrid")
+    file_cache_dir: Optional[str] = None
+
+    # Encryption configuration
+    encryption_enabled: bool = False
+    encryption_type: str = "aes256"  # "none", "aes256"
+
+    # Cache behavior configuration
+    enabled: bool = True
+    default_ttl: int = 3600  # 1 hour
+    max_size_mb: int = 100
+
+    # Operation-specific TTLs
+    operation_ttls: Optional[Dict[str, int]] = None
+
+    # Hybrid backend configuration
+    hybrid_local_ttl: int = 300  # 5 minutes local cache for hybrid mode
+
+    def __post_init__(self):
+        """Post-initialization validation and setup."""
+        # Initialize operation_ttls if not provided
+        if self.operation_ttls is None:
+            self.operation_ttls = {}
+
+        # Validate backend type
+        valid_backends = ["file", "dynamodb", "hybrid"]
+        if self.backend_type not in valid_backends:
+            logger.warning(
+                f"Invalid backend type '{self.backend_type}' for profile {self.profile_name}, defaulting to 'file'"
+            )
+            self.backend_type = "file"
+
+        # Validate encryption type
+        valid_encryption_types = ["none", "aes256"]
+        if self.encryption_type not in valid_encryption_types:
+            logger.warning(
+                f"Invalid encryption type '{self.encryption_type}' for profile {self.profile_name}, defaulting to 'aes256'"
+            )
+            self.encryption_type = "aes256"
+
+        # If encryption is disabled, set type to none
+        if not self.encryption_enabled:
+            self.encryption_type = "none"
+
+        # Validate DynamoDB configuration for DynamoDB backends
+        if self.backend_type in ["dynamodb", "hybrid"]:
+            if not self.dynamodb_table_name:
+                logger.warning(
+                    f"No DynamoDB table name specified for profile {self.profile_name} with {self.backend_type} backend"
+                )
+
+        # Validate file configuration for file backends
+        if self.backend_type in ["file", "hybrid"]:
+            if not self.file_cache_dir:
+                # Use default file cache directory
+                self.file_cache_dir = str(Path.home() / ".awsideman" / "cache" / self.profile_name)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary representation."""
+        return {
+            "profile_name": self.profile_name,
+            "backend_type": self.backend_type,
+            "dynamodb_table_name": self.dynamodb_table_name,
+            "dynamodb_region": self.dynamodb_region,
+            "dynamodb_profile": self.dynamodb_profile,
+            "file_cache_dir": self.file_cache_dir,
+            "encryption_enabled": self.encryption_enabled,
+            "encryption_type": self.encryption_type,
+            "enabled": self.enabled,
+            "default_ttl": self.default_ttl,
+            "max_size_mb": self.max_size_mb,
+            "operation_ttls": self.operation_ttls.copy() if self.operation_ttls else {},
+            "hybrid_local_ttl": self.hybrid_local_ttl,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], profile_name: str = None) -> "ProfileCacheConfig":
+        """Create ProfileCacheConfig from dictionary."""
+        # Ensure profile_name is set
+        if profile_name and "profile_name" not in data:
+            data["profile_name"] = profile_name
+        return cls(**data)
+
+
+@dataclass
 class AdvancedCacheConfig(CacheConfig):
     """
     Advanced cache configuration extending the base CacheConfig.
 
     Adds support for backend selection, encryption, and DynamoDB configuration
     while maintaining backward compatibility with existing cache settings.
+
+    Now also supports profile-specific configurations.
     """
 
     # Backend configuration
@@ -38,11 +144,18 @@ class AdvancedCacheConfig(CacheConfig):
     # File backend specific configuration
     file_cache_dir: Optional[str] = None
 
+    # Profile-specific cache configurations
+    profile_configs: Optional[Dict[str, ProfileCacheConfig]] = None
+
     def __post_init__(self):
         """Post-initialization validation and setup."""
         # Initialize operation_ttls if not provided
         if not hasattr(self, "operation_ttls") or self.operation_ttls is None:
             self.operation_ttls = {}
+
+        # Initialize profile_configs if not provided
+        if self.profile_configs is None:
+            self.profile_configs = {}
 
         # Validate backend type (but don't auto-correct in __post_init__)
         valid_backends = ["file", "dynamodb", "hybrid"]
@@ -60,6 +173,36 @@ class AdvancedCacheConfig(CacheConfig):
         # If encryption is disabled, set type to none
         if not self.encryption_enabled:
             self.encryption_type = "none"
+
+    def get_profile_config(self, profile_name: str) -> "ProfileCacheConfig":
+        """
+        Get cache configuration for a specific profile.
+
+        Args:
+            profile_name: Name of the AWS profile
+
+        Returns:
+            ProfileCacheConfig for the specified profile, or default config if not found
+        """
+        if profile_name in self.profile_configs:
+            return self.profile_configs[profile_name]
+
+        # Return default configuration for this profile
+        return ProfileCacheConfig(
+            profile_name=profile_name,
+            backend_type=self.backend_type,
+            dynamodb_table_name=self.dynamodb_table_name,
+            dynamodb_region=self.dynamodb_region,
+            dynamodb_profile=self.dynamodb_profile,
+            file_cache_dir=self.file_cache_dir,
+            encryption_enabled=self.encryption_enabled,
+            encryption_type=self.encryption_type,
+            enabled=self.enabled,
+            default_ttl=self.default_ttl,
+            max_size_mb=self.max_size_mb,
+            operation_ttls=self.operation_ttls.copy() if self.operation_ttls else {},
+            hybrid_local_ttl=self.hybrid_local_ttl,
+        )
 
     @classmethod
     def from_config_file(cls, config_path: Optional[str] = None) -> "AdvancedCacheConfig":
@@ -105,6 +248,34 @@ class AdvancedCacheConfig(CacheConfig):
                 if key in cache_section:
                     advanced_config_data[key] = cache_section[key]
 
+            # Load profile-specific configurations
+            profile_configs = {}
+            if "profiles" in cache_section and isinstance(cache_section["profiles"], dict):
+                for profile_name, profile_config in cache_section["profiles"].items():
+                    if isinstance(profile_config, dict):
+                        try:
+                            profile_configs[profile_name] = ProfileCacheConfig.from_dict(
+                                profile_config, profile_name
+                            )
+                            logger.debug(f"Loaded cache config for profile: {profile_name}")
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to load cache config for profile {profile_name}: {e}"
+                            )
+
+            if profile_configs:
+                advanced_config_data["profile_configs"] = profile_configs
+
+        # Auto-configure DynamoDB profile if not specified
+        if (
+            advanced_config_data.get("backend_type") in ["dynamodb", "hybrid"]
+            and "dynamodb_profile" not in advanced_config_data
+        ):
+            default_profile = config.get("default_profile")
+            if default_profile:
+                advanced_config_data["dynamodb_profile"] = default_profile
+                logger.debug(f"Auto-configured DynamoDB profile to default: {default_profile}")
+
         logger.debug("Loaded cache configuration from unified config system")
         return cls(**advanced_config_data)
 
@@ -148,6 +319,83 @@ class AdvancedCacheConfig(CacheConfig):
             "hybrid_local_ttl": cls._get_env_int("AWSIDEMAN_CACHE_HYBRID_LOCAL_TTL", 300),
             "file_cache_dir": os.getenv("AWSIDEMAN_CACHE_FILE_DIR"),
         }
+
+        # Load profile-specific configurations from environment
+        profile_configs = {}
+        for env_var in os.environ:
+            if env_var.startswith("AWSIDEMAN_CACHE_PROFILE_"):
+                # Format: AWSIDEMAN_CACHE_PROFILE_<PROFILE_NAME>_<SETTING>
+                # Example: AWSIDEMAN_CACHE_PROFILE_PROD_BACKEND_TYPE=dynamodb
+                parts = env_var.replace("AWSIDEMAN_CACHE_PROFILE_", "").split("_", 1)
+                if len(parts) == 2:
+                    profile_name = parts[0].lower()
+                    setting = parts[1].lower()
+                    value = os.getenv(env_var)
+
+                    if profile_name not in profile_configs:
+                        profile_configs[profile_name] = {}
+
+                    # Map environment variable names to config keys
+                    setting_mapping = {
+                        "backend_type": "backend_type",
+                        "dynamodb_table_name": "dynamodb_table_name",
+                        "dynamodb_region": "dynamodb_region",
+                        "dynamodb_profile": "dynamodb_profile",
+                        "file_cache_dir": "file_cache_dir",
+                        "encryption_enabled": "encryption_enabled",
+                        "encryption_type": "encryption_type",
+                        "enabled": "enabled",
+                        "default_ttl": "default_ttl",
+                        "max_size_mb": "max_size_mb",
+                    }
+
+                    if setting in setting_mapping:
+                        config_key = setting_mapping[setting]
+                        if setting in ["enabled", "encryption_enabled"]:
+                            profile_configs[profile_name][config_key] = value.lower() in (
+                                "true",
+                                "1",
+                                "yes",
+                                "on",
+                            )
+                        elif setting in ["default_ttl", "max_size_mb"]:
+                            try:
+                                profile_configs[profile_name][config_key] = int(value)
+                            except (ValueError, TypeError):
+                                logger.warning(f"Invalid value for {env_var}: {value}")
+                        else:
+                            profile_configs[profile_name][config_key] = value
+
+        # Convert profile configs to ProfileCacheConfig objects
+        if profile_configs:
+            for profile_name, profile_data in profile_configs.items():
+                try:
+                    profile_data["profile_name"] = profile_name
+                    profile_configs[profile_name] = ProfileCacheConfig.from_dict(profile_data)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to create ProfileCacheConfig for profile {profile_name}: {e}"
+                    )
+                    del profile_configs[profile_name]
+
+            advanced_config["profile_configs"] = profile_configs
+
+        # Auto-configure DynamoDB profile if not specified in environment
+        if advanced_config.get("backend_type") in [
+            "dynamodb",
+            "hybrid",
+        ] and not advanced_config.get("dynamodb_profile"):
+            # Try to get default profile from config file
+            try:
+                from ..utils.config import Config
+
+                config = Config()
+                default_profile = config.get("default_profile")
+                if default_profile:
+                    advanced_config["dynamodb_profile"] = default_profile
+                    logger.debug(f"Auto-configured DynamoDB profile to default: {default_profile}")
+            except Exception as e:
+                logger.debug(f"Could not auto-configure DynamoDB profile: {e}")
 
         logger.debug("Loaded cache configuration from environment variables")
         return cls(**advanced_config)

@@ -576,7 +576,12 @@ class TestAWSClientManagerIntegration:
         # First call should create the cached client
         result1 = client_manager.get_cached_client()
         assert result1 == mock_cached_client
-        mock_cached_aws_client_class.assert_called_once_with(client_manager)
+        # Now CachedAwsClient is called with both client_manager and cache_manager
+        mock_cached_aws_client_class.assert_called_once()
+        call_args = mock_cached_aws_client_class.call_args
+        assert len(call_args[0]) == 2  # Should have 2 positional arguments
+        assert call_args[0][0] == client_manager  # First arg should be client_manager
+        # Second arg should be a cache manager (either real or fallback)
 
         # Second call should return the same instance
         result2 = client_manager.get_cached_client()

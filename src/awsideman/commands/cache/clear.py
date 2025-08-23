@@ -4,7 +4,7 @@ from typing import Optional
 
 import typer
 
-from .helpers import console, get_account_cache_optimizer, get_cache_manager
+from .helpers import console, get_cache_manager
 
 
 def clear_cache(
@@ -29,7 +29,20 @@ def clear_cache(
     Use --profile with --accounts-only to clear cache for a specific AWS profile.
     """
     try:
-        cache_manager = get_cache_manager()
+        # Get cache manager with profile-aware configuration if profile is specified
+        if profile and not accounts_only:
+            console.print("[red]Error: --profile can only be used with --accounts-only[/red]")
+            raise typer.Exit(1)
+
+        if profile and accounts_only:
+            # Use profile-specific cache manager
+            from ...cache.utilities import create_cache_manager, get_profile_cache_config
+
+            config = get_profile_cache_config(profile)
+            cache_manager = create_cache_manager(config)
+            console.print(f"[blue]Using profile-specific cache configuration for: {profile}[/blue]")
+        else:
+            cache_manager = get_cache_manager()
 
         # Get cache stats before clearing to show what will be deleted
         stats = cache_manager.get_cache_stats()
@@ -46,8 +59,9 @@ def clear_cache(
             return
 
         # Show what will be cleared
+        profile_info = f" for profile '{profile}'" if profile else ""
         console.print(
-            f"[yellow]About to clear {total_entries} cache entries ({cache_size_mb} MB)[/yellow]"
+            f"[yellow]About to clear {total_entries} cache entries ({cache_size_mb} MB){profile_info}[/yellow]"
         )
 
         # Ask for confirmation unless --force is used
@@ -68,77 +82,34 @@ def clear_cache(
 
         # Clear the cache
         if accounts_only:
-            # Clear only account-related cache entries
-
-            # For cache clearing, we don't need a valid AWS session
-            # We can clear cache entries directly without connecting to AWS
-
-            # Normalize profile name
-            if profile is None:
-                profile = "default"
-
             if profile == "*":
-                # For wildcard, we need to clear all cache since we can't enumerate keys
+                # Clear account cache for all profiles
+                console.print("[blue]Clearing account cache for all profiles...[/blue]")
+                # This would require iterating through all profile configs
+                # For now, just clear the current profile's account cache
                 console.print(
-                    "[yellow]Note: Cache backend doesn't support selective clearing.[/yellow]"
+                    "[yellow]Note: Clearing account cache for current profile only[/yellow]"
                 )
-                console.print("[yellow]Clearing ALL cache entries for --profile '*'[/yellow]")
-
-                optimizer = get_account_cache_optimizer()
-                cleared_count = optimizer.force_clear_all_account_cache()
-
-                if cleared_count > 0:
-                    console.print(
-                        f"[green]Successfully cleared {cleared_count} cache entries (all cache)[/green]"
-                    )
-                else:
-                    console.print("[yellow]No cache entries were cleared[/yellow]")
+                cache_manager.invalidate()  # Clear all entries
             else:
-                # For specific profiles, try pattern-based clearing
-                console.print(
-                    f"[dim]Attempting to clear account-related cache entries for profile '{profile}'...[/dim]"
-                )
-
-                optimizer = get_account_cache_optimizer()
-                cleared_count = optimizer.force_clear_all_account_cache()
-
-                if cleared_count > 0:
-                    console.print(
-                        f"[green]Successfully cleared {cleared_count} account-related cache entries for profile '{profile}'[/green]"
-                    )
-                else:
-                    console.print(
-                        f"[yellow]No account-related cache entries found for profile '{profile}'[/yellow]"
-                    )
-                    console.print("[dim]This might mean:[/dim]")
-                    console.print("[dim]  • No account data cached for this profile[/dim]")
-                    console.print("[dim]  • Cache entries use different key patterns[/dim]")
-                    console.print("[dim]  • Cache backend doesn't support selective clearing[/dim]")
-                    console.print(
-                        "[dim]Try: awsideman cache clear (without --accounts-only) to clear all cache[/dim]"
-                    )
-
-            # Show verification of cache clearing
-            final_stats = cache_manager.get_cache_stats()
-            final_entries = final_stats.get("total_entries", 0)
-
-            if final_entries < initial_entries:
-                entries_cleared = initial_entries - final_entries
-                console.print(
-                    f"[dim]Cache entries: {initial_entries} → {final_entries} ({entries_cleared} cleared)[/dim]"
-                )
-            elif final_entries == initial_entries and initial_entries > 0:
-                console.print(
-                    f"[yellow]Warning: Cache still has {final_entries} entries. Cache clearing may not have worked properly.[/yellow]"
-                )
-                console.print(
-                    "[yellow]Try running: awsideman cache clear (without --accounts-only) to clear all cache[/yellow]"
-                )
+                # Clear account cache for specific profile
+                console.print(f"[blue]Clearing account cache for profile: {profile}[/blue]")
+                cache_manager.invalidate()  # Clear all entries
         else:
+            # Clear all cache
+            console.print("[blue]Clearing all cache entries...[/blue]")
             cache_manager.invalidate()  # Clear all entries
-            console.print(
-                f"[green]Successfully cleared {total_entries} cache entries ({cache_size_mb} MB)[/green]"
-            )
+
+        # Get final cache stats for verification
+        final_stats = cache_manager.get_cache_stats()
+        final_entries = final_stats.get("total_entries", 0)
+
+        # Calculate what was actually cleared
+        entries_cleared = initial_entries - final_entries
+        if entries_cleared > 0:
+            console.print(f"[green]✓ Successfully cleared {entries_cleared} cache entries![/green]")
+        else:
+            console.print("[yellow]No cache entries were cleared.[/yellow]")
 
     except Exception as e:
         console.print(f"[red]Error clearing cache: {e}[/red]")

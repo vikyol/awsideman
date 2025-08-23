@@ -4,19 +4,18 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import typer
-from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
 from rich.table import Table
 
-from ...aws_clients.manager import AWSClientManager
-from ...utils.error_handler import handle_aws_error, handle_network_error
-from .helpers import (
-    console,
-    get_single_key,
-    validate_filter,
-    validate_limit,
-    validate_profile,
-    validate_sso_instance,
+from ..common import (
+    cache_option,
+    extract_standard_params,
+    handle_aws_error,
+    profile_option,
+    region_option,
+    show_cache_info,
+    validate_profile_with_cache,
 )
+from .helpers import console, get_single_key, validate_filter, validate_limit, validate_sso_instance
 
 
 def _list_groups_internal(
@@ -24,6 +23,9 @@ def _list_groups_internal(
     limit: Optional[int] = None,
     next_token: Optional[str] = None,
     profile: Optional[str] = None,
+    region: Optional[str] = None,
+    enable_caching: bool = True,
+    verbose: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
     Internal implementation of list_groups that can be called directly from tests.
@@ -44,21 +46,19 @@ def _list_groups_internal(
 
         if limit and not validate_limit(limit):
             raise typer.Exit(1)
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Validate profile and get AWS client with cache integration
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=enable_caching, region=region
+        )
 
         # Check if AWS_DEFAULT_REGION environment variable is set
-        if os.environ.get("AWS_DEFAULT_REGION"):
+        if os.environ.get("AWS_DEFAULT_REGION") and verbose:
             console.print(
                 f"[yellow]Warning: AWS_DEFAULT_REGION environment variable is set to '{os.environ.get('AWS_DEFAULT_REGION')}'. This may override the region in your profile.[/yellow]"
             )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         _, identity_store_id = validate_sso_instance(profile_data)
-
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
 
         # Get the identity store client
         identity_store = aws_client.get_identity_store_client()
@@ -138,7 +138,13 @@ def _list_groups_internal(
                     console.print("\n[blue]Fetching next page...[/blue]\n")
                     # Call _list_groups_internal recursively with the next token
                     return _list_groups_internal(
-                        filter=filter, limit=limit, next_token=next_token, profile=profile
+                        filter=filter,
+                        limit=limit,
+                        next_token=next_token,
+                        profile=profile,
+                        region=region,
+                        enable_caching=enable_caching,
+                        verbose=verbose,
                     )
                 else:
                     console.print("\n[yellow]Pagination stopped.[/yellow]")
@@ -148,24 +154,15 @@ def _list_groups_internal(
         # Return the groups and next token for further processing
         return groups, next_token
 
-    except ClientError as e:
-        # Handle AWS API errors with improved error messages and guidance
-        handle_aws_error(e, operation="ListGroups")
     except ValueError as e:
         # Handle filter format errors
         console.print(f"[red]Error: {str(e)}[/red]")
         console.print("[yellow]Filter format should be 'attribute=value'.[/yellow]")
         console.print("[yellow]Example: --filter DisplayName=Administrators[/yellow]")
         raise typer.Exit(1)
-    except (ConnectionError, EndpointConnectionError) as e:
-        # Handle network-related errors
-        handle_network_error(e)
     except Exception as e:
-        # Handle other unexpected errors
-        console.print(f"[red]Error: {str(e)}[/red]")
-        console.print(
-            "[yellow]This is an unexpected error. Please report this issue if it persists.[/yellow]"
-        )
+        # Handle all other errors using common error handler
+        handle_aws_error(e, "listing groups", verbose=verbose)
         raise typer.Exit(1)
 
 
@@ -182,13 +179,22 @@ def list_groups(
     next_token: Optional[str] = typer.Option(
         None, "--next-token", "-n", help="Pagination token (for internal use)"
     ),
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
-    ),
+    profile: Optional[str] = profile_option(),
+    region: Optional[str] = region_option(),
+    no_cache: bool = cache_option(),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """List all groups in the Identity Store.
 
     Displays a table of groups with their IDs, names, and descriptions.
     Results can be filtered and paginated. Press ENTER to see the next page of results.
     """
-    return _list_groups_internal(filter, limit, next_token, profile)
+    # Extract and process standard command parameters
+    profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+
+    # Show cache information if verbose
+    show_cache_info(verbose)
+
+    return _list_groups_internal(
+        filter, limit, next_token, profile, region, enable_caching, verbose
+    )

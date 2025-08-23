@@ -14,20 +14,6 @@ def test_cache_status_module_import():
         pytest.fail(f"Failed to import cache_status: {e}")
 
 
-def test_cache_status_function_signature():
-    """Test that the cache_status function has the expected signature."""
-    import inspect
-
-    from src.awsideman.commands.cache.status import cache_status
-
-    # Check that the function exists and is callable
-    assert callable(cache_status)
-
-    # Check that it has no parameters (it's a command with no arguments)
-    sig = inspect.signature(cache_status)
-    assert len(sig.parameters) == 0
-
-
 def test_cache_status_help_text():
     """Test that the cache_status function has help text."""
     from src.awsideman.commands.cache.status import cache_status
