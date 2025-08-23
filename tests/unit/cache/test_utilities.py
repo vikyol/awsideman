@@ -217,7 +217,9 @@ class TestGetOptimalCacheConfigForEnvironment:
 
     def test_production_environment(self):
         """Test optimal config for production environment."""
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "AWS_ACCESS_KEY_ID": "test-key"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "AWS_ACCESS_KEY_ID": "test-key"}, clear=True
+        ):
             result = get_optimal_cache_config_for_environment()
 
             assert result.backend_type == "dynamodb"
@@ -227,7 +229,7 @@ class TestGetOptimalCacheConfigForEnvironment:
 
     def test_ci_cd_environment(self):
         """Test optimal config for CI/CD environment."""
-        with patch.dict(os.environ, {"CI": "true"}):
+        with patch.dict(os.environ, {"CI": "true"}, clear=True):
             result = get_optimal_cache_config_for_environment()
 
             assert result.backend_type == "file"
@@ -235,7 +237,7 @@ class TestGetOptimalCacheConfigForEnvironment:
 
     def test_development_environment(self):
         """Test optimal config for development environment."""
-        with patch.dict(os.environ, {"AWS_PROFILE": "dev-profile"}):
+        with patch.dict(os.environ, {"AWS_PROFILE": "dev-profile"}, clear=True):
             result = get_optimal_cache_config_for_environment()
 
             assert result.backend_type == "hybrid"

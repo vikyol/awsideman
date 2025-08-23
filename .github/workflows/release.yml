@@ -1,0 +1,197 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0-alpha.1)'
+        required: true
+        default: '0.1.0-alpha.1'
+      release_type:
+        description: 'Type of release'
+        required: true
+        default: 'alpha'
+        type: choice
+        options:
+          - alpha
+          - beta
+          - rc
+          - stable
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+
+    - name: Install dependencies
+      run: poetry install
+
+    - name: Run tests
+      run: poetry run pytest
+
+    - name: Run linting
+      run: poetry run ruff check src/ tests/
+
+    - name: Check code formatting
+      run: poetry run black --check src/ tests/
+
+    - name: Check import sorting
+      run: poetry run isort --check-only src/ tests/
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+
+    - name: Install dependencies
+      run: poetry install
+
+    - name: Build package
+      run: poetry build
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+  release:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+    - name: Create GitHub Release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "dist/*"
+        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        generateReleaseNotes: true
+        body: |
+          ## 🚀 awsideman ${{ github.ref_name }} Release
+
+          ### 📋 Release Summary
+          This is a ${{ contains(github.ref, 'alpha') && 'alpha' || contains(github.ref, 'beta') && 'beta' || contains(github.ref, 'rc') && 'release candidate' || 'stable' }} release of awsideman.
+
+          ### ⚠️ Important Notes
+          ${{ contains(github.ref, 'alpha') && '**This is an ALPHA release and is NOT recommended for production use.**' || '' }}
+          ${{ contains(github.ref, 'beta') && '**This is a BETA release and may contain bugs.**' || '' }}
+          ${{ contains(github.ref, 'rc') && '**This is a RELEASE CANDIDATE and should be tested thoroughly.**' || '' }}
+
+          ### 🎯 What's New
+          - Profile-aware cache system
+          - Enhanced CLI commands with profile support
+          - Advanced cache backends (file, DynamoDB)
+          - Comprehensive permission management
+          - Backup and restore functionality
+          - Template system for configurations
+          - Rollback system for operations
+          - Multi-account support
+
+          ### 📦 Installation
+          ```bash
+          pip install awsideman==${{ github.ref_name }}
+          ```
+
+          ### 🔧 Configuration
+          ```bash
+          # Set profile-specific cache backend
+          awsideman config set cache.backend_type=file --profile myprofile
+
+          # View current profile's cache settings
+          awsideman config show --profile myprofile
+          ```
+
+          ### 📚 Documentation
+          - [Getting Started](https://github.com/vikyol/awsideman/blob/main/docs/getting-started.md)
+          - [Configuration Reference](https://github.com/vikyol/awsideman/blob/main/CONFIGURATION.md)
+          - [Examples](https://github.com/vikyol/awsideman/tree/main/examples)
+
+          ### 🐛 Reporting Issues
+          Please report any issues at: https://github.com/vikyol/awsideman/issues
+
+          ### 🤝 Contributing
+          We welcome contributions! See our [Contributing Guide](https://github.com/vikyol/awsideman/blob/main/CONTRIBUTING.md) for details.
+
+          ---
+
+          **Built with ❤️ for the AWS community**
+
+          **Star ⭐ this repository if awsideman helps you!**
+
+  publish-pypi:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') && contains(github.ref, 'alpha')
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+
+    - name: Install dependencies
+      run: poetry install
+
+    - name: Build package
+      run: poetry build
+
+    - name: Publish to PyPI
+      run: |
+        echo "Publishing to PyPI..."
+        poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
+        poetry publish
+      env:
+        PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+
+  notify:
+    needs: [release]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+    - name: Notify on success
+      if: success()
+      run: |
+        echo "✅ Release ${{ github.ref_name }} completed successfully!"
+        echo "🚀 Published to GitHub Releases"
+        echo "📦 Build artifacts available for download"
+
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "❌ Release ${{ github.ref_name }} failed!"
+        echo "🔍 Check the workflow logs for details"

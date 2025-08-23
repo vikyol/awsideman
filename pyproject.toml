@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "awsideman"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 description = "AWS Identity Center Manager - A CLI tool for managing AWS Identity Center operations"
 authors = ["Erhan Vikyol"]
 readme = "README.md"
@@ -10,7 +10,7 @@ homepage = "https://floccus.se/awsideman"  # Add homepage
 repository = "https://github.com/vikyol/awsideman"  # Add repository
 keywords = ["aws", "identity-center", "iam", "cli", "management"]  # Add keywords
 classifiers = [  # Add classifiers
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",

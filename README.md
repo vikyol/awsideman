@@ -2,6 +2,14 @@
 
 > **"Because humans shouldn't have to think like machines"**
 
+> ⚠️ **ALPHA RELEASE WARNING** ⚠️
+>
+> **This is an alpha release (v0.1.0-alpha.1) and is not recommended for production use.**
+> - Breaking changes may occur in future releases
+> - Some features may be incomplete or unstable
+> - Please report any issues you encounter
+> - Feedback and contributions are welcome!
+
 A powerful, open-source CLI tool that transforms AWS Identity Center (SSO) management from complex, error-prone tasks into intuitive, human-friendly operations. Built for teams who value **simplicity**, **safety**, and **scalability**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -158,9 +166,23 @@ awsideman assignment assign AdminAccess client1.admin \
 - AWS CLI configured with appropriate credentials
 
 ### **Installation**
+
+#### **Option 1: Install Alpha Release (Recommended for Testing)**
+```bash
+# Install the latest alpha version
+pip install awsideman==0.1.0-alpha.1
+
+# Or with Poetry
+poetry add awsideman@0.1.0-alpha.1
+
+# Verify installation
+awsideman --help
+```
+
+#### **Option 2: Install from Source (Development)**
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/awsideman.git
+git clone https://github.com/vikyol/awsideman.git
 cd awsideman
 
 # Install dependencies
@@ -423,6 +445,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Ready to simplify your AWS Identity Center management?**
 
 ```bash
+# Quick start with alpha release
+pip install awsideman==0.1.0-alpha.1
+awsideman info
+
+# Or from source
 git clone https://github.com/vikyol/awsideman.git
 cd awsideman
 poetry install

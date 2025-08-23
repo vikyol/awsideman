@@ -30,13 +30,33 @@ class TestCommandCacheIntegration:
 
     def test_extract_standard_params_defaults(self):
         """Test extract_standard_params with default values."""
-        profile, region, enable_caching = extract_standard_params()
+        # Mock the config to return a default profile for this test
+        with patch("src.awsideman.utils.config.Config") as mock_config_class:
+            mock_config = Mock()
+            mock_config.get.return_value = "default-profile"
+            mock_config_class.return_value = mock_config
 
-        # The default profile should be resolved from config
-        # In this test environment, it might be None or a configured value
-        assert profile is not None  # Should resolve to default profile
-        assert region is None
-        assert enable_caching is True  # Default is caching enabled
+            profile, region, enable_caching = extract_standard_params()
+
+            # The default profile should be resolved from config
+            assert profile == "default-profile"
+            assert region is None
+            assert enable_caching is True  # Default is caching enabled
+
+    def test_extract_standard_params_defaults_no_config(self):
+        """Test extract_standard_params with default values when no config exists."""
+        # Mock the config to return None for default profile (simulating no config)
+        with patch("src.awsideman.utils.config.Config") as mock_config_class:
+            mock_config = Mock()
+            mock_config.get.return_value = None
+            mock_config_class.return_value = mock_config
+
+            profile, region, enable_caching = extract_standard_params()
+
+            # When no default profile is configured, profile will be None
+            assert profile is None
+            assert region is None
+            assert enable_caching is True  # Default is caching enabled
 
     @patch("src.awsideman.commands.common.create_aws_client_manager")
     def test_get_aws_client_manager_with_caching(self, mock_create_client):
@@ -165,7 +185,7 @@ class TestGroupCommandCacheIntegration:
         mock_client_manager = Mock()
         mock_get_client_manager.return_value = mock_client_manager
 
-        # Mock the actual group listing logic
+        # Mock the actual user listing logic
         mock_client_manager.get_identity_store_client.return_value.list_groups.return_value = []
 
         # Just test that the function was called with correct parameters
@@ -301,7 +321,7 @@ class TestAssignmentCommandCacheIntegration:
     def test_assignment_list_with_caching_disabled(self, mock_get_client_manager):
         """Test assignment list command with caching disabled."""
         mock_client_manager = Mock()
-        mock_client_manager.return_value = mock_client_manager
+        mock_get_client_manager.return_value = mock_client_manager
 
         # Mock the actual assignment listing logic
         mock_client_manager.get_identity_center_client.return_value.list_account_assignments.return_value = (
