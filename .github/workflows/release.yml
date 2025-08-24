@@ -1,3 +1,18 @@
+# Release Workflow for awsideman
+#
+# SETUP INSTRUCTIONS:
+# 1. Create a PyPI account at https://pypi.org/account/register/
+# 2. Generate an API token at https://pypi.org/manage/account/token/
+# 3. Add the token as a GitHub secret:
+#    - Go to your repository Settings > Secrets and variables > Actions
+#    - Click "New repository secret"
+#    - Name: PYPI_TOKEN
+#    - Value: pypi-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# 4. The token should start with "pypi-" followed by a long string
+#
+# Note: This workflow only publishes alpha releases to PyPI
+#       Stable releases will be published manually or through a separate workflow
+
 name: Release
 
 on:
@@ -9,7 +24,7 @@ on:
       version:
         description: 'Version to release (e.g., 0.1.0-alpha.1)'
         required: true
-        default: '0.1.0-alpha.1'
+        default: '0.1.0-alpha.2'
       release_type:
         description: 'Type of release'
         required: true
@@ -23,6 +38,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   validate:
@@ -152,6 +168,10 @@ jobs:
 
           **Star ⭐ this repository if awsideman helps you!**
 
+  # PyPI Publishing Job
+  # Note: You need to add PYPI_TOKEN as a GitHub secret
+  # Go to Settings > Secrets and variables > Actions
+  # Add a new secret named PYPI_TOKEN with your PyPI API token
   publish-pypi:
     needs: [validate, build]
     runs-on: ubuntu-latest
@@ -173,16 +193,40 @@ jobs:
     - name: Build package
       run: poetry build
 
-    - name: Publish to PyPI
+    - name: Verify PyPI token
       run: |
-        echo "Publishing to PyPI..."
-        poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
-        poetry publish
+        if [ -z "${{ secrets.PYPI_TOKEN }}" ]; then
+          echo "❌ PYPI_TOKEN secret is not set!"
+          echo "Please add PYPI_TOKEN to your repository secrets:"
+          echo "1. Go to Settings > Secrets and variables > Actions"
+          echo "2. Add a new secret named PYPI_TOKEN"
+          echo "3. Set the value to your PyPI API token"
+          exit 1
+        else
+          echo "✅ PYPI_TOKEN secret is configured"
+          echo "Token format: ${PYPI_TOKEN:0:10}..."
+        fi
+
+    - name: Test PyPI connection
+      run: |
+        echo "Testing PyPI connection..."
+        pip install twine
+        twine check dist/*
+        echo "✅ Package validation passed"
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_TOKEN }}
+        skip-existing: true
+        verbose: true
+        package-dir: dist/
       env:
-        PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
 
   notify:
-    needs: [release]
+    needs: [release, publish-pypi]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -192,9 +236,11 @@ jobs:
         echo "✅ Release ${{ github.ref_name }} completed successfully!"
         echo "🚀 Published to GitHub Releases"
         echo "📦 Build artifacts available for download"
+        echo "📤 PyPI publishing completed"
 
     - name: Notify on failure
       if: failure()
       run: |
         echo "❌ Release ${{ github.ref_name }} failed!"
         echo "🔍 Check the workflow logs for details"
+        echo "📤 PyPI publishing may have failed - check the publish-pypi job logs"
