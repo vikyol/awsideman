@@ -4,7 +4,6 @@ import os
 from unittest.mock import Mock, patch
 
 from src.awsideman.cache.config import AdvancedCacheConfig
-from src.awsideman.cache.manager import CacheManager
 from src.awsideman.cache.utilities import (
     create_cache_manager,
     get_cache_config_from_environment,
@@ -78,70 +77,57 @@ class TestGetDefaultCacheConfig:
 class TestCreateCacheManager:
     """Test create_cache_manager function."""
 
-    @patch("src.awsideman.cache.utilities.get_default_cache_config")
-    @patch("src.awsideman.cache.utilities.CacheManager")
-    def test_successful_cache_manager_creation(self, mock_cache_manager_class, mock_get_config):
-        """Test successful cache manager creation."""
-        mock_config = Mock(spec=AdvancedCacheConfig)
-        mock_config.validate.return_value = {}
-        mock_get_config.return_value = mock_config
-
-        mock_manager = Mock(spec=CacheManager)
-        mock_cache_manager_class.return_value = mock_manager
+    def test_successful_cache_manager_creation(self):
+        """Test successful cache manager creation returns CacheManager."""
+        from src.awsideman.cache.manager import CacheManager
 
         result = create_cache_manager()
 
-        assert result == mock_manager
-        mock_cache_manager_class.assert_called_once_with(config=mock_config)
+        # Should return CacheManager singleton
+        assert isinstance(result, CacheManager)
 
-    @patch("src.awsideman.cache.utilities.get_default_cache_config")
-    @patch("src.awsideman.cache.utilities.CacheManager")
-    def test_fallback_to_basic_cache_manager(self, mock_cache_manager_class, mock_get_config):
-        """Test fallback to basic cache manager when creation fails."""
-        # Mock the config to be valid
-        mock_config = Mock(spec=AdvancedCacheConfig)
-        mock_config.backend_type = "dynamodb"
-        mock_config.validate.return_value = {}
-        mock_get_config.return_value = mock_config
+        # Multiple calls should return the same instance
+        result2 = create_cache_manager()
+        assert result is result2
 
-        # First call to CacheManager fails, second call succeeds (fallback)
-        mock_cache_manager_class.side_effect = [Exception("Construction failed"), Mock()]
+    def test_fallback_to_basic_cache_manager(self):
+        """Test that create_cache_manager always returns CacheManager."""
+        from src.awsideman.cache.manager import CacheManager
 
+        # Even with errors, should return CacheManager singleton
         result = create_cache_manager()
 
-        assert result is not None
-        assert mock_cache_manager_class.call_count == 2
+        assert isinstance(result, CacheManager)
 
-    @patch("src.awsideman.cache.utilities.get_default_cache_config")
-    @patch("src.awsideman.cache.utilities.CacheManager")
-    def test_cache_manager_with_custom_config(self, mock_cache_manager_class, mock_get_config):
-        """Test cache manager creation with custom configuration."""
+        # Should be consistent across calls
+        result2 = create_cache_manager()
+        assert result is result2
+
+    def test_cache_manager_with_custom_config(self):
+        """Test cache manager creation with custom configuration (ignored for singleton)."""
+        from src.awsideman.cache.manager import CacheManager
+
         custom_config = AdvancedCacheConfig(
             backend_type="dynamodb", dynamodb_table_name="custom-table", enabled=True
         )
 
-        mock_manager = Mock(spec=CacheManager)
-        mock_cache_manager_class.return_value = mock_manager
-
+        # Custom config is ignored since CacheManager is a singleton
         result = create_cache_manager(custom_config)
 
-        assert result == mock_manager
-        mock_cache_manager_class.assert_called_once_with(config=custom_config)
+        assert isinstance(result, CacheManager)
 
-    @patch("src.awsideman.cache.utilities.get_default_cache_config")
-    @patch("src.awsideman.cache.utilities.CacheManager")
-    def test_cache_manager_validation_warnings(self, mock_cache_manager_class, mock_get_config):
-        """Test cache manager creation with validation warnings."""
-        mock_config = Mock(spec=AdvancedCacheConfig)
-        mock_config.validate.return_value = {"warning": "Minor configuration issue"}
-        mock_get_config.return_value = mock_config
+        # Should be the same instance regardless of config
+        result2 = create_cache_manager()
+        assert result is result2
 
-        mock_manager = Mock(spec=CacheManager)
-        mock_cache_manager_class.return_value = mock_manager
+    def test_cache_manager_validation_warnings(self):
+        """Test cache manager creation continues with validation warnings."""
+        from src.awsideman.cache.manager import CacheManager
 
+        # CacheManager should work regardless of validation warnings
         result = create_cache_manager()
 
-        assert result == mock_manager
+        assert isinstance(result, CacheManager)
         # Should continue with warnings rather than failing
 
 

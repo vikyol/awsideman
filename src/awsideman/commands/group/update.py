@@ -5,7 +5,6 @@ from typing import Optional
 import typer
 from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
 
-from ...aws_clients.manager import AWSClientManager
 from ...utils.error_handler import handle_aws_error, handle_network_error
 from .get import get_group
 from .helpers import (
@@ -13,7 +12,6 @@ from .helpers import (
     validate_group_description,
     validate_group_name,
     validate_non_empty,
-    validate_profile,
     validate_sso_instance,
 )
 
@@ -60,17 +58,17 @@ def update_group(
         if description and not validate_group_description(description):
             raise typer.Exit(1)
 
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Validate profile and get AWS client with cache integration
+        from ..common import validate_profile_with_cache
+
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=True, region=None
+        )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         _, identity_store_id = validate_sso_instance(profile_data)
 
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-
-        # Get the identity store client
+        # Get the identity store client (now cached)
         identity_store = aws_client.get_identity_store_client()
 
         # Get the group first to ensure it exists and get current details
@@ -103,6 +101,8 @@ def update_group(
             )
 
             console.print("[green]Group updated successfully![/green]")
+
+            # Cache invalidation is now handled automatically by the cached client
 
             return updated_details
 

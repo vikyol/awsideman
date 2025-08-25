@@ -56,6 +56,14 @@ class CachedAwsClient:
             "list_accounts_for_provisioned_permission_set",
             "list_permission_sets_provisioned_to_account",
             "describe_instance",
+            # Permission Set operations (enhanced)
+            "list_managed_policies_in_permission_set",
+            "get_inline_policy_for_permission_set",
+            "list_customer_managed_policy_references_in_permission_set",
+            # Assignment operations (enhanced)
+            "list_account_assignments",
+            "list_permission_sets_provisioned_to_account",
+            "list_accounts_for_provisioned_permission_set",
             # Identity Store operations
             "list_users",
             "list_groups",
@@ -153,6 +161,7 @@ class CachedAwsClient:
         # Generate cache key - if this fails, fall back to API call
         try:
             cache_key = self._generate_cache_key(operation, params)
+            logger.debug(f"Generated cache key: {cache_key} for operation {operation}")
         except Exception as e:
             logger.warning(f"Failed to generate cache key for operation {operation}: {e}")
             logger.debug(f"Falling back to API call for operation {operation}")
@@ -160,10 +169,13 @@ class CachedAwsClient:
 
         # Try to get from cache - if cache fails, fall back to API call
         try:
+            logger.debug(f"Checking cache for key: {cache_key}")
             cached_result = self.cache_manager.get(cache_key)
             if cached_result is not None:
                 logger.debug(f"Cache hit for operation {operation}")
                 return cached_result
+            else:
+                logger.debug(f"Cache miss for operation {operation}")
         except Exception as e:
             logger.warning(f"Cache retrieval failed for operation {operation}: {e}")
             logger.debug(f"Falling back to API call for operation {operation}")
@@ -176,7 +188,8 @@ class CachedAwsClient:
 
             # Try to cache the successful result - if caching fails, log but don't fail the operation
             try:
-                self.cache_manager.set(cache_key, result, operation=operation)
+                logger.debug(f"Storing result in cache with key: {cache_key}")
+                self.cache_manager.set(cache_key, result)
                 logger.debug(f"Successfully cached result for operation {operation}")
             except Exception as cache_error:
                 logger.warning(f"Failed to cache result for operation {operation}: {cache_error}")
@@ -385,7 +398,7 @@ def create_cached_client_manager(
     client_manager = AWSClientManager(profile=profile, region=region)
 
     # Create cache manager with optional config
-    cache_manager = CacheManager(config=cache_config)
+    cache_manager = CacheManager()
 
     # Create and return the cached client
     return CachedAwsClient(client_manager, cache_manager)

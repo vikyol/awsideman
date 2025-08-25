@@ -159,6 +159,20 @@ def update_permission_set(
                 # Log the successful update
                 console.print("[green]Permission set attributes updated successfully.[/green]")
 
+                # Invalidate cache to ensure permission set data is fresh
+                try:
+                    # Use the AWS client manager's cache manager to ensure we invalidate
+                    # Clear internal data storage to ensure fresh data
+                    if aws_client.is_caching_enabled():
+                        # Clear the cache directly through the AWS client manager
+                        aws_client.clear_cache()
+
+                except Exception as cache_error:
+                    # Don't fail the command if cache invalidation fails
+                    console.print(
+                        f"[yellow]Warning: Failed to invalidate cache: {cache_error}[/yellow]"
+                    )
+
                 # Log which attributes were updated
                 if description is not None:
                     console.print(f"[green]Updated description: {description}[/green]")

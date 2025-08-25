@@ -10,7 +10,7 @@ from rich.table import Table
 from ..utils.config import Config
 
 app = typer.Typer(
-    help="Manage awsideman configuration settings including profiles, cache, backup, rollback, and templates."
+    help="Manage awsideman configuration settings including profiles, data storage, backup, rollback, and templates."
 )
 console = Console()
 
@@ -18,11 +18,14 @@ console = Console()
 @app.command("show")
 def show_config(
     section: str = typer.Option(
-        None, "--section", "-s", help="Show specific configuration section (profiles, cache, etc.)"
+        None,
+        "--section",
+        "-s",
+        help="Show specific configuration section (profiles, storage, etc.)",
     ),
     format: str = typer.Option("table", "--format", "-f", help="Output format: table, yaml, json"),
     profile: Optional[str] = typer.Option(
-        None, "--profile", help="Show cache configuration for specific profile"
+        None, "--profile", help="Show storage configuration for specific profile"
     ),
 ):
     """Show current configuration."""
@@ -96,18 +99,18 @@ def show_config_path():
 @app.command("set")
 def set_config(
     key_value: str = typer.Argument(
-        ..., help="Configuration key=value pair (e.g., cache.enabled=true)"
+        ..., help="Configuration key=value pair (e.g., storage.enabled=true)"
     ),
     profile: Optional[str] = typer.Option(
-        None, "--profile", help="AWS profile to set configuration for (for cache settings)"
+        None, "--profile", help="AWS profile to set configuration for (for storage settings)"
     ),
 ):
     """Set a configuration value using key=value format.
 
     Examples:
-    - awsideman config set cache.enabled=true
-    - awsideman config set cache.default_ttl=7200
-    - awsideman config set cache.max_size_mb=200
+    - awsideman config set storage.enabled=true
+    - awsideman config set storage.default_ttl=7200
+    - awsideman config set storage.max_size_mb=200
     - awsideman config set cache.backend_type=dynamodb --profile prod
     """
     config = Config()

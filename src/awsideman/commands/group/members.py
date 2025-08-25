@@ -7,7 +7,6 @@ import typer
 from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
 from rich.table import Table
 
-from ...aws_clients.manager import AWSClientManager
 from ...utils.error_handler import handle_aws_error, handle_network_error
 from .get import get_group
 from .helpers import (
@@ -16,7 +15,6 @@ from .helpers import (
     get_single_key,
     validate_limit,
     validate_non_empty,
-    validate_profile,
     validate_sso_instance,
 )
 
@@ -26,6 +24,7 @@ def _list_members_internal(
     limit: Optional[int] = None,
     next_token: Optional[str] = None,
     profile: Optional[str] = None,
+    debug: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
     Internal implementation of list_members that can be called directly from tests.
@@ -47,18 +46,32 @@ def _list_members_internal(
         if limit and not validate_limit(limit):
             raise typer.Exit(1)
 
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Validate profile and get AWS client with cache integration
+        from ..common import validate_profile_with_cache
+
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=True, region=None
+        )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         _, identity_store_id = validate_sso_instance(profile_data)
 
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-
-        # Get the identity store client
+        # Get the identity store client (now cached)
         identity_store = aws_client.get_identity_store_client()
+
+        # Check permissions in debug mode
+        if debug:
+            try:
+                # Try to list a few users to check permissions
+                identity_store.list_users(IdentityStoreId=identity_store_id, MaxResults=1)
+                console.print("[green]DEBUG: Permission check passed - can list users[/green]")
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                error_message = e.response.get("Error", {}).get("Message", str(e))
+                console.print("[red]DEBUG: Permission check failed - cannot list users:[/red]")
+                console.print(f"[red]  Error Code: {error_code}[/red]")
+                console.print(f"[red]  Error Message: {error_message}[/red]")
+                console.print("[red]  This may explain why user details are showing as N/A[/red]")
 
         # Check if group_identifier is a UUID (group ID) or if we need to search
         uuid_pattern = (
@@ -155,15 +168,53 @@ def _list_members_internal(
 
                 # Get user details
                 try:
+                    if debug:
+                        console.print(f"[blue]DEBUG: Getting details for user {user_id}[/blue]")
+
                     user_response = identity_store.describe_user(
                         IdentityStoreId=identity_store_id, UserId=user_id
                     )
-                    user = user_response.get("User", {})
+
+                    # The AWS Identity Store API returns user data at the top level, not nested under "User"
+                    user = user_response
+
                     username = user.get("UserName", "N/A")
                     display_name = user.get("DisplayName", "N/A")
-                except ClientError:
-                    username = "N/A"
-                    display_name = "N/A"
+
+                except ClientError as e:
+                    # Log the specific error for debugging
+                    error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                    error_message = e.response.get("Error", {}).get("Message", str(e))
+
+                    if debug:
+                        # Show detailed error information in debug mode
+                        console.print(f"[red]DEBUG: Error retrieving user {user_id}:[/red]")
+                        console.print(f"[red]  Error Code: {error_code}[/red]")
+                        console.print(f"[red]  Error Message: {error_message}[/red]")
+                        console.print(f"[red]  User ID: {user_id}[/red]")
+                        console.print(f"[red]  Identity Store ID: {identity_store_id}[/red]")
+
+                    if error_code == "AccessDenied":
+                        console.print(
+                            f"[yellow]Warning: Access denied when retrieving details for user {user_id}. Check permissions.[/yellow]"
+                        )
+                    elif error_code == "ResourceNotFoundException":
+                        console.print(
+                            f"[yellow]Warning: User {user_id} not found. User may have been deleted.[/yellow]"
+                        )
+                    else:
+                        console.print(
+                            f"[yellow]Warning: Error retrieving user {user_id} details: {error_code} - {error_message}[/yellow]"
+                        )
+
+                    # Try to get basic user info from the membership data if available
+                    username = "N/A (Error)"
+                    display_name = "N/A (Error)"
+
+                    # If we have the user ID, we can at least show that
+                    if user_id:
+                        username = f"User ID: {user_id[:8]}..."
+                        display_name = "Details unavailable"
 
                 # Add the row to the table
                 table.add_row(membership_id, user_id, username, display_name)
@@ -185,7 +236,7 @@ def _list_members_internal(
                         console.print("\n[blue]Fetching next page...[/blue]\n")
                         # Call _list_members_internal recursively with the next token
                         return _list_members_internal(
-                            group_identifier, limit, next_token_result, profile
+                            group_identifier, limit, next_token_result, profile, debug
                         )
                     else:
                         console.print("\n[yellow]Pagination stopped.[/yellow]")
@@ -220,11 +271,16 @@ def list_members(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
+    debug: bool = typer.Option(
+        False, "--debug", "-d", help="Enable debug mode for troubleshooting user detail retrieval"
+    ),
 ):
     """List all members of a group.
 
     Displays a table of users who are members of the specified group.
     Results can be paginated. Press ENTER to see the next page of results.
+
+    If user details show as "N/A", use --debug to see detailed error information.
 
     Examples:
         # List members of a group by name
@@ -235,9 +291,12 @@ def list_members(
 
         # List members using a specific AWS profile
         $ awsideman group list-members Engineers --profile dev-account
+
+        # List members with debug information
+        $ awsideman group list-members TestGroup --debug
     """
     memberships, next_token_result = _list_members_internal(
-        group_identifier, limit, next_token, profile
+        group_identifier, limit, next_token, profile, debug
     )
     # Return the expected tuple format for tests
     return memberships, next_token_result, group_identifier
@@ -275,17 +334,17 @@ def add_member(
         if not validate_non_empty(user_identifier, "User identifier"):
             raise typer.Exit(1)
 
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Validate profile and get AWS client with cache integration
+        from ..common import validate_profile_with_cache
+
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=True, region=None
+        )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         _, identity_store_id = validate_sso_instance(profile_data)
 
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-
-        # Get the identity store client
+        # Get the identity store client (now cached)
         identity_store = aws_client.get_identity_store_client()
 
         # Get group details
@@ -309,6 +368,9 @@ def add_member(
         except ClientError:
             username = user_identifier
 
+        # Inform user about the operation
+        console.print(f"[blue]Adding user '{username}' to group '{group_name}'...[/blue]")
+
         # Check if user is already a member
         try:
             memberships_response = identity_store.list_group_memberships(
@@ -321,11 +383,19 @@ def add_member(
                     console.print(
                         f"[yellow]User '{username}' is already a member of group '{group_name}'.[/yellow]"
                     )
+                    console.print(
+                        "[blue]No action needed - the user is already in the group.[/blue]"
+                    )
                     return None
 
-        except ClientError as e:
-            handle_aws_error(e, operation="ListGroupMemberships")
-            raise typer.Exit(1)
+        except ClientError:
+            # If we can't check existing memberships, continue and let the create operation handle it
+            console.print(
+                f"[yellow]Warning: Could not check existing memberships for group '{group_name}'. Proceeding with add operation...[/yellow]"
+            )
+            console.print(
+                "[blue]If the user is already a member, you'll see a clear message below.[/blue]"
+            )
 
         # Add the user to the group
         try:
@@ -338,11 +408,27 @@ def add_member(
                 f"[green]Successfully added user '{username}' to group '{group_name}'.[/green]"
             )
 
+            # Cache invalidation is now handled automatically by the cached client
+
             return membership_id
 
         except ClientError as e:
-            handle_aws_error(e, operation="CreateGroupMembership")
-            raise typer.Exit(1)
+            # Handle the specific case where user is already a member
+            error_code = e.response.get("Error", {}).get("Code", "")
+            error_message = e.response.get("Error", {}).get("Message", "")
+
+            if (
+                error_code == "ConflictException"
+                and "Member and Group relationship already exists" in error_message
+            ):
+                console.print(
+                    f"[yellow]User '{username}' is already a member of group '{group_name}'.[/yellow]"
+                )
+                return None
+            else:
+                # Handle other AWS errors using the standard error handler
+                handle_aws_error(e, operation="CreateGroupMembership")
+                raise typer.Exit(1)
 
     except ClientError as e:
         handle_aws_error(e, operation="CreateGroupMembership")
@@ -392,17 +478,17 @@ def remove_member(
         if not validate_non_empty(user_identifier, "User identifier"):
             raise typer.Exit(1)
 
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Validate profile and get AWS client with cache integration
+        from ..common import validate_profile_with_cache
+
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=True, region=None
+        )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         _, identity_store_id = validate_sso_instance(profile_data)
 
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-
-        # Get the identity store client
+        # Get the identity store client (now cached)
         identity_store = aws_client.get_identity_store_client()
 
         # Get group details
@@ -481,6 +567,8 @@ def remove_member(
             console.print(
                 f"[green]Successfully removed user '{username}' from group '{group_name}'.[/green]"
             )
+
+            # Cache invalidation is now handled automatically by the cached client
 
             return True
 

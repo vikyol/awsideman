@@ -6,9 +6,8 @@ from typing import Optional
 import typer
 from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
 
-from ...aws_clients.manager import AWSClientManager
 from ...utils.error_handler import handle_aws_error, handle_network_error
-from .helpers import console, validate_non_empty, validate_profile, validate_sso_instance
+from .helpers import console, validate_non_empty, validate_sso_instance
 
 
 def get_group(
@@ -36,17 +35,17 @@ def get_group(
         if not validate_non_empty(identifier, "Group identifier"):
             raise typer.Exit(1)
 
-        # Validate the profile and get profile data
-        profile_name, profile_data = validate_profile(profile)
+        # Validate profile and get AWS client with cache integration
+        from ..common import validate_profile_with_cache
+
+        profile_name, profile_data, aws_client = validate_profile_with_cache(
+            profile=profile, enable_caching=True, region=None
+        )
 
         # Validate the SSO instance and get instance ARN and identity store ID
         _, identity_store_id = validate_sso_instance(profile_data)
 
-        # Initialize the AWS client manager with the profile and region
-        region = profile_data.get("region")
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-
-        # Get the identity store client
+        # Get the identity store client (now cached)
         identity_store = aws_client.get_identity_store_client()
 
         # Check if identifier is a UUID (group ID) or if we need to search

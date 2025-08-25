@@ -642,6 +642,15 @@ def assign_single_account(
                     request_id=request_id,
                 )
 
+                # Clear internal data storage to ensure fresh data
+                try:
+                    if aws_client.is_caching_enabled():
+                        aws_client.clear_cache()
+
+                except Exception:
+                    # Don't fail the command if cache invalidation fails
+                    pass
+
             elif status == "SUCCEEDED":
                 console.print("[green]✓ Assignment created successfully.[/green]")
                 console.print()

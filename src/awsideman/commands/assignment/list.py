@@ -15,7 +15,7 @@ from ...utils.config import Config
 from ...utils.error_handler import handle_network_error
 from ...utils.validators import validate_sso_instance
 from ..common import (
-    cache_option,
+    advanced_cache_option,
     extract_standard_params,
     handle_aws_error,
     profile_option,
@@ -50,7 +50,7 @@ def list_assignments(
     ),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
+    no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ) -> None:
     """List all permission set assignments.

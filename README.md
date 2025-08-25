@@ -1,4 +1,4 @@
-# 🚀 awsideman - AWS Identity Center Manager
+# awsideman - AWS Identity Center Manager
 
 > **"Because humans shouldn't have to think like machines"**
 
@@ -35,7 +35,7 @@ aws sso-admin create-account-assignment \
 **awsideman approach:**
 ```bash
 # ✅ Simple, intuitive
-awsideman assignment assign ReadOnlyAccess john.doe --account Production
+awsideman assignment assign ReadOnlyAccess john.doe 123456789012
 ```
 
 ## 🌟 **Key Features**
@@ -73,8 +73,8 @@ awsideman assignment assign ReadOnlyAccess john.doe --account Production
 awsideman assignment assign DeveloperAccess new.employee --filter "tag:Environment=Development"
 
 # Offboard departing employee
-awsideman assignment revoke-all former.employee --dry-run
-awsideman assignment revoke-all former.employee --confirm
+awsideman assignment revoke ReadOnlyAccess former.employee --filter "*"
+awsideman assignment revoke DeveloperAccess former.employee --filter "*"
 ```
 
 ### **2. Bulk Operations**
@@ -89,21 +89,21 @@ awsideman assignment assign ReadOnlyAccess AuditorsGroup --filter "tag:Complianc
 ### **3. Access Reviews & Compliance**
 ```bash
 # Generate access reports
-awsideman access-review user john.doe --format csv --output user_access.csv
-awsideman access-review account Production --since 2024-01-01
+awsideman access-review principal john.doe --format csv --output user_access.csv
+awsideman access-review account 123456789012
 
 # Permission set analysis
-awsideman access-review permission-set AdminAccess --show-assignments
+awsideman access-review permission-set AdminAccess
 ```
 
 ### **4. Backup & Disaster Recovery**
 ```bash
 # Create comprehensive backups
-awsideman backup create --type full --encrypt
-awsideman backup create --type incremental --since yesterday
+awsideman backup create --type full
+awsideman backup create --type incremental --since 2024-01-01
 
 # Restore from backup
-awsideman restore --backup-id backup-20240101 --dry-run
+awsideman restore apply backup-20240101 --dry-run
 ```
 
 ### **5. Permission Copying**
@@ -143,19 +143,18 @@ awsideman clone --name PowerUserAccess --to DeveloperAccess --preview
 ```bash
 # Synchronize user access across environments
 awsideman assignment assign DeveloperAccess john.doe \
-  --profile dev-org --account DevelopmentAccount
+  --profile dev-org --filter "tag:Environment=Development"
 awsideman assignment assign DeveloperAccess john.doe \
-  --profile prod-org --account ProductionAccount
+  --profile prod-org --filter "tag:Environment=Production"
 
 # Cross-organization backup and restore
 awsideman backup create --profile production --type full
 awsideman backup create --profile development --type full
-awsideman backup sync production-backup development-backup
 
 # Manage multiple client environments
-awsideman user create client1.admin --profile client1-production
+awsideman user create --username client1.admin --display-name "Client1 Admin" --email client1.admin@company.com --profile client1-production
 awsideman assignment assign AdminAccess client1.admin \
-  --profile client1-production --account Client1Main
+  --profile client1-production --filter "tag:Client=Client1"
 ```
 
 ## 🛠️ **Installation & Setup**
@@ -268,7 +267,7 @@ assignments:
 ```
 
 ```bash
-awsideman templates apply developer-access.yaml --principal john.doe
+awsideman templates apply developer-access.yaml
 ```
 
 ### **Multi-Account Operations**
@@ -280,7 +279,7 @@ awsideman assignment assign ReadOnlyAccess auditor \
   --continue-on-error
 
 # Organization-wide access reviews
-awsideman access-review organization --export-format json
+awsideman access-review account 123456789012 --format json
 ```
 
 ### **Multiple Profile/SSO Support**
@@ -295,12 +294,7 @@ awsideman user list --profile staging
 # Cross-organization operations
 awsideman assignment assign ReadOnlyAccess john.doe \
   --profile production \
-  --account ProductionAccount
-
-# Compare configurations across organizations
-awsideman backup create --profile production --type full
-awsideman backup create --profile development --type full
-awsideman backup compare production-backup development-backup
+  --filter "tag:Environment=Production"
 
 # Bulk operations across multiple organizations
 awsideman bulk assign cross-org-assignments.csv \
@@ -351,7 +345,7 @@ poetry run mypy src/
 poetry run pre-commit run --all-files
 ```
 
-## �️ **Archiotecture & Design**
+## 🏗️ **Architecture & Design**
 
 awsideman is built with modern software engineering principles:
 
@@ -404,7 +398,7 @@ poetry run pytest
 
 Comprehensive documentation is available:
 
-- **[Getting Started Guide](docs/getting-started.md)** - Step-by-step setup
+- **[Getting Started Guide](docs/backup-restore/getting-started.md)** - Step-by-step setup
 - **[Configuration Reference](CONFIGURATION.md)** - All configuration options
 - **[Command Reference](docs/)** - Complete CLI documentation
 - **[Examples](examples/)** - Real-world usage patterns

@@ -209,7 +209,7 @@ jobs:
 
     - name: Test PyPI connection
       run: |
-        echo "Testing PyPI connection..."
+        echo "Testingpoetry PyPI connection..."
         pip install twine
         twine check dist/*
         echo "✅ Package validation passed"

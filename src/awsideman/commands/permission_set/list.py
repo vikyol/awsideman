@@ -9,7 +9,6 @@ from rich.table import Table
 
 from ...utils.validators import validate_filter, validate_limit
 from ..common import (
-    cache_option,
     extract_standard_params,
     handle_aws_error,
     profile_option,
@@ -63,8 +62,8 @@ def _list_permission_sets_internal(
         # Validate the SSO instance and get instance ARN and identity store ID
         instance_arn, _ = validate_sso_instance(profile_data)
 
-        # Get the SSO Admin client
-        sso_admin_client = aws_client.get_client("sso-admin")
+        # Get the SSO Admin client with caching support
+        sso_admin_client = aws_client.get_identity_center_client()
 
         # Prepare the list_permission_sets API call parameters
         list_permission_sets_params = {"InstanceArn": instance_arn}
@@ -270,7 +269,6 @@ def list_permission_sets(
     next_token: Optional[str] = typer.Option(None, "--next-token", "-n", help="Pagination token"),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """List all permission sets in the Identity Center.
@@ -295,7 +293,7 @@ def list_permission_sets(
         $ awsideman permission-set list --next-token ABCDEF123456
     """
     # Extract and process standard command parameters
-    profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+    profile, region, enable_caching = extract_standard_params(profile, region)
 
     # Show cache information if verbose
     show_cache_info(verbose)

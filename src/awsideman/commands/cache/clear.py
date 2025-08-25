@@ -10,7 +10,7 @@ from .helpers import console, get_cache_manager
 def clear_cache(
     force: bool = typer.Option(False, "--force", "-f", help="Force clear without confirmation"),
     accounts_only: bool = typer.Option(
-        False, "--accounts-only", help="Clear only account-related cache entries"
+        False, "--accounts-only", help="Clear only account-related storage entries"
     ),
     profile: Optional[str] = typer.Option(
         None,
@@ -18,15 +18,15 @@ def clear_cache(
         help="AWS profile to clear cache for (only works with --accounts-only). Use '*' to clear all profiles.",
     ),
 ):
-    """Clear all cached data.
+    """Clear internal data storage.
 
-    Removes all cached AWS Identity Center data to force fresh API calls.
-    Use this when you need to ensure you're getting the most up-to-date information.
+    Removes stored AWS Identity Center data to refresh information from AWS.
+    Use this when you need to ensure you're getting the most current information.
 
-    Use --accounts-only to clear only account-related cache entries, which is useful
+    Use --accounts-only to clear only account-related data, which is useful
     when you know the organization structure has changed but other data is still valid.
 
-    Use --profile with --accounts-only to clear cache for a specific AWS profile.
+    Use --profile with --accounts-only to clear data for a specific AWS profile.
     """
     try:
         # Get cache manager with profile-aware configuration if profile is specified
@@ -90,15 +90,15 @@ def clear_cache(
                 console.print(
                     "[yellow]Note: Clearing account cache for current profile only[/yellow]"
                 )
-                cache_manager.invalidate()  # Clear all entries
+                cache_manager.invalidate("*")  # Clear all entries
             else:
                 # Clear account cache for specific profile
                 console.print(f"[blue]Clearing account cache for profile: {profile}[/blue]")
-                cache_manager.invalidate()  # Clear all entries
+                cache_manager.invalidate("*")  # Clear all entries
         else:
             # Clear all cache
             console.print("[blue]Clearing all cache entries...[/blue]")
-            cache_manager.invalidate()  # Clear all entries
+            cache_manager.invalidate("*")  # Clear all entries
 
         # Get final cache stats for verification
         final_stats = cache_manager.get_cache_stats()

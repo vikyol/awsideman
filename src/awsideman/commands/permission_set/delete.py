@@ -133,6 +133,20 @@ def delete_permission_set(
             )
             console.print(f"[green]Permission Set ARN: {permission_set_arn}[/green]")
 
+            # Invalidate cache to ensure permission set data is fresh
+            try:
+                # Use the AWS client manager's cache manager to ensure we invalidate
+                # the same cache that the cached client uses
+                if aws_client.is_caching_enabled():
+                    # Clear internal data storage to ensure fresh data
+                    aws_client.clear_cache()
+
+            except Exception as cache_error:
+                # Don't fail the command if cache invalidation fails
+                console.print(
+                    f"[yellow]Warning: Failed to invalidate cache: {cache_error}[/yellow]"
+                )
+
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
             error_message = e.response.get("Error", {}).get("Message", str(e))

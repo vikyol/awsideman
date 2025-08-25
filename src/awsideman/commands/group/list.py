@@ -7,7 +7,6 @@ import typer
 from rich.table import Table
 
 from ..common import (
-    cache_option,
     extract_standard_params,
     handle_aws_error,
     profile_option,
@@ -181,7 +180,6 @@ def list_groups(
     ),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """List all groups in the Identity Store.
@@ -190,7 +188,7 @@ def list_groups(
     Results can be filtered and paginated. Press ENTER to see the next page of results.
     """
     # Extract and process standard command parameters
-    profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+    profile, region, enable_caching = extract_standard_params(profile, region)
 
     # Show cache information if verbose
     show_cache_info(verbose)

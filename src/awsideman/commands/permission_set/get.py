@@ -9,7 +9,6 @@ from rich.table import Table
 
 from ...utils.error_handler import with_retry
 from ..common import (
-    cache_option,
     extract_standard_params,
     handle_aws_error,
     profile_option,
@@ -29,7 +28,6 @@ def get_permission_set(
     identifier: str = typer.Argument(..., help="Permission set name or ARN"),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Get detailed information about a specific permission set.
@@ -50,7 +48,7 @@ def get_permission_set(
     """
     try:
         # Extract and process standard command parameters
-        profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+        profile, region, enable_caching = extract_standard_params(profile, region)
 
         # Show cache information if verbose
         show_cache_info(verbose)

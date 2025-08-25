@@ -21,20 +21,45 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
-def cache_option(default: bool = True) -> Any:
+def cache_option(default: bool = True, advanced: bool = False) -> Any:
     """
     Create a standardized --no-cache option for commands.
 
     Args:
         default: Default caching behavior (True = caching enabled by default)
+        advanced: Whether this is an advanced debugging option (affects help text)
 
     Returns:
         Typer option for cache control
     """
+    if advanced:
+        help_text = "Advanced debugging option"
+    else:
+        help_text = "Advanced debugging option"
+
     return typer.Option(
         not default,  # Invert the default so --no-cache disables caching
         "--no-cache",
-        help="Disable caching for this command (forces fresh API calls)",
+        help=help_text,
+        hidden=True,  # Always hide from normal help output
+    )
+
+
+def advanced_cache_option(default: bool = True) -> Any:
+    """
+    Create an advanced --no-cache option for debugging commands.
+
+    Args:
+        default: Default caching behavior (True = caching enabled by default)
+
+    Returns:
+        Typer option for advanced cache control
+    """
+    return typer.Option(
+        not default,  # Invert the default so --no-cache disables caching
+        "--no-cache",
+        help="Advanced debugging option",
+        hidden=True,  # Hide from normal help output
     )
 
 
@@ -222,7 +247,7 @@ StandardCommandParams = Tuple[Optional[str], Optional[str], bool]
 
 
 def extract_standard_params(
-    profile: Optional[str] = None, region: Optional[str] = None, no_cache: bool = False
+    profile: Optional[str] = None, region: Optional[str] = None, no_cache: Optional[bool] = None
 ) -> StandardCommandParams:
     """
     Extract and process standard command parameters.
@@ -230,7 +255,7 @@ def extract_standard_params(
     Args:
         profile: AWS profile name
         region: AWS region
-        no_cache: Whether caching is disabled
+        no_cache: Whether caching is disabled (None means caching enabled by default)
 
     Returns:
         Tuple of (profile, region, enable_caching)
@@ -247,5 +272,6 @@ def extract_standard_params(
         except Exception as e:
             logger.debug(f"Could not resolve default profile: {e}")
 
-    enable_caching = not no_cache
+    # Default to caching enabled if no_cache is not specified
+    enable_caching = not (no_cache or False)
     return profile, region, enable_caching

@@ -237,15 +237,22 @@ class TestEnhancedAWSClientManager:
             cache_manager=mock_cache_manager,
         )
 
-        with patch.object(client_manager, "get_cached_client") as mock_get_cached:
-            mock_cached_client = Mock()
-            mock_cached_client.get_identity_store_client.return_value = "cached_client"
-            mock_get_cached.return_value = mock_cached_client
+        with patch.object(client_manager, "get_raw_identity_store_client") as mock_get_raw:
+            mock_raw_client = Mock()
+            mock_get_raw.return_value = mock_raw_client
 
-            result = client_manager.get_identity_store_client()
+            with patch(
+                "src.awsideman.cache.aws_client.CachedIdentityStoreClient"
+            ) as mock_cached_client_class:
+                mock_cached_client = Mock()
+                mock_cached_client_class.return_value = mock_cached_client
 
-            assert result == "cached_client"
-            mock_get_cached.assert_called_once()
+                result = client_manager.get_identity_store_client()
+
+                assert result == mock_cached_client
+                mock_cached_client_class.assert_called_once_with(
+                    mock_raw_client, mock_cache_manager
+                )
 
     @patch("src.awsideman.aws_clients.manager.AWSClientManager._init_session")
     def test_get_identity_store_client_without_caching(self, mock_init_session):

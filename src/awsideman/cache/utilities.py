@@ -160,9 +160,35 @@ def get_profile_cache_config(profile_name: str) -> AdvancedCacheConfig:
         return get_default_cache_config()
 
 
-def create_cache_manager(config: Optional[AdvancedCacheConfig] = None) -> CacheManager:
+def create_cache_manager(config: Optional[AdvancedCacheConfig] = None) -> "CacheManager":
     """
-    Create a cache manager instance with proper configuration.
+    Create a unified cache manager instance (singleton pattern).
+
+    This function now returns the CacheManager singleton instance,
+    ensuring consistent cache behavior across the entire system.
+
+    Args:
+        config: Optional AdvancedCacheConfig instance (ignored for singleton)
+
+    Returns:
+        CacheManager singleton instance
+    """
+    from .manager import CacheManager
+
+    # The CacheManager is a singleton, so we just return the instance
+    # Configuration is handled internally by the singleton
+    logger.debug("Getting CacheManager singleton instance")
+    cache_manager = CacheManager()
+
+    logger.info("Successfully retrieved unified cache manager singleton")
+    return cache_manager
+
+
+def create_legacy_cache_manager(config: Optional[AdvancedCacheConfig] = None) -> CacheManager:
+    """
+    Create a legacy cache manager instance with proper configuration.
+
+    This function is kept for backward compatibility and testing purposes.
 
     Args:
         config: Optional AdvancedCacheConfig instance. If None, loads default config.
@@ -174,7 +200,7 @@ def create_cache_manager(config: Optional[AdvancedCacheConfig] = None) -> CacheM
         config = get_default_cache_config()
 
     try:
-        logger.debug(f"Creating cache manager with backend type: {config.backend_type}")
+        logger.debug(f"Creating legacy cache manager with backend type: {config.backend_type}")
         cache_manager = CacheManager(config=config)
 
         # Validate the cache manager configuration
@@ -183,14 +209,14 @@ def create_cache_manager(config: Optional[AdvancedCacheConfig] = None) -> CacheM
             logger.warning(f"Cache configuration validation warnings: {validation_errors}")
             # Continue with warnings rather than failing
 
-        logger.info("Successfully created cache manager")
+        logger.info("Successfully created legacy cache manager")
         return cache_manager
 
     except Exception as e:
-        logger.error(f"Failed to create cache manager: {e}")
+        logger.error(f"Failed to create legacy cache manager: {e}")
 
         # Fall back to basic cache manager
-        logger.info("Falling back to basic cache manager")
+        logger.info("Falling back to basic legacy cache manager")
         fallback_config = AdvancedCacheConfig(
             enabled=True,
             backend_type="file",

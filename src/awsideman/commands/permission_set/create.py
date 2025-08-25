@@ -134,6 +134,20 @@ def create_permission_set(
             console.print(f"[green]Permission set '{name}' created successfully.[/green]")
             console.print(f"[green]Permission Set ARN: {permission_set_arn}[/green]")
 
+            # Invalidate cache to ensure permission set data is fresh
+            try:
+                # Use the AWS client manager's cache manager to ensure we invalidate
+                # Clear internal data storage to ensure fresh data
+                if aws_client.is_caching_enabled():
+                    # Clear the cache directly through the AWS client manager
+                    aws_client.clear_cache()
+
+            except Exception as cache_error:
+                # Don't fail the command if cache invalidation fails
+                console.print(
+                    f"[yellow]Warning: Failed to invalidate cache: {cache_error}[/yellow]"
+                )
+
             # Attach managed policies if provided
             attached_policies = []
             if managed_policy:

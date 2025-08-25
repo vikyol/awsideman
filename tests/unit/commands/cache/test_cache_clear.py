@@ -44,7 +44,7 @@ def test_clear_cache_help_text():
     # Check that the docstring contains expected content
     doc = clear_cache.__doc__.lower()
     assert "clear" in doc
-    assert "cache" in doc
+    assert "storage" in doc  # Updated from "cache" to "storage"
     assert "data" in doc
 
 

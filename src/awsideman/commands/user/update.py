@@ -9,7 +9,6 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ...aws_clients.manager import AWSClientManager
-from ..cache.helpers import get_cache_manager
 from .helpers import (
     console,
     format_user_for_display,
@@ -222,16 +221,7 @@ def update_user(
             # Make the API call to update the user
             identity_store.update_user(**update_user_params)
 
-            # Invalidate user-related cache entries to ensure consistency
-            try:
-                cache_manager = get_cache_manager()
-                cache_manager.invalidate()  # Clear all cache to ensure updated user data is reflected
-                console.print("[dim]Cache invalidated to ensure consistency.[/dim]")
-            except Exception as cache_error:
-                # Don't fail the command if cache invalidation fails
-                console.print(
-                    f"[yellow]Warning: Failed to invalidate cache: {cache_error}[/yellow]"
-                )
+            # Cache invalidation is handled automatically by CachedIdentityStoreClient
 
             # Log the successful update
             console.print("[green]User updated successfully.[/green]")

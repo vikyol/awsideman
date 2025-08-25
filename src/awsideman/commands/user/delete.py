@@ -8,9 +8,7 @@ from botocore.exceptions import ClientError
 from rich.panel import Panel
 from rich.table import Table
 
-from ..cache.helpers import get_cache_manager
 from ..common import (
-    cache_option,
     extract_standard_params,
     handle_aws_error,
     profile_option,
@@ -26,7 +24,6 @@ def delete_user(
     force: bool = typer.Option(False, "--force", "-f", help="Force deletion without confirmation"),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Delete a user from AWS Identity Center.
@@ -55,7 +52,7 @@ def delete_user(
     """
     try:
         # Extract and process standard command parameters
-        profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+        profile, region, enable_caching = extract_standard_params(profile, region)
 
         # Show cache information if verbose
         show_cache_info(verbose)
@@ -180,11 +177,14 @@ def delete_user(
                 if key == "Emails" and value:
                     email_values = [email_obj.get("Value", "N/A") for email_obj in value]
                     details_table.add_row(key, ", ".join(email_values))
-                elif key == "Name" and value:
-                    name_values = [f"{k}: {v}" for k, v in value.items()]
-                    details_table.add_row(key, ", ".join(name_values))
                 else:
                     details_table.add_row(key, str(value))
+            elif isinstance(value, dict) and key == "Name":
+                # Handle Name field specially to format as "GivenName FamilyName"
+                given_name = value.get("GivenName", "")
+                family_name = value.get("FamilyName", "")
+                formatted_name = f"{given_name} {family_name}".strip()
+                details_table.add_row(key, formatted_name if formatted_name else "N/A")
             else:
                 details_table.add_row(key, str(value))
 
@@ -224,17 +224,7 @@ def delete_user(
             )
 
             # Invalidate user-related cache entries to ensure consistency
-            try:
-                cache_manager = get_cache_manager()
-                # Invalidate list_users cache entries that would contain the deleted user
-                # We need to clear cache entries that might contain this user
-                cache_manager.invalidate()  # Clear all cache for now - could be more targeted
-                console.print("[dim]Cache invalidated to ensure consistency.[/dim]")
-            except Exception as cache_error:
-                # Don't fail the command if cache invalidation fails
-                console.print(
-                    f"[yellow]Warning: Failed to invalidate cache: {cache_error}[/yellow]"
-                )
+            # Cache invalidation is handled automatically by CachedIdentityStoreClient
 
             # Display success message with checkmark emoji
             console.print(f"[green]✓ User '{username}' deleted successfully.[/green]")

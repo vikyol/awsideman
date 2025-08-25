@@ -508,7 +508,8 @@ class TestCreateCachedClientManager:
         mock_client_manager_class.assert_called_once_with(
             profile="test-profile", region="us-west-2"
         )
-        mock_cache_manager_class.assert_called_once_with(config=cache_config)
+        # New unified cache manager doesn't take config parameter
+        mock_cache_manager_class.assert_called_once_with()
 
         assert isinstance(result, CachedAwsClient)
         assert result.client_manager == mock_client_manager
@@ -530,7 +531,8 @@ class TestCreateCachedClientManager:
 
         # Verify correct initialization with defaults
         mock_client_manager_class.assert_called_once_with(profile=None, region=None)
-        mock_cache_manager_class.assert_called_once_with(config=None)
+        # New unified cache manager doesn't take config parameter
+        mock_cache_manager_class.assert_called_once_with()
 
         assert isinstance(result, CachedAwsClient)
 

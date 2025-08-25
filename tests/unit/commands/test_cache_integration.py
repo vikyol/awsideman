@@ -58,6 +58,16 @@ class TestCommandCacheIntegration:
             assert region is None
             assert enable_caching is True  # Default is caching enabled
 
+    def test_extract_standard_params_with_none_no_cache(self):
+        """Test extract_standard_params with no_cache=None (should default to caching enabled)."""
+        profile, region, enable_caching = extract_standard_params(
+            profile="test-profile", region="us-west-2", no_cache=None
+        )
+
+        assert profile == "test-profile"
+        assert region == "us-west-2"
+        assert enable_caching is True  # None should default to caching enabled
+
     @patch("src.awsideman.commands.common.create_aws_client_manager")
     def test_get_aws_client_manager_with_caching(self, mock_create_client):
         """Test get_aws_client_manager with caching enabled."""

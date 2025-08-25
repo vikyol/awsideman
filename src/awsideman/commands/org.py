@@ -12,7 +12,7 @@ from ..aws_clients.manager import build_organization_hierarchy, get_account_deta
 from ..utils.config import Config
 from ..utils.models import NodeType, OrgNode
 from .common import (
-    cache_option,
+    advanced_cache_option,
     extract_standard_params,
     get_aws_client_manager,
     handle_aws_error,
@@ -75,14 +75,13 @@ def tree(
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
+    no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Display the full AWS Organization hierarchy including roots, OUs, and accounts.
 
     Shows organizational units, their relationships, and accounts under each OU.
     Supports both tree and flat output formats, as well as JSON output.
-    Caching is enabled by default for improved performance. Use --no-cache to disable.
     """
     try:
         # Extract and process standard command parameters
@@ -126,14 +125,13 @@ def account(
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
+    no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Display detailed information about a specific AWS account.
 
     Shows comprehensive metadata including account name, ID, email, status,
     joined timestamp, tags, and the full OU path from root to account.
-    Caching is enabled by default for improved performance. Use --no-cache to disable.
     """
     try:
         # Extract and process standard command parameters
@@ -185,7 +183,7 @@ def search(
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
+    no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Search for accounts by name or substring.
@@ -254,7 +252,7 @@ def trace_policies(
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
+    no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Trace all SCPs and RCPs affecting a given account.

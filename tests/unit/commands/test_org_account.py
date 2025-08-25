@@ -76,8 +76,9 @@ def test_account_command_options():
     clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
 
     assert "--json" in clean_output
-    assert "--no-cache" in clean_output
     assert "--profile" in clean_output
+    # --no-cache is now hidden as an advanced debugging option
+    # assert "--no-cache" in clean_output
 
 
 def test_account_command_short_profile_option():

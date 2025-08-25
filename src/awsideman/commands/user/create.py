@@ -7,9 +7,7 @@ from botocore.exceptions import ClientError
 from rich.panel import Panel
 from rich.table import Table
 
-from ..cache.helpers import get_cache_manager
 from ..common import (
-    cache_option,
     extract_standard_params,
     handle_aws_error,
     profile_option,
@@ -38,7 +36,6 @@ def create_user(
     ),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Create a new user in AWS Identity Center.
@@ -72,7 +69,7 @@ def create_user(
             raise typer.Exit(1)
 
         # Extract and process standard command parameters
-        profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+        profile, region, enable_caching = extract_standard_params(profile, region)
 
         # Show cache information if verbose
         show_cache_info(verbose)
@@ -125,16 +122,7 @@ def create_user(
                 console.print("[red]Error: Failed to create user. No user ID returned.[/red]")
                 raise typer.Exit(1)
 
-            # Invalidate user-related cache entries to ensure consistency
-            try:
-                cache_manager = get_cache_manager()
-                cache_manager.invalidate()  # Clear all cache to ensure new user appears in lists
-                console.print("[dim]Cache invalidated to ensure consistency.[/dim]")
-            except Exception as cache_error:
-                # Don't fail the command if cache invalidation fails
-                console.print(
-                    f"[yellow]Warning: Failed to invalidate cache: {cache_error}[/yellow]"
-                )
+            # Cache invalidation is handled automatically by CachedIdentityStoreClient
 
             console.print(f"[green]User '{username}' created successfully.[/green]")
             console.print(f"[green]User ID: {user_id}[/green]")

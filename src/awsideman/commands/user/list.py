@@ -7,7 +7,6 @@ import typer
 from rich.table import Table
 
 from ..common import (
-    cache_option,
     extract_standard_params,
     handle_aws_error,
     profile_option,
@@ -33,17 +32,18 @@ def list_users(
     ),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """List all users in the Identity Store.
 
-    Displays a table of users with their IDs, usernames, emails, names, and status.
+    Displays a table of users with their IDs, usernames, emails, and names.
     Results can be filtered and paginated. Press ENTER to see the next page of results.
+
+    Note: For detailed user information including status, use 'awsideman user get <username>'.
     """
     try:
         # Extract and process standard command parameters
-        profile, region, enable_caching = extract_standard_params(profile, region, no_cache)
+        profile, region, enable_caching = extract_standard_params(profile, region)
 
         # Show cache information if verbose
         show_cache_info(verbose)
@@ -114,7 +114,6 @@ def list_users(
         table.add_column("Username", style="green")
         table.add_column("Email", style="blue")
         table.add_column("Name", style="magenta")
-        table.add_column("Status", style="yellow")
 
         # Add rows to the table
         for user in users:
@@ -141,11 +140,8 @@ def list_users(
             else:
                 name = ""
 
-            # Get user status
-            status = user.get("Status", "")
-
             # Add the row to the table
-            table.add_row(user_id, username, email, name, status)
+            table.add_row(user_id, username, email, name)
 
         # Display the table
         console.print(table)
@@ -169,7 +165,6 @@ def list_users(
                         next_token=next_token,
                         profile=profile,
                         region=region,
-                        no_cache=no_cache,
                         verbose=verbose,
                     )
                 else:

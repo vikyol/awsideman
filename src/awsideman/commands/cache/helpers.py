@@ -60,24 +60,24 @@ def validate_cache_config(config: AdvancedCacheConfig) -> bool:
 
 def get_cache_manager() -> CacheManager:
     """
-    Get a configured cache manager instance using the new utilities.
+    Get the unified cache manager singleton instance.
 
-    This function now uses the enhanced cache configuration utilities
-    for better reliability and configuration management.
+    This function now returns the CacheManager singleton,
+    ensuring consistent cache behavior across all commands.
     """
     try:
-        # Use the new utility function for better configuration management
-        logger.debug("Loading cache manager using enhanced configuration utilities")
+        # Use the new utility function to get the singleton
+        logger.debug("Getting unified cache manager singleton")
         cache_manager = create_cache_manager()
 
-        logger.info("Successfully created cache manager with enhanced configuration")
+        logger.info("Successfully retrieved unified cache manager singleton")
         return cache_manager
 
     except Exception as e:
-        logger.error(f"Failed to create cache manager with enhanced utilities: {e}")
+        logger.error(f"Failed to get unified cache manager: {e}")
 
-        # Fall back to basic cache manager
-        logger.info("Falling back to basic cache manager")
+        # Fall back to creating a new singleton instance
+        logger.info("Falling back to direct CacheManager instantiation")
         return CacheManager()
 
 

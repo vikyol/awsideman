@@ -4,13 +4,13 @@ from .helpers import console
 
 
 def inspect_cache():
-    """Inspect cache contents and performance.
+    """Inspect internal data storage contents and metrics.
 
     This command provides functionality to:
-    - View detailed cache contents
-    - Analyze cache performance metrics
-    - Debug cache issues
-    - Export cache data for analysis
+    - View detailed storage contents
+    - Analyze storage metrics
+    - Debug storage issues
+    - Export storage data for analysis
     """
     console.print("[yellow]Cache inspection functionality to be implemented.[/yellow]")
     console.print(

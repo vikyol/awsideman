@@ -25,7 +25,7 @@ def test_cache_status_help_text():
     # Check that the docstring contains expected content
     doc = cache_status.__doc__.lower()
     assert "display" in doc
-    assert "cache" in doc
+    assert "storage" in doc  # Updated from "cache" to "storage"
     assert "status" in doc
 
 

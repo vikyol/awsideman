@@ -12,6 +12,55 @@ from ...aws_clients.manager import AWSClientManager
 from .helpers import console, validate_profile, validate_sso_instance
 
 
+def _get_user_group_memberships(identity_store, identity_store_id: str, user_id: str):
+    """
+    Get all groups that a user is a member of.
+
+    Args:
+        identity_store: AWS Identity Store client
+        identity_store_id: Identity store ID
+        user_id: User ID to find groups for
+
+    Returns:
+        List of group dictionaries with GroupId, DisplayName, Description, and MembershipId
+    """
+    groups = []
+
+    try:
+        # List all groups and check if the user is a member of each
+        paginator = identity_store.get_paginator("list_groups")
+        for page in paginator.paginate(IdentityStoreId=identity_store_id):
+            for group in page.get("Groups", []):
+                group_id = group["GroupId"]
+
+                # Check if user is a member of this group
+                try:
+                    memberships_response = identity_store.list_group_memberships(
+                        IdentityStoreId=identity_store_id, GroupId=group_id
+                    )
+
+                    for membership in memberships_response.get("GroupMemberships", []):
+                        member_id = membership.get("MemberId", {})
+                        if member_id.get("UserId") == user_id:
+                            groups.append(
+                                {
+                                    "GroupId": group_id,
+                                    "DisplayName": group.get("DisplayName", ""),
+                                    "Description": group.get("Description", ""),
+                                    "MembershipId": membership.get("MembershipId", ""),
+                                }
+                            )
+                            break
+                except ClientError:
+                    # Skip groups we can't access
+                    continue
+    except ClientError:
+        # If we can't list groups, return empty list
+        pass
+
+    return groups
+
+
 def get_user(
     identifier: str = typer.Argument(..., help="Username, email, or user ID to search for"),
     profile: Optional[str] = typer.Option(
@@ -246,6 +295,41 @@ def get_user(
 
         # Display the panel
         console.print(panel)
+
+        # Add group memberships information
+        console.print("\n[bold blue]Group Memberships:[/bold blue]")
+
+        try:
+            # Get all groups that the user is a member of
+            user_groups = _get_user_group_memberships(identity_store, identity_store_id, user_id)
+
+            if not user_groups:
+                console.print("[yellow]User is not a member of any groups.[/yellow]")
+            else:
+                # Create a table for displaying group memberships
+                groups_table = Table(title=f"Groups for {username or user_id_short}")
+                groups_table.add_column("Group ID", style="cyan")
+                groups_table.add_column("Group Name", style="green")
+                groups_table.add_column("Description", style="yellow")
+                groups_table.add_column("Membership ID", style="blue")
+
+                # Add rows to the table
+                for group in user_groups:
+                    groups_table.add_row(
+                        group.get("GroupId", ""),
+                        group.get("DisplayName", "N/A"),
+                        group.get("Description", "N/A"),
+                        group.get("MembershipId", ""),
+                    )
+
+                # Display the groups table
+                console.print(groups_table)
+                console.print(f"[green]User is a member of {len(user_groups)} group(s).[/green]")
+
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: Could not retrieve group memberships: {str(e)}[/yellow]"
+            )
 
         # Return the user data for further processing if needed
         return user

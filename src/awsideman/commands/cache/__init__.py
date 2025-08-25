@@ -18,9 +18,7 @@ from .status import cache_status
 from .warm import warm_cache
 
 # Create the main app instance
-app = typer.Typer(
-    help="Manage cache for AWS Identity Center operations. Clear cache, view status, and warm cache for better performance."
-)
+app = typer.Typer(help="Manage internal data storage for AWS Identity Center operations.")
 
 # Register commands with the app
 app.command("clear")(clear_cache)

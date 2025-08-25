@@ -68,7 +68,7 @@ class AccountCacheOptimizer:
 
         Args:
             organizations_client: Organizations client for API calls (can be None for cache-only operations)
-            cache_manager: Optional cache manager instance
+            cache_manager: Optional unified cache manager instance
             profile: AWS profile name for profile-specific caching
         """
         self.organizations_client = organizations_client

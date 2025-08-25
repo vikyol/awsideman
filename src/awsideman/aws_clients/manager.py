@@ -231,7 +231,13 @@ class AWSClientManager:
             Identity Center client with or without caching based on enable_caching setting
         """
         if self.enable_caching:
-            return self.get_cached_client().get_identity_center_client()
+            # Use the new unified cache system
+            from ..cache.aws_client import CachedIdentityCenterClient
+            from ..cache.manager import CacheManager
+
+            cache_manager = self.cache_manager or CacheManager()
+            raw_client = self.get_raw_identity_center_client()
+            return CachedIdentityCenterClient(raw_client, cache_manager)
         else:
             return IdentityCenterClientWrapper(self)
 
@@ -243,7 +249,13 @@ class AWSClientManager:
             Identity Store client with or without caching based on enable_caching setting
         """
         if self.enable_caching:
-            return self.get_cached_client().get_identity_store_client()
+            # Use the new unified cache system
+            from ..cache.aws_client import CachedIdentityStoreClient
+            from ..cache.manager import CacheManager
+
+            cache_manager = self.cache_manager or CacheManager()
+            raw_client = self.get_raw_identity_store_client()
+            return CachedIdentityStoreClient(raw_client, cache_manager)
         else:
             return IdentityStoreClientWrapper(self)
 

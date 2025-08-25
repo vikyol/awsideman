@@ -9,6 +9,7 @@ This directory contains comprehensive documentation for awsideman's features and
 - **[Bulk Operations](BULK_OPERATIONS.md)** - CSV/JSON-based bulk assignment and revocation operations
 - **[Rollback Operations](ROLLBACK_OPERATIONS.md)** - Operation tracking and rollback capabilities for safe permission management
 - **[Backup & Restore System](backup-restore/README.md)** - Comprehensive backup and restore for AWS Identity Center
+- **[Cache System](CACHE_DOCUMENTATION_INDEX.md)** - Unified cache manager architecture, usage, and troubleshooting
 - **[Rollback Developer Guide](ROLLBACK_DEVELOPER_GUIDE.md)** - Technical documentation for rollback system architecture and APIs
 - **[Rollback API Reference](ROLLBACK_API_REFERENCE.md)** - Complete API documentation for rollback system classes and methods
 - **[Security Implementation](SECURITY.md)** - Security features, encryption, and best practices
@@ -16,6 +17,7 @@ This directory contains comprehensive documentation for awsideman's features and
 
 ### Troubleshooting and Support
 - **[Multi-Account Troubleshooting](MULTI_ACCOUNT_TROUBLESHOOTING.md)** - Comprehensive troubleshooting guide for multi-account operations
+- **[Cache Troubleshooting](CACHE_TROUBLESHOOTING.md)** - Diagnostic procedures and solutions for cache-related issues
 - **[Environment Variables](ENVIRONMENT_VARIABLES.md)** - Configuration through environment variables
 
 ## Quick Navigation
@@ -49,6 +51,7 @@ This directory contains comprehensive documentation for awsideman's features and
 ### Advanced Topics
 1. **Performance Optimization**
    - [Multi-Account Performance](MULTI_ACCOUNT_OPERATIONS.md#performance-considerations)
+   - [Cache Architecture and Performance](CACHE_ARCHITECTURE.md#performance-characteristics)
    - [Cache Configuration](../examples/cache-configurations/)
 
 2. **Security and Compliance**

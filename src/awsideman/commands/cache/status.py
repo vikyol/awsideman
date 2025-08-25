@@ -1,11 +1,12 @@
 """Cache status command for awsideman."""
 
+import json
 from typing import Optional
 
 import typer
 
 from ..common import (
-    cache_option,
+    advanced_cache_option,
     extract_standard_params,
     profile_option,
     region_option,
@@ -36,19 +37,52 @@ def _display_backend_configuration(cache_manager) -> None:
 def _display_encryption_status(cache_manager) -> None:
     """Display encryption status and key information."""
     try:
-        # Get encryption information from cache manager
-        if hasattr(cache_manager, "config") and cache_manager.config:
+        # Check encryption status directly from backend
+        encryption_enabled = False
+        encryption_type = "none"
+
+        if hasattr(cache_manager, "get_backend") and cache_manager.get_backend():
+            backend = cache_manager.get_backend()
+            if hasattr(backend, "get_stats"):
+                try:
+                    backend_stats = backend.get_stats()
+                    if backend_stats.get("total_entries", 0) > 0:
+                        # Sample a few files to check encryption status
+                        if hasattr(backend, "path_manager"):
+                            cache_files = backend.path_manager.list_cache_files()
+                            for cache_file in cache_files[:3]:  # Check first 3 files
+                                try:
+                                    with open(cache_file, "rb") as f:
+                                        file_content = f.read()
+                                    if len(file_content) >= 4:
+                                        metadata_length = int.from_bytes(
+                                            file_content[:4], byteorder="big"
+                                        )
+                                        if metadata_length > 0 and metadata_length < len(
+                                            file_content
+                                        ):
+                                            metadata_json = file_content[4 : 4 + metadata_length]
+                                            metadata = json.loads(metadata_json.decode("utf-8"))
+                                            if metadata.get("encrypted", False):
+                                                encryption_enabled = True
+                                                encryption_type = "aes"
+                                                break
+                                except Exception:
+                                    continue
+                except Exception:
+                    pass
+
+        # Fallback to config if backend check fails
+        if not encryption_enabled and hasattr(cache_manager, "config") and cache_manager.config:
             config = cache_manager.config
             encryption_enabled = getattr(config, "encryption_enabled", False)
             encryption_type = getattr(config, "encryption_type", "none")
 
-            console.print(
-                f"[green]Encryption:[/green] {'Enabled' if encryption_enabled else 'Disabled'}"
-            )
-            if encryption_enabled:
-                console.print(f"[green]Encryption Type:[/green] {encryption_type}")
-        else:
-            console.print("[yellow]Encryption:[/yellow] Unable to retrieve")
+        console.print(
+            f"[green]Encryption:[/green] {'Enabled' if encryption_enabled else 'Disabled'}"
+        )
+        if encryption_enabled:
+            console.print(f"[green]Encryption Type:[/green] {encryption_type}")
     except Exception as e:
         console.print(f"[yellow]Encryption:[/yellow] Unable to retrieve ({e})")
 
@@ -83,23 +117,30 @@ def _display_cache_statistics(stats: dict, cache_manager=None) -> None:
         if cache_manager and hasattr(cache_manager, "get_cache_size_info"):
             try:
                 size_info = cache_manager.get_cache_size_info()
-                usage_pct = size_info.get("usage_percentage", 0)
+                total_entries = size_info.get("total_entries", 0)
+                max_entries = size_info.get("max_entries", 1000)
+
+                # Calculate actual usage percentage based on entries
+                if max_entries > 0:
+                    actual_usage_pct = (total_entries / max_entries) * 100
+                else:
+                    actual_usage_pct = 0
 
                 if size_info.get("is_over_limit", False):
-                    console.print(f"[red]Cache Usage:[/red] {usage_pct}% (OVER LIMIT)")
+                    console.print(f"[red]Storage Usage:[/red] {actual_usage_pct:.1f}% (OVER LIMIT)")
                     console.print(
                         f"[red]Over Limit By:[/red] {size_info.get('bytes_over_limit', 0)} bytes"
                     )
-                elif usage_pct > 80:
-                    console.print(f"[yellow]Cache Usage:[/yellow] {usage_pct}% (HIGH)")
+                elif actual_usage_pct > 80:
+                    console.print(f"[yellow]Storage Usage:[/yellow] {actual_usage_pct:.1f}% (HIGH)")
                 else:
-                    console.print(f"[green]Cache Usage:[/green] {usage_pct}%")
+                    console.print(f"[green]Storage Usage:[/green] {actual_usage_pct:.1f}%")
 
                 console.print(
                     f"[green]Available Space:[/green] {size_info.get('available_space_mb', 0)} MB"
                 )
             except Exception as e:
-                console.print(f"[yellow]Cache Usage:[/yellow] Unable to calculate ({e})")
+                console.print(f"[yellow]Storage Usage:[/yellow] Unable to calculate ({e})")
 
         # Display configuration settings
         console.print("\n[bold blue]Configuration Settings[/bold blue]")
@@ -165,9 +206,9 @@ def _display_backend_health(backend) -> None:
 
 
 def _display_recent_cache_entries(cache_manager) -> None:
-    """Display recent cache entries with expiration times."""
+    """Display recent storage entries with expiration times."""
     try:
-        console.print("\n[bold blue]Recent Cache Entries[/bold blue]")
+        console.print("\n[bold blue]Recent Storage Entries[/bold blue]")
 
         # Get recent entries (limit to first 10)
         entries = cache_manager.get_recent_entries(limit=10)
@@ -176,22 +217,100 @@ def _display_recent_cache_entries(cache_manager) -> None:
             # Create a table for better organization
             from rich.table import Table
 
+            from ...cache.key_builder import CacheKeyBuilder
+
             table = Table(show_header=True, header_style="bold magenta")
-            table.add_column("Operation", style="cyan", ratio=2)
+            table.add_column("Operation", style="cyan", ratio=1)
+            table.add_column("Resource", style="magenta", ratio=1)
             table.add_column("TTL", style="yellow", ratio=1)
             table.add_column("Age", style="blue", ratio=1)
             table.add_column("Size", style="green", ratio=1)
             table.add_column("Key", style="dim", ratio=3)
 
             for entry in entries:
-                operation = entry.get("operation", "Unknown")
+                key = entry.get("key", "Unknown")
                 ttl = entry.get("ttl", "Unknown")
                 age = entry.get("age", "Unknown")
                 size = entry.get("size", "Unknown")
-                key = entry.get("key", "Unknown")
+
+                # Parse the cache key to extract operation and resource type
+                try:
+                    # First try the standard CacheKeyBuilder format
+                    if ":" in key:
+                        parsed_key = CacheKeyBuilder.parse_key(key)
+                        operation = parsed_key.get("operation") or "Unknown"
+                        resource_type = parsed_key.get("resource_type") or "Unknown"
+                    else:
+                        # Parse the actual cache key format (e.g., "list_organizational_units_for_parent_6765104b06d831b4")
+                        operation = "Unknown"
+                        resource_type = "Unknown"
+
+                        # Try to extract meaningful information from the key
+                        if key.startswith("list_"):
+                            operation = "list"
+                            # Extract resource type from the key
+                            if "organizational_units" in key:
+                                resource_type = "organizational_units"
+                            elif "accounts" in key:
+                                resource_type = "accounts"
+                            elif "roots" in key:
+                                resource_type = "roots"
+                            elif "users" in key:
+                                resource_type = "users"
+                            elif "groups" in key:
+                                resource_type = "groups"
+                            elif "permission_sets" in key:
+                                resource_type = "permission_sets"
+                            elif "assignments" in key:
+                                resource_type = "assignments"
+                            else:
+                                resource_type = "other"
+                        elif key.startswith("describe_"):
+                            operation = "describe"
+                            # Extract resource type from the key
+                            if "user" in key:
+                                resource_type = "user"
+                            elif "group" in key:
+                                resource_type = "group"
+                            elif "permission_set" in key:
+                                resource_type = "permission_set"
+                            elif "account" in key:
+                                resource_type = "account"
+                            else:
+                                resource_type = "other"
+                        elif key.startswith("get_"):
+                            operation = "get"
+                            resource_type = "other"
+                        else:
+                            # Try to guess from the key content
+                            if "user" in key:
+                                resource_type = "user"
+                            elif "group" in key:
+                                resource_type = "group"
+                            elif "permission" in key:
+                                resource_type = "permission_set"
+                            elif "account" in key:
+                                resource_type = "account"
+                            elif "organizational" in key:
+                                resource_type = "organizational_units"
+                            else:
+                                resource_type = "other"
+
+                            # Try to guess operation
+                            if "list" in key:
+                                operation = "list"
+                            elif "describe" in key:
+                                operation = "describe"
+                            elif "get" in key:
+                                operation = "get"
+                            else:
+                                operation = "other"
+                except Exception:
+                    operation = "Unknown"
+                    resource_type = "Unknown"
 
                 # Truncate long keys for display
-                display_key = key  # [:50] + "..." if len(key) > 50 else key
+                display_key = key[:50] + "..." if len(key) > 50 else key
 
                 # Color code based on expiration status
                 if entry.get("is_expired", False):
@@ -199,7 +318,9 @@ def _display_recent_cache_entries(cache_manager) -> None:
                 else:
                     row_style = "green"
 
-                table.add_row(operation, ttl, age, size, display_key, style=row_style)
+                table.add_row(
+                    operation, resource_type, ttl, age, size, display_key, style=row_style
+                )
 
             console.print(table)
         else:
@@ -211,17 +332,17 @@ def _display_recent_cache_entries(cache_manager) -> None:
 def cache_status(
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
-    no_cache: bool = cache_option(),
+    no_cache: bool = advanced_cache_option(),
     verbose: bool = verbose_option(),
 ):
-    """Display cache status and statistics.
+    """Display internal data storage status and statistics.
 
-    Shows information about the current cache including:
-    - Backend type and configuration
+    Shows information about the current data storage including:
+    - Storage backend type and configuration
     - Encryption status and key information
-    - Number of cached entries and total cache size
+    - Number of stored entries and total storage size
     - Backend-specific statistics and health status
-    - Recent cache entries with expiration times
+    - Recent entries with expiration times
     """
     try:
         # Extract and process standard command parameters
@@ -247,7 +368,7 @@ def cache_status(
                 backend_type = verbose_stats.get("backend_type", "unknown")
                 total_entries = verbose_stats.get("total_entries", 0)
                 console.print(
-                    f"[blue]Cache: {backend_type} backend, " f"{total_entries} entries[/blue]"
+                    f"[blue]Storage: {backend_type} backend, " f"{total_entries} entries[/blue]"
                 )
             else:
                 console.print("[blue]Cache: Disabled[/blue]")
@@ -281,7 +402,7 @@ def cache_status(
         # Display cache statistics
         _display_cache_statistics(stats, cache_manager)
 
-        # Display recent cache entries
+        # Display recent storage entries
         _display_recent_cache_entries(cache_manager)
 
     except Exception as e:

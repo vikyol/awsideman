@@ -1166,6 +1166,16 @@ def revoke_single_account(
                     request_id=request_id,
                 )
 
+                # Invalidate cache to ensure assignment data is fresh
+                try:
+                    # Clear internal data storage to ensure fresh data
+                    if aws_client.is_caching_enabled():
+                        aws_client.clear_cache()
+
+                except Exception:
+                    # Don't fail the command if cache invalidation fails
+                    pass
+
             elif status == "SUCCEEDED":
                 console.print("[green]✓ Assignment revoked successfully.[/green]")
                 console.print()
