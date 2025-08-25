@@ -244,9 +244,9 @@ def export_principal(
         profile_name, profile_data = validate_profile(profile)
         instance_arn, identity_store_id = validate_sso_instance(profile_data, profile_name)
 
-        # Initialize AWS clients
+        # Initialize AWS clients with caching enabled
         region = profile_data.get("region")
-        client_manager = AWSClientManager(profile=profile_name, region=region)
+        client_manager = AWSClientManager(profile=profile_name, region=region, enable_caching=True)
         sso_admin_client = client_manager.get_identity_center_client()
         identitystore_client = client_manager.get_identity_store_client()
 
@@ -267,22 +267,31 @@ def export_principal(
             assignments = _get_principal_assignments_for_account(
                 sso_admin_client, instance_arn, principal_id, resolved_type, account_id
             )
-        else:
-            # Try to get assignments across all accounts (requires Organizations access)
-            assignments = _get_principal_assignments(
-                sso_admin_client, instance_arn, principal_id, resolved_type, client_manager
-            )
 
-        # For users, also get inherited assignments from group memberships
-        inherited_assignments = []
-        if resolved_type == "USER":
-            inherited_assignments = _get_user_inherited_assignments(
+            # For users, also get inherited assignments from group memberships for this account
+            inherited_assignments = []
+            if resolved_type == "USER":
+                inherited_assignments = _get_user_inherited_assignments(
+                    sso_admin_client,
+                    identitystore_client,
+                    instance_arn,
+                    identity_store_id,
+                    principal_id,
+                    account_id,
+                    client_manager,
+                )
+        else:
+            # Use consolidated search for organization-wide queries (much more efficient)
+            console.print(
+                f"[blue]Searching {resolved_type} across the entire organization (optimized)...[/blue]"
+            )
+            assignments, inherited_assignments = _get_consolidated_principal_assignments(
                 sso_admin_client,
                 identitystore_client,
                 instance_arn,
                 identity_store_id,
                 principal_id,
-                account_id,
+                resolved_type,
                 client_manager,
             )
 
@@ -575,9 +584,6 @@ def _get_principal_assignments(
         for page in paginator.paginate():
             accounts.extend(page.get("Accounts", []))
 
-        console.print(
-            f"[blue]Searching {principal_type} across {len(accounts)} accounts in organization...[/blue]"
-        )
     except Exception as e:
         # If Organizations access fails, we can't enumerate all accounts
         console.print(
@@ -792,6 +798,9 @@ def _get_user_inherited_assignments(
                 sso_admin_client, instance_arn, group_id, "GROUP", account_id
             )
         else:
+            console.print(
+                f"[blue]Searching GROUP {group_name} across the entire organization...[/blue]"
+            )
             group_assignments = _get_principal_assignments(
                 sso_admin_client, instance_arn, group_id, "GROUP", client_manager
             )
@@ -1034,3 +1043,127 @@ def _output_table(assignments: List[Dict[str, Any]], title: str):
         table.add_row(*row_data)
 
     console.print(table)
+
+
+def _get_consolidated_principal_assignments(
+    sso_admin_client,
+    identitystore_client,
+    instance_arn: str,
+    identity_store_id: str,
+    principal_id: str,
+    principal_type: str,
+    client_manager: AWSClientManager,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Get both direct and inherited assignments for a principal in a single efficient pass.
+
+    Returns:
+        Tuple of (direct_assignments, inherited_assignments)
+    """
+    direct_assignments = []
+    inherited_assignments = []
+
+    try:
+        # Get all accounts once (this will be cached)
+        org_client = client_manager.get_organizations_client()
+        paginator = org_client.client.get_paginator("list_accounts")
+        accounts = []
+        for page in paginator.paginate():
+            accounts.extend(page.get("Accounts", []))
+
+        console.print(f"[blue]Found {len(accounts)} accounts in organization[/blue]")
+
+        # Get all permission sets once (this will be cached)
+        console.print(
+            "[blue]Fetching permission sets (this will be cached for future runs)...[/blue]"
+        )
+        ps_paginator = sso_admin_client.get_paginator("list_permission_sets")
+        permission_sets = []
+        for page in ps_paginator.paginate(InstanceArn=instance_arn):
+            permission_sets.extend(page.get("PermissionSets", []))
+
+        console.print(f"[blue]Found {len(permission_sets)} permission sets[/blue]")
+
+        # If this is a user, get their group memberships for inherited permissions
+        user_groups = {}
+        if principal_type == "USER":
+            try:
+                group_memberships = identitystore_client.list_group_memberships_for_member(
+                    IdentityStoreId=identity_store_id, MemberId={"UserId": principal_id}
+                )
+
+                if group_memberships.get("GroupMemberships"):
+                    # Get group details for better display
+                    for gm in group_memberships["GroupMemberships"]:
+                        group_id = gm["GroupId"]
+                        try:
+                            group_response = identitystore_client.describe_group(
+                                IdentityStoreId=identity_store_id, GroupId=group_id
+                            )
+                            user_groups[group_id] = group_response.get("DisplayName", group_id)
+                        except Exception:
+                            user_groups[group_id] = group_id
+
+                    console.print(f"[blue]User is member of {len(user_groups)} groups[/blue]")
+            except Exception as e:
+                console.print(
+                    f"[yellow]Warning: Could not get user group memberships: {str(e)}[/yellow]"
+                )
+
+        # Check assignments for each account
+        for i, account in enumerate(accounts, 1):
+            account_id = account["Id"]
+            account_name = account.get("Name", "Unknown")
+
+            console.print(
+                f"[blue]Checking account {i}/{len(accounts)}: {account_name} ({account_id})[/blue]"
+            )
+
+            try:
+                # For each permission set, check assignments for both the principal and their groups
+                for permission_set_arn in permission_sets:
+                    try:
+                        response = sso_admin_client.list_account_assignments(
+                            InstanceArn=instance_arn,
+                            AccountId=account_id,
+                            PermissionSetArn=permission_set_arn,
+                        )
+
+                        for assignment in response.get("AccountAssignments", []):
+                            # Check for direct assignments
+                            if (
+                                assignment["PrincipalId"] == principal_id
+                                and assignment["PrincipalType"] == principal_type
+                            ):
+                                assignment_copy = assignment.copy()
+                                assignment_copy["AccountId"] = account_id
+                                assignment_copy["AccountName"] = account_name
+                                direct_assignments.append(assignment_copy)
+
+                            # Check for inherited assignments from groups (only for users)
+                            elif (
+                                principal_type == "USER"
+                                and assignment["PrincipalType"] == "GROUP"
+                                and assignment["PrincipalId"] in user_groups
+                            ):
+                                assignment_copy = assignment.copy()
+                                assignment_copy["AccountId"] = account_id
+                                assignment_copy["AccountName"] = account_name
+                                assignment_copy["inheritance_source"] = "GROUP"
+                                assignment_copy["inheritance_group_name"] = user_groups[
+                                    assignment["PrincipalId"]
+                                ]
+                                assignment_copy["inheritance_group_id"] = assignment["PrincipalId"]
+                                inherited_assignments.append(assignment_copy)
+
+                    except Exception:
+                        # Skip permission sets that cause errors
+                        continue
+            except Exception:
+                # Skip accounts we can't access
+                continue
+
+    except Exception as e:
+        console.print(f"[yellow]Warning: Error during consolidated search: {str(e)}[/yellow]")
+
+    return direct_assignments, inherited_assignments
