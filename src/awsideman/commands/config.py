@@ -25,10 +25,14 @@ def show_config(
     ),
     format: str = typer.Option("table", "--format", "-f", help="Output format: table, yaml, json"),
     profile: Optional[str] = typer.Option(
-        None, "--profile", help="Show storage configuration for specific profile"
+        None, "--profile", help="Show cache configuration for specific profile"
     ),
 ):
-    """Show current configuration."""
+    """Show current configuration.
+
+    For cache configuration, shows effective settings by merging defaults with profile-specific overrides.
+    The current profile is automatically detected from AWS_PROFILE environment variable or default_profile setting.
+    """
     config = Config()
     config_data = config.get_all()
 
@@ -46,11 +50,15 @@ def show_config(
     # Filter by section if specified
     if section:
         if section in config_data:
+            # Store the full config data for cache section processing
+            full_config_data = config_data.copy()
             config_data = {section: config_data[section]}
         else:
             console.print(f"[red]Configuration section '{section}' not found.[/red]")
             console.print(f"Available sections: {', '.join(config_data.keys())}")
             return
+    else:
+        full_config_data = config_data
 
     # Display configuration
     if format == "yaml":
@@ -71,7 +79,7 @@ def show_config(
         syntax = Syntax(json_output, "json", theme="monokai", line_numbers=True)
         console.print(syntax)
     else:  # table format
-        _display_config_table(config_data)
+        _display_config_table(config_data, full_config_data)
 
 
 @app.command("path")
@@ -102,7 +110,7 @@ def set_config(
         ..., help="Configuration key=value pair (e.g., storage.enabled=true)"
     ),
     profile: Optional[str] = typer.Option(
-        None, "--profile", help="AWS profile to set configuration for (for storage settings)"
+        None, "--profile", help="AWS profile to set configuration for (for cache settings)"
     ),
 ):
     """Set a configuration value using key=value format.
@@ -112,6 +120,10 @@ def set_config(
     - awsideman config set storage.default_ttl=7200
     - awsideman config set storage.max_size_mb=200
     - awsideman config set cache.backend_type=dynamodb --profile prod
+    - awsideman config set cache.backend_type=file  # Uses current profile
+    - awsideman config set cache.default_ttl=7200   # Uses current profile
+
+    Note: Cache settings are automatically applied to the current profile if no profile is specified.
     """
     config = Config()
 
@@ -135,8 +147,14 @@ def set_config(
         parsed_value = _parse_config_value(value)
 
         # Handle profile-specific cache configuration
-        if profile and key.startswith("cache."):
+        if key.startswith("cache."):
             _set_profile_cache_config(config, profile, key, parsed_value)
+
+            # Show the effective cache configuration after setting the value
+            console.print("\n[blue]Effective cache configuration after update:[/blue]")
+            config_data = config.get_all()
+            cache_section = config_data.get("cache", {})
+            _display_effective_cache_config(config_data, cache_section)
         else:
             # Set the configuration value normally
             _set_config_value(config, key, parsed_value)
@@ -145,11 +163,9 @@ def set_config(
         if profile:
             console.print(f"[green]Applied to profile: {profile}[/green]")
 
-        # Show updated configuration
-        console.print(f"\n[blue]Updated configuration for '{key}':[/blue]")
-        if profile and key.startswith("cache."):
-            _show_profile_cache_config(config, profile, key)
-        else:
+        # Show updated configuration (only for non-cache settings)
+        if not key.startswith("cache."):
+            console.print(f"\n[blue]Updated configuration for '{key}':[/blue]")
             _show_single_config_value(config, key)
 
     except Exception as e:
@@ -273,13 +289,9 @@ def validate_config():
         console.print("[green]Configuration is valid with no warnings.[/green]")
 
 
-def _display_config_table(config_data: dict):
+def _display_config_table(config_data: dict, full_config_data: dict):
     """Display configuration data in table format."""
     for section_name, section_data in config_data.items():
-        # Skip backup section as it's handled in the cache section
-        if section_name == "backup":
-            continue
-
         console.print(f"\n[bold blue]{section_name.title()} Configuration[/bold blue]")
 
         if section_name == "profiles" and isinstance(section_data, dict):
@@ -304,146 +316,124 @@ def _display_config_table(config_data: dict):
             console.print(table)
 
         elif section_name == "cache" and isinstance(section_data, dict):
-            # Special handling for cache config
+            # Special handling for cache config - show effective configuration
+            _display_effective_cache_config(full_config_data, section_data)
+
+        elif section_name == "backup" and isinstance(section_data, dict):
+            # Special handling for backup config
+            _display_backup_config_table(section_data)
+
+        elif section_name == "default_profile" and isinstance(section_data, str):
+            # Special handling for default_profile
             table = Table()
             table.add_column("Setting", style="cyan")
             table.add_column("Value", style="green")
-
-            for key, value in section_data.items():
-                if key == "operation_ttls" and isinstance(value, dict):
-                    # Show operation TTLs as a sub-table
-                    table.add_row(key, f"{len(value)} operations configured")
-                else:
-                    table.add_row(key, str(value))
-
+            table.add_row("Default Profile", str(section_data))
             console.print(table)
-
-            # Show operation TTLs if they exist
-            if "operation_ttls" in section_data and isinstance(
-                section_data["operation_ttls"], dict
-            ):
-                console.print("\n[bold blue]Operation TTLs[/bold blue]")
-                ttl_table = Table()
-                ttl_table.add_column("Operation", style="cyan")
-                ttl_table.add_column("TTL (seconds)", style="green")
-
-                for operation, ttl in section_data["operation_ttls"].items():
-                    ttl_table.add_row(operation, str(ttl))
-
-                console.print(ttl_table)
-
-            # Show backup configuration right after cache
-            backup_config = config_data.get("backup", {})
-            if backup_config:
-                console.print("\n[bold blue]Backup Configuration[/bold blue]")
-                backup_table = Table()
-                backup_table.add_column("Section", style="cyan")
-                backup_table.add_column("Setting", style="green")
-                backup_table.add_column("Value", style="yellow")
-
-                # Storage configuration
-                storage_config = backup_config.get("storage", {})
-                backup_table.add_row(
-                    "Storage",
-                    "Default Backend",
-                    storage_config.get("default_backend", "filesystem"),
-                )
-
-                filesystem_config = storage_config.get("filesystem", {})
-                backup_table.add_row(
-                    "Storage",
-                    "Filesystem Path",
-                    filesystem_config.get("path", "~/.awsideman/backups"),
-                )
-
-                s3_config = storage_config.get("s3", {})
-                backup_table.add_row(
-                    "Storage", "S3 Bucket", s3_config.get("bucket", "Not configured")
-                )
-                backup_table.add_row("Storage", "S3 Prefix", s3_config.get("prefix", "backups"))
-                backup_table.add_row(
-                    "Storage", "S3 Region", s3_config.get("region", "Profile default")
-                )
-
-                # Encryption configuration
-                encryption_config = backup_config.get("encryption", {})
-                backup_table.add_row(
-                    "Encryption", "Enabled", str(encryption_config.get("enabled", True))
-                )
-                backup_table.add_row("Encryption", "Type", encryption_config.get("type", "aes256"))
-
-                # Compression configuration
-                compression_config = backup_config.get("compression", {})
-                backup_table.add_row(
-                    "Compression", "Enabled", str(compression_config.get("enabled", True))
-                )
-                backup_table.add_row("Compression", "Type", compression_config.get("type", "gzip"))
-
-                # Default settings
-                defaults_config = backup_config.get("defaults", {})
-                backup_table.add_row(
-                    "Defaults", "Backup Type", defaults_config.get("backup_type", "full")
-                )
-                backup_table.add_row(
-                    "Defaults",
-                    "Include Inactive Users",
-                    str(defaults_config.get("include_inactive_users", False)),
-                )
-                backup_table.add_row(
-                    "Defaults", "Resource Types", defaults_config.get("resource_types", "all")
-                )
-
-                # Retention policy
-                retention_config = backup_config.get("retention", {})
-                backup_table.add_row(
-                    "Retention", "Keep Daily", str(retention_config.get("keep_daily", 7))
-                )
-                backup_table.add_row(
-                    "Retention", "Keep Weekly", str(retention_config.get("keep_weekly", 4))
-                )
-                backup_table.add_row(
-                    "Retention", "Keep Monthly", str(retention_config.get("keep_monthly", 12))
-                )
-                backup_table.add_row(
-                    "Retention", "Auto Cleanup", str(retention_config.get("auto_cleanup", True))
-                )
-
-                # Performance settings
-                performance_config = backup_config.get("performance", {})
-                backup_table.add_row(
-                    "Performance",
-                    "Deduplication Enabled",
-                    str(performance_config.get("deduplication_enabled", True)),
-                )
-                backup_table.add_row(
-                    "Performance",
-                    "Parallel Processing",
-                    str(performance_config.get("parallel_processing_enabled", True)),
-                )
-                backup_table.add_row(
-                    "Performance",
-                    "Resource Monitoring",
-                    str(performance_config.get("resource_monitoring_enabled", True)),
-                )
-                backup_table.add_row(
-                    "Performance", "Max Workers", str(performance_config.get("max_workers", 8))
-                )
-
-                console.print(backup_table)
-
         else:
-            # Generic handling for other sections
+            # Default table display for other sections
             if isinstance(section_data, dict):
                 table = Table()
-                table.add_column("Key", style="cyan")
+                table.add_column("Setting", style="cyan")
                 table.add_column("Value", style="green")
 
                 for key, value in section_data.items():
-                    table.add_row(key, str(value))
+                    if isinstance(value, dict):
+                        table.add_row(key, f"{len(value)} items configured")
+                    else:
+                        table.add_row(key, str(value))
 
                 console.print(table)
+            elif isinstance(section_data, str):
+                # Handle string values (like default_profile)
+                table = Table()
+                table.add_column("Setting", style="cyan")
+                table.add_column("Value", style="green")
+                table.add_row(section_name, str(section_data))
+                console.print(table)
             else:
+                # Handle other types
                 console.print(f"  {section_data}")
+
+
+def _display_effective_cache_config(config_data: dict, cache_section: dict):
+    """Display effective cache configuration by merging defaults with profile-specific settings."""
+    from ..utils.config import DEFAULT_CACHE_CONFIG
+
+    # Get the current profile (default or from environment)
+    current_profile = _get_current_profile(config_data)
+
+    # Get profile-specific cache config if it exists
+    profile_cache_config = cache_section.get("profiles", {}).get(current_profile, {})
+
+    # Merge default config with profile-specific overrides
+    effective_config = DEFAULT_CACHE_CONFIG.copy()
+
+    # Apply global cache config overrides
+    for key, value in cache_section.items():
+        if key != "profiles" and value is not None:
+            if key == "operation_ttls" and isinstance(value, dict):
+                effective_config["operation_ttls"].update(value)
+            else:
+                effective_config[key] = value
+
+    # Apply profile-specific overrides (these take precedence)
+    for key, value in profile_cache_config.items():
+        if value is not None:
+            if key == "operation_ttls" and isinstance(value, dict):
+                effective_config["operation_ttls"].update(value)
+            else:
+                effective_config[key] = value
+
+    # Display the effective configuration
+    console.print(f"[blue]Effective Cache Configuration (Profile: {current_profile})[/blue]")
+
+    # Show basic settings
+    table = Table()
+    table.add_column("Setting", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_column("Source", style="yellow")
+
+    for key, value in effective_config.items():
+        if key == "operation_ttls":
+            continue  # Handle separately
+
+        # Determine source of the setting
+        if key in profile_cache_config:
+            source = f"profile:{current_profile}"
+        elif key in cache_section and key != "profiles":
+            source = "global"
+        else:
+            source = "default"
+
+        table.add_row(key, str(value), source)
+
+    console.print(table)
+
+    # Show operation TTLs if they exist
+    if effective_config.get("operation_ttls"):
+        console.print("\n[bold blue]Operation TTLs[/bold blue]")
+        ttl_table = Table()
+        ttl_table.add_column("Operation", style="cyan")
+        ttl_table.add_column("TTL (seconds)", style="green")
+        ttl_table.add_column("Source", style="yellow")
+
+        for operation, ttl in effective_config["operation_ttls"].items():
+            # Determine source for each TTL
+            if (
+                current_profile in cache_section.get("profiles", {})
+                and "operation_ttls" in cache_section["profiles"][current_profile]
+                and operation in cache_section["profiles"][current_profile]["operation_ttls"]
+            ):
+                source = f"profile:{current_profile}"
+            elif "operation_ttls" in cache_section and operation in cache_section["operation_ttls"]:
+                source = "global"
+            else:
+                source = "default"
+
+            ttl_table.add_row(operation, str(ttl), source)
+
+        console.print(ttl_table)
 
 
 def _parse_config_value(value: str):
@@ -531,6 +521,11 @@ def _set_profile_cache_config(config: Config, profile_name: str, key: str, value
     """Set profile-specific cache configuration."""
     config_data = config.get_all()
 
+    # If no profile specified, use current profile
+    if not profile_name:
+        profile_name = _get_current_profile(config_data)
+        console.print(f"[blue]Using current profile: {profile_name}[/blue]")
+
     # Ensure cache section exists
     if "cache" not in config_data:
         config_data["cache"] = {}
@@ -552,6 +547,10 @@ def _set_profile_cache_config(config: Config, profile_name: str, key: str, value
     # Save the configuration
     config.config_data = config_data
     config.save_config()
+
+    console.print(
+        f"[green]✓ Cache setting '{cache_key}' updated for profile '{profile_name}'[/green]"
+    )
 
 
 def _show_profile_cache_config(config: Config, profile_name: str, key: str):
@@ -675,3 +674,132 @@ def _display_cache_config_table(cache_config: dict, title: str):
             ttl_table.add_row(operation, str(ttl))
 
         console.print(ttl_table)
+
+
+def _display_backup_config_table(backup_config: dict):
+    """Display backup configuration in table format."""
+    console.print("\n[bold blue]Backup Configuration[/bold blue]")
+    console.print("-" * 40)
+
+    # Storage configuration
+    storage_config = backup_config.get("storage", {})
+    if storage_config:
+        console.print("\n[bold blue]Storage Configuration[/bold blue]")
+        storage_table = Table()
+        storage_table.add_column("Setting", style="cyan")
+        storage_table.add_column("Value", style="green")
+
+        storage_table.add_row(
+            "Default Backend", storage_config.get("default_backend", "filesystem")
+        )
+
+        filesystem_config = storage_config.get("filesystem", {})
+        if filesystem_config:
+            storage_table.add_row(
+                "Filesystem Path", filesystem_config.get("path", "~/.awsideman/backups")
+            )
+
+        s3_config = storage_config.get("s3", {})
+        if s3_config:
+            storage_table.add_row("S3 Bucket", s3_config.get("bucket", "Not configured"))
+            storage_table.add_row("S3 Prefix", s3_config.get("prefix", "backups"))
+            storage_table.add_row("S3 Region", s3_config.get("region", "Profile default"))
+
+        console.print(storage_table)
+
+    # Encryption configuration
+    encryption_config = backup_config.get("encryption", {})
+    if encryption_config:
+        console.print("\n[bold blue]Encryption Configuration[/bold blue]")
+        encryption_table = Table()
+        encryption_table.add_column("Setting", style="cyan")
+        encryption_table.add_column("Value", style="green")
+
+        encryption_table.add_row("Enabled", str(encryption_config.get("enabled", True)))
+        encryption_table.add_row("Type", encryption_config.get("type", "aes256"))
+
+        console.print(encryption_table)
+
+    # Compression configuration
+    compression_config = backup_config.get("compression", {})
+    if compression_config:
+        console.print("\n[bold blue]Compression Configuration[/bold blue]")
+        compression_table = Table()
+        compression_table.add_column("Setting", style="cyan")
+        compression_table.add_column("Value", style="green")
+
+        compression_table.add_row("Enabled", str(compression_config.get("enabled", True)))
+        compression_table.add_row("Type", compression_config.get("type", "gzip"))
+
+        console.print(compression_table)
+
+    # Default settings
+    defaults_config = backup_config.get("defaults", {})
+    if defaults_config:
+        console.print("\n[bold blue]Default Settings[/bold blue]")
+        defaults_table = Table()
+        defaults_table.add_column("Setting", style="cyan")
+        defaults_table.add_column("Value", style="green")
+
+        defaults_table.add_row("Backup Type", defaults_config.get("backup_type", "full"))
+        defaults_table.add_row(
+            "Include Inactive Users", str(defaults_config.get("include_inactive_users", False))
+        )
+        defaults_table.add_row("Resource Types", defaults_config.get("resource_types", "all"))
+
+        console.print(defaults_table)
+
+    # Retention policy
+    retention_config = backup_config.get("retention", {})
+    if retention_config:
+        console.print("\n[bold blue]Retention Policy[/bold blue]")
+        retention_table = Table()
+        retention_table.add_column("Setting", style="cyan")
+        retention_table.add_column("Value", style="green")
+
+        retention_table.add_row("Keep Daily", str(retention_config.get("keep_daily", 7)))
+        retention_table.add_row("Keep Weekly", str(retention_config.get("keep_weekly", 4)))
+        retention_table.add_row("Keep Monthly", str(retention_config.get("keep_monthly", 12)))
+        retention_table.add_row("Auto Cleanup", str(retention_config.get("auto_cleanup", True)))
+
+        console.print(retention_table)
+
+    # Performance settings
+    performance_config = backup_config.get("performance", {})
+    if performance_config:
+        console.print("\n[bold blue]Performance Settings[/bold blue]")
+        performance_table = Table()
+        performance_table.add_column("Setting", style="cyan")
+        performance_table.add_column("Value", style="green")
+
+        performance_table.add_row(
+            "Deduplication", str(performance_config.get("deduplication_enabled", True))
+        )
+        performance_table.add_row(
+            "Parallel Processing", str(performance_config.get("parallel_processing_enabled", True))
+        )
+        performance_table.add_row(
+            "Resource Monitoring", str(performance_config.get("resource_monitoring_enabled", True))
+        )
+        performance_table.add_row("Max Workers", str(performance_config.get("max_workers", 8)))
+
+        console.print(performance_table)
+
+
+def _get_current_profile(config_data: dict) -> str:
+    """Get the current profile name, falling back to default if not specified."""
+    # Check if we're in a profile-specific context
+    import os
+
+    profile_from_env = os.environ.get("AWS_PROFILE")
+
+    if profile_from_env:
+        return profile_from_env
+
+    # Fall back to default profile from config
+    default_profile = config_data.get("default_profile")
+    if default_profile:
+        return default_profile
+
+    # Final fallback
+    return "default"
