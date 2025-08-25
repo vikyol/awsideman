@@ -225,22 +225,30 @@ class TestGetOptimalCacheConfigForEnvironment:
     def test_development_environment(self):
         """Test optimal config for development environment."""
         with patch.dict(os.environ, {"ENVIRONMENT": "development"}):
-            result = get_optimal_cache_config_for_environment()
+            # Mock the AWS credentials check to return False for development environment
+            with patch("os.path.exists", return_value=False):
+                # Also remove AWS environment variables to ensure they're not detected
+                with patch.dict(os.environ, {}, clear=True):
+                    # Set the environment back to development
+                    os.environ["ENVIRONMENT"] = "development"
+                    result = get_optimal_cache_config_for_environment()
 
-            assert result.enabled is True
-            assert result.backend_type == "file"
-            assert result.encryption_enabled is False
-            assert result.default_ttl == 3600  # Default TTL for development
+                    assert result.enabled is True
+                    assert result.backend_type == "file"
+                    assert result.encryption_enabled is False
+                    assert result.default_ttl == 3600  # Default TTL for development
 
     def test_local_development(self):
         """Test optimal config for local development."""
         with patch.dict(os.environ, {}, clear=True):
-            result = get_optimal_cache_config_for_environment()
+            # Mock the AWS credentials check to return False for local development
+            with patch("os.path.exists", return_value=False):
+                result = get_optimal_cache_config_for_environment()
 
-            assert result.enabled is True
-            assert result.backend_type == "file"
-            assert result.encryption_enabled is False
-            assert result.default_ttl == 3600  # Default TTL for local development
+                assert result.enabled is True
+                assert result.backend_type == "file"
+                assert result.encryption_enabled is False
+                assert result.default_ttl == 3600  # Default TTL for local development
 
 
 class TestMergeCacheConfigs:

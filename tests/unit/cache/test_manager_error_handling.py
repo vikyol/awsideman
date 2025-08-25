@@ -316,6 +316,23 @@ class TestErrorHandlingIntegration:
         """Reset singleton and circuit breaker for each test."""
         CacheManager.reset_instance()
 
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Get the current cache manager instance
+            manager = CacheManager()
+
+            # Clear all cache entries
+            if hasattr(manager, "clear"):
+                manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
+
     def test_invalidation_engine_error_handling(self):
         """Test error handling in invalidation engine integration."""
         manager = CacheManager()

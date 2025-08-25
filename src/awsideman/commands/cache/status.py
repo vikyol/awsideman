@@ -15,21 +15,57 @@ from ..common import (
 from .helpers import console, get_cache_manager
 
 
-def _display_backend_configuration(cache_manager) -> None:
+def _display_backend_configuration(cache_manager, actual_config=None) -> None:
     """Display backend configuration information."""
     try:
-        backend = cache_manager.get_backend()
-        if backend:
-            backend_type = type(backend).__name__
+        # If we have actual configuration, use it for display
+        if actual_config:
+            backend_type = actual_config.backend_type
             console.print(f"[green]Backend Type:[/green] {backend_type}")
 
-            # Display backend-specific configuration
-            if hasattr(backend, "get_config"):
-                config = backend.get_config()
-                if config:
-                    console.print(f"[green]Backend Config:[/green] {config}")
+            # Display backend-specific configuration based on actual config
+            if backend_type == "dynamodb":
+                console.print(
+                    f"[green]DynamoDB Table:[/green] {actual_config.dynamodb_table_name or 'Not configured'}"
+                )
+                console.print(
+                    f"[green]DynamoDB Region:[/green] {actual_config.dynamodb_region or 'Not configured'}"
+                )
+                if actual_config.dynamodb_profile:
+                    console.print(
+                        f"[green]DynamoDB Profile:[/green] {actual_config.dynamodb_profile}"
+                    )
+            elif backend_type == "file":
+                if actual_config.file_cache_dir:
+                    console.print(
+                        f"[green]File Cache Directory:[/green] {actual_config.file_cache_dir}"
+                    )
+            elif backend_type == "hybrid":
+                console.print(
+                    f"[green]Hybrid Local TTL:[/green] {actual_config.hybrid_local_ttl} seconds"
+                )
+                if actual_config.dynamodb_table_name:
+                    console.print(
+                        f"[green]DynamoDB Table:[/green] {actual_config.dynamodb_table_name}"
+                    )
+                if actual_config.file_cache_dir:
+                    console.print(
+                        f"[green]File Cache Directory:[/green] {actual_config.file_cache_dir}"
+                    )
         else:
-            console.print("[yellow]Backend Type:[/yellow] Not configured")
+            # Fall back to cache manager backend detection
+            backend = cache_manager.get_backend()
+            if backend:
+                backend_type = type(backend).__name__
+                console.print(f"[green]Backend Type:[/green] {backend_type}")
+
+                # Display backend-specific configuration
+                if hasattr(backend, "get_config"):
+                    config = backend.get_config()
+                    if config:
+                        console.print(f"[green]Backend Config:[/green] {config}")
+            else:
+                console.print("[yellow]Backend Type:[/yellow] Not configured")
     except Exception as e:
         console.print(f"[yellow]Backend Config:[/yellow] Unable to retrieve ({e})")
 
@@ -141,14 +177,6 @@ def _display_cache_statistics(stats: dict, cache_manager=None) -> None:
                 )
             except Exception as e:
                 console.print(f"[yellow]Storage Usage:[/yellow] Unable to calculate ({e})")
-
-        # Display configuration settings
-        console.print("\n[bold blue]Configuration Settings[/bold blue]")
-        console.print("-" * 30)
-        console.print(
-            f"[green]Default TTL:[/green] {stats['default_ttl']} seconds ({stats['default_ttl'] // 60} minutes)"
-        )
-        console.print(f"[green]Max Cache Size:[/green] {stats['max_size_mb']} MB")
 
         # Display total entries
         console.print(f"[green]Total Entries:[/green] {stats['total_entries']}")
@@ -358,7 +386,50 @@ def cache_status(
             config = get_profile_cache_config(profile_param)
             cache_manager = create_cache_manager(config)
         else:
-            cache_manager = get_cache_manager()
+            # Try to get profile-specific cache manager for current profile
+            try:
+                from ...cache.utilities import get_profile_cache_config
+                from ...utils.config import Config
+
+                # Get current profile from config
+                config = Config()
+                config_data = config.get_all()
+                current_profile = config_data.get("default_profile")
+
+                if current_profile:
+                    # Use profile-specific cache configuration
+                    profile_config = get_profile_cache_config(current_profile)
+                    cache_manager = create_cache_manager(profile_config)
+                    console.print(
+                        f"[dim]Using cache configuration for profile: {current_profile}[/dim]"
+                    )
+                else:
+                    # Fall back to default cache manager
+                    cache_manager = get_cache_manager()
+            except Exception as e:
+                console.print(f"[dim]Could not get profile-specific cache config: {e}[/dim]")
+                # Fall back to default cache manager
+                cache_manager = get_cache_manager()
+
+        # Get the actual configuration for display purposes
+        actual_config = None
+        if profile_param:
+            from ...cache.utilities import get_profile_cache_config
+
+            actual_config = get_profile_cache_config(profile_param)
+        else:
+            try:
+                from ...cache.utilities import get_profile_cache_config
+                from ...utils.config import Config
+
+                config = Config()
+                config_data = config.get_all()
+                current_profile = config_data.get("default_profile")
+
+                if current_profile:
+                    actual_config = get_profile_cache_config(current_profile)
+            except Exception:
+                pass
 
         # Show cache information if verbose (using the same cache manager)
         if verbose:
@@ -394,13 +465,37 @@ def cache_status(
             return
 
         # Display backend type and configuration
-        _display_backend_configuration(cache_manager)
+        _display_backend_configuration(cache_manager, actual_config)
 
         # Display encryption status and key information
         _display_encryption_status(cache_manager)
 
         # Display cache statistics
         _display_cache_statistics(stats, cache_manager)
+
+        # Display configuration settings if we have actual config
+        if actual_config:
+            console.print("\n[bold blue]Configuration Settings[/bold blue]")
+            console.print("-" * 40)
+            console.print(
+                f"[green]Default TTL:[/green] {actual_config.default_ttl} seconds ({actual_config.default_ttl // 60} minutes)"
+            )
+            console.print(f"[green]Max Cache Size:[/green] {actual_config.max_size_mb} MB")
+            console.print(
+                f"[green]Encryption:[/green] {'Enabled' if actual_config.encryption_enabled else 'Disabled'}"
+            )
+            if actual_config.encryption_enabled:
+                console.print(f"[green]Encryption Type:[/green] {actual_config.encryption_type}")
+        else:
+            # Fall back to cache manager stats
+            console.print("\n[bold blue]Configuration Settings[/bold blue]")
+            console.print("-" * 40)
+            console.print(
+                f"[green]Default TTL:[/green] {stats.get('default_ttl', 'Unknown')} seconds"
+            )
+            console.print(
+                f"[green]Max Cache Size:[/green] {stats.get('max_size_mb', 'Unknown')} MB"
+            )
 
         # Display recent storage entries
         _display_recent_cache_entries(cache_manager)

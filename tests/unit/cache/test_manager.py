@@ -14,6 +14,23 @@ class TestSingletonBehavior:
         """Reset singleton instances before each test."""
         CacheManager.reset_instance()
 
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Get the current cache manager instance
+            manager = CacheManager()
+
+            # Clear all cache entries
+            if hasattr(manager, "clear"):
+                manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
+
     def test_singleton_same_instance(self):
         """Test that multiple instantiations return the same instance."""
         manager1 = CacheManager()
@@ -79,6 +96,23 @@ class TestCacheOperations:
     def setup_method(self):
         """Reset singleton instance before each test."""
         CacheManager.reset_instance()
+
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Get the current cache manager instance
+            manager = CacheManager()
+
+            # Clear all cache entries
+            if hasattr(manager, "clear"):
+                manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
 
     def test_get_set_basic(self):
         """Test basic get and set operations."""
@@ -171,6 +205,23 @@ class TestPatternInvalidation:
         """Reset singleton instances before each test."""
         CacheManager.reset_instance()
 
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Get the current cache manager instance
+            manager = CacheManager()
+
+            # Clear all cache entries
+            if hasattr(manager, "clear"):
+                manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
+
     def test_wildcard_invalidation(self):
         """Test invalidation with wildcard patterns."""
         manager = CacheManager()
@@ -249,6 +300,23 @@ class TestThreadSafety:
     def setup_method(self):
         """Reset singleton instances before each test."""
         CacheManager.reset_instance()
+
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Get the current cache manager instance
+            manager = CacheManager()
+
+            # Clear all cache entries
+            if hasattr(manager, "clear"):
+                manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
 
     def test_concurrent_get_set(self):
         """Test concurrent get and set operations."""
@@ -338,6 +406,23 @@ class TestStatistics:
         """Reset singleton instances before each test."""
         CacheManager.reset_instance()
 
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Get the current cache manager instance
+            manager = CacheManager()
+
+            # Clear all cache entries
+            if hasattr(manager, "clear"):
+                manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
+
     def test_hit_miss_statistics(self):
         """Test hit and miss statistics tracking."""
         manager = CacheManager()
@@ -417,6 +502,23 @@ class TestUtilityMethods:
         """Reset singleton instances before each test."""
         CacheManager.reset_instance()
 
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Get the current cache manager instance
+            manager = CacheManager()
+
+            # Clear all cache entries
+            if hasattr(manager, "clear"):
+                manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
+
     def test_cleanup_expired(self):
         """Test cleanup of expired entries."""
         manager = CacheManager()
@@ -479,6 +581,23 @@ class TestInvalidationIntegration:
     def setup_method(self):
         """Reset singleton instances before each test."""
         CacheManager.reset_instance()
+
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Get the current cache manager instance
+            manager = CacheManager()
+
+            # Clear all cache entries
+            if hasattr(manager, "clear"):
+                manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
 
     def test_invalidate_for_operation_user(self):
         """Test invalidate_for_operation method for user operations."""

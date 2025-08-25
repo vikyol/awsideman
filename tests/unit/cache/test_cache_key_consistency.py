@@ -32,6 +32,20 @@ class TestCacheKeyConsistency:
             self.mock_identity_store_client, cache_manager=self.cache_manager
         )
 
+    def teardown_method(self):
+        """Clean up cache data after each test to prevent test data leakage."""
+        try:
+            # Clear all cache entries
+            if hasattr(self.cache_manager, "clear"):
+                self.cache_manager.clear()
+
+            # Reset the singleton instance to ensure clean state for next test
+            CacheManager.reset_instance()
+
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Cache cleanup failed: {e}")
+
     def test_list_permission_sets_consistent_cache_keys(self):
         """Test that list_permission_sets generates consistent cache keys."""
         instance_arn = "arn:aws:sso:::instance/ssoins-1234567890abcdef"
