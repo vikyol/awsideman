@@ -7,11 +7,12 @@ creating, updating, and deleting users in AWS Identity Center.
 import typer
 
 # Import all submodules first
-from . import create, delete, get, helpers, list, update
+from . import create, delete, find, get, helpers, list, update
 
 # Import command functions
 from .create import create_user
 from .delete import delete_user
+from .find import find_users
 from .get import get_user
 from .list import list_users
 from .update import update_user
@@ -27,6 +28,7 @@ app.command("get")(get_user)
 app.command("create")(create_user)
 app.command("update")(update_user)
 app.command("delete")(delete_user)
+app.command("find")(find_users)
 
 # Export the app for backward compatibility
-__all__ = ["app", "list", "get", "create", "update", "delete", "helpers"]
+__all__ = ["app", "list", "get", "create", "update", "delete", "find", "helpers"]
