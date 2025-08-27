@@ -170,7 +170,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                 )
 
             # Get the profile configuration to find the SSO instance
-            from awsideman.utils.config import Config
+            from ..utils.config import Config
 
             config = Config()
             profiles = config.get("profiles", {})

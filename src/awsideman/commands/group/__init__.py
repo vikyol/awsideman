@@ -7,11 +7,12 @@ creating, updating, and deleting groups in AWS Identity Center.
 import typer
 
 # Import all submodules first
-from . import create, delete, get, helpers, list, members, update
+from . import create, delete, find, get, helpers, list, members, update
 
 # Import command functions
 from .create import create_group
 from .delete import delete_group
+from .find import find_groups
 from .get import get_group
 from .list import list_groups
 from .members import add_member, list_members, remove_member
@@ -28,9 +29,10 @@ app.command("get")(get_group)
 app.command("create")(create_group)
 app.command("update")(update_group)
 app.command("delete")(delete_group)
+app.command("find")(find_groups)
 app.command("list-members")(list_members)
 app.command("add-member")(add_member)
 app.command("remove-member")(remove_member)
 
 # Export the app for backward compatibility
-__all__ = ["app", "list", "get", "create", "update", "delete", "members", "helpers"]
+__all__ = ["app", "list", "get", "create", "update", "delete", "find", "members", "helpers"]

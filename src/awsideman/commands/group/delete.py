@@ -79,7 +79,7 @@ def delete_group(
                     console.print(
                         "[yellow]You can list available groups with 'awsideman group list'.[/yellow]"
                     )
-                    raise typer.Exit(1)
+                    return  # Exit cleanly for "not found" scenario
                 elif len(groups) > 1:
                     console.print(
                         f"[yellow]Warning: Multiple groups found matching '{identifier}'. Deleting the first match.[/yellow]"
@@ -129,7 +129,7 @@ def delete_group(
                 console.print(
                     "[yellow]You can list available groups with 'awsideman group list'.[/yellow]"
                 )
-                raise typer.Exit(1)
+                return  # Exit cleanly for "not found" scenario
             else:
                 # Handle other errors with improved messages
                 handle_aws_error(e, operation="DescribeGroup")
@@ -185,10 +185,10 @@ def delete_group(
                 console.print(
                     "[yellow]The group may have been deleted by another process or user.[/yellow]"
                 )
+                return  # Exit cleanly for "not found" scenario
             else:
                 handle_aws_error(delete_error, operation="DeleteGroup")
-
-            raise typer.Exit(1)
+                raise typer.Exit(1)
 
     except ClientError as e:
         # Handle AWS API errors with improved error messages and guidance

@@ -61,7 +61,9 @@ except ImportError:
     from awsideman.commands.restore import app as restore_app
 
 app = typer.Typer(
-    help="AWS Identity Center Manager - A CLI tool for managing AWS Identity Center operations including users, groups, and permission sets."
+    help="AWS Identity Center Manager - A CLI tool for managing AWS Identity Center operations including users, groups, and permission sets.",
+    add_completion=True,
+    no_args_is_help=True,
 )
 console = Console()
 
@@ -80,22 +82,18 @@ app.add_typer(cache.app, name="cache")
 app.add_typer(bulk.app, name="bulk")
 app.add_typer(status.app, name="status")
 app.add_typer(access_review.app, name="access-review")
-app.add_typer(rollback.app, name="rollback")
 app.add_typer(templates.app, name="templates")
+app.add_typer(rollback.app, name="rollback")
 app.add_typer(backup_app, name="backup")
 app.add_typer(restore_app, name="restore")
 
 
-@app.callback()
-def callback(
-    version: Optional[bool] = typer.Option(
-        None, "--version", "-v", help="Show the application version and exit."
-    ),
-):
-    """AWS Identity Center Manager CLI"""
-    if version:
-        console.print(f"awsideman version: {__version__}")
-        raise typer.Exit()
+# Add version command
+@app.command()
+def version():
+    """Show the application version and exit."""
+    console.print(f"awsideman version: {__version__}")
+    raise typer.Exit()
 
 
 @app.command()

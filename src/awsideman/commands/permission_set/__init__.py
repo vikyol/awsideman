@@ -16,6 +16,7 @@ from . import helpers
 # Import command functions
 from .create import create_permission_set
 from .delete import delete_permission_set
+from .find import find_permission_sets
 from .get import get_permission_set
 
 # Import helper functions for backward compatibility
@@ -41,6 +42,7 @@ app.command("get")(get_permission_set)
 app.command("create")(create_permission_set)
 app.command("update")(update_permission_set)
 app.command("delete")(delete_permission_set)
+app.command("find")(find_permission_sets)
 
 # Export the app and functions for backward compatibility
 __all__ = [
@@ -50,6 +52,7 @@ __all__ = [
     "create_permission_set",
     "update_permission_set",
     "delete_permission_set",
+    "find_permission_sets",
     "console",
     "resolve_permission_set_identifier",
     "validate_aws_managed_policy_arn",
