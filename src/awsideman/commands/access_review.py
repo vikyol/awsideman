@@ -167,7 +167,27 @@ def export_account(
     try:
         # Validate profile and SSO instance
         profile_name, profile_data = validate_profile(profile)
-        instance_arn, identity_store_id = validate_sso_instance(profile_data, profile_name)
+
+        # CRITICAL FIX: Use profile-specific SSO instance instead of list_instances()
+        # This prevents profile mixing and security vulnerabilities
+
+        # Check if profile has SSO instance configured
+        instance_arn = profile_data.get("sso_instance_arn")
+        identity_store_id = profile_data.get("identity_store_id")
+
+        if not instance_arn or not identity_store_id:
+            # Auto-detection is only safe when we have a single profile context
+            # For security reasons, we require explicit configuration
+            console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+            console.print("[yellow]For security reasons, auto-detection is disabled.[/yellow]")
+            console.print(
+                "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance."
+            )
+            console.print("You can find available SSO instances with 'awsideman sso list'.")
+            raise typer.Exit(1)
+
+        console.print(f"[green]Using configured SSO instance: {instance_arn}[/green]")
+        console.print(f"[green]Identity Store ID: {identity_store_id}[/green]")
 
         # Initialize AWS clients
         region = profile_data.get("region")

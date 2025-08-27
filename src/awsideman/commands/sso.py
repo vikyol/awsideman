@@ -18,7 +18,7 @@ config = Config()
 def list_instances(
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
 ):
-    """List all SSO instances in the AWS account."""
+    """List AWS SSO instances for the specified profile."""
     profile_name = profile or config.get("default_profile")
 
     if not profile_name:
@@ -33,20 +33,37 @@ def list_instances(
         console.print(f"[red]Profile '{profile_name}' does not exist.[/red]")
         return
 
-    region = profiles[profile_name].get("region")
-
     try:
-        aws_client = AWSClientManager(profile=profile_name, region=region)
-        sso_admin_client = aws_client.get_identity_center_client()
+        # CRITICAL FIX: Only show instances for this specific profile
+        # Do NOT call list_instances() as it returns ALL instances the credentials can access
+        # This prevents profile mixing and security vulnerabilities
 
-        response = sso_admin_client.list_instances()
-        instances = response.get("Instances", [])
+        # Check if profile has SSO instance configured
+        profile_data = profiles[profile_name]
+        configured_instance_arn = profile_data.get("sso_instance_arn")
+        configured_identity_store_id = profile_data.get("identity_store_id")
 
-        if not instances:
-            console.print("[yellow]No SSO instances found in this account.[/yellow]")
+        if not configured_instance_arn or not configured_identity_store_id:
+            console.print(
+                f"[yellow]Profile '{profile_name}' has no SSO instance configured.[/yellow]"
+            )
+            console.print(
+                "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance."
+            )
             return
 
-        table = Table(title="AWS SSO Instances")
+        # Only show the configured instance for this profile
+        instances = [
+            {
+                "InstanceArn": configured_instance_arn,
+                "IdentityStoreId": configured_identity_store_id,
+                "Name": profile_data.get("sso_instance_name", ""),
+            }
+        ]
+
+        console.print(f"[blue]Showing SSO instance for profile '{profile_name}':[/blue]")
+
+        table = Table(title=f"AWS SSO Instance for Profile '{profile_name}'")
         table.add_column("Instance ARN", style="cyan")
         table.add_column("Identity Store ID", style="green")
         table.add_column("Name", style="yellow")
@@ -58,14 +75,8 @@ def list_instances(
 
             # Check if we have a custom display name for this instance
             custom_name = ""
-            for p_name, p_data in profiles.items():
-                if (
-                    p_data.get("sso_instance_arn") == instance_arn
-                    and p_data.get("identity_store_id") == identity_store_id
-                    and p_data.get("sso_instance_name")
-                ):
-                    custom_name = p_data.get("sso_instance_name")
-                    break
+            if profile_data.get("sso_instance_name"):
+                custom_name = profile_data.get("sso_instance_name")
 
             # Use custom name if available, otherwise use AWS name
             display_name = custom_name or aws_name

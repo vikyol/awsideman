@@ -235,25 +235,27 @@ def create_backup(
 
         aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
 
-        # Get SSO instance information for the collector
-        try:
-            sso_client = aws_client.get_identity_center_client()
-            instances = sso_client.list_instances()
-            console.print(f"[blue]Found {len(instances.get('Instances', []))} SSO instances[/blue]")
+        # CRITICAL FIX: Use profile-specific SSO instance instead of list_instances()
+        # This prevents profile mixing and security vulnerabilities
 
-            if not instances.get("Instances"):
-                console.print("[red]Error: No SSO instances found. Cannot create backup.[/red]")
-                raise typer.Exit(1)
+        # Get SSO instance information from profile configuration
+        instance_arn = profile_data.get("sso_instance_arn")
+        identity_store_id = profile_data.get("identity_store_id")
 
-            instance_arn = instances["Instances"][0]["InstanceArn"]
-            console.print(f"[blue]Using SSO instance: {instance_arn}[/blue]")
-
-            collector = IdentityCenterCollector(
-                client_manager=aws_client, instance_arn=instance_arn
+        if not instance_arn or not identity_store_id:
+            console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+            console.print("[yellow]For security reasons, auto-detection is disabled.[/yellow]")
+            console.print(
+                "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance."
             )
-        except Exception as e:
-            console.print(f"[red]Error getting SSO instance: {e}[/red]")
+            console.print("You can find available SSO instances with 'awsideman sso list'.")
             raise typer.Exit(1)
+
+        console.print(f"[blue]Using configured SSO instance: {instance_arn}[/blue]")
+        console.print(f"[blue]Identity Store ID: {identity_store_id}[/blue]")
+
+        # Create the IdentityCenterCollector with the profile-specific instance
+        collector = IdentityCenterCollector(client_manager=aws_client, instance_arn=instance_arn)
 
         # Get the current AWS account ID
         try:

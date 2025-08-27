@@ -137,28 +137,33 @@ def validate_template(
             # Create AWS client manager with validated profile
             aws_client = AWSClientManager(profile=profile_name, region=region)
 
-            # Get SSO instance information
-            user_feedback.show_info("Connecting to AWS Identity Center...", "AWS Connection")
-            with progress_bar.create_spinner("Connecting to AWS..."):
-                sso_client = aws_client.get_identity_center_client()
-                instances = sso_client.list_instances()
+            # CRITICAL FIX: Use profile-specific SSO instance instead of list_instances()
+            # This prevents profile mixing and security vulnerabilities
 
-            if not instances.get("Instances"):
+            # Get SSO instance information from profile configuration
+            instance_arn = profile_data.get("sso_instance_arn")
+            identity_store_id = profile_data.get("identity_store_id")
+
+            if not instance_arn or not identity_store_id:
                 warning = TemplateErrorHandler.create_validation_error(
-                    "missing_required_field", details="No SSO instances found"
+                    "missing_required_field", details="No SSO instance configured for this profile"
                 )
                 error_collector.add_warning(warning)
                 user_feedback.show_warning(
-                    "No SSO instances found. Entity validation will be limited.",
+                    "No SSO instance configured for this profile. Entity validation will be limited.",
                     "Limited Validation",
+                )
+                user_feedback.show_info(
+                    "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance.",
+                    "Configuration Required",
                 )
                 instance_arn = None
                 identity_store_id = None
             else:
-                instance = instances["Instances"][0]
-                instance_arn = instance["InstanceArn"]
-                identity_store_id = instance["IdentityStoreId"]
-                user_feedback.show_info(f"Using SSO instance: {instance_arn}", "SSO Instance")
+                user_feedback.show_info(
+                    f"Using configured SSO instance: {instance_arn}", "SSO Instance"
+                )
+                user_feedback.show_info(f"Identity Store ID: {identity_store_id}", "Identity Store")
 
             # Initialize validator
             validator = TemplateValidator(

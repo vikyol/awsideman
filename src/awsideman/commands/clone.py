@@ -44,32 +44,42 @@ def clone_permission_set(
         # Get configuration
         config = Config()
 
-        # Discover SSO instance ARN if not provided
+        # Initialize AWS client manager and determine profile to use
+        profile_to_use = profile or config.get("default_profile")
+        if not profile_to_use:
+            typer.echo("❌ Error: No profile specified and no default profile set.")
+            typer.echo(
+                "Use --profile option or set a default profile with 'awsideman profile set-default'."
+            )
+            raise typer.Exit(1)
+
+        # If no instance ARN provided, try to discover it from the profile
         if not instance_arn:
             try:
-                # Initialize AWS client manager to discover SSO information
-                # Use awsideman default profile
-                profile_to_use = config.get("default_profile")
-                if not profile_to_use:
-                    typer.echo("❌ Error: No profile specified and no default profile set.")
+                # CRITICAL FIX: Use profile-specific SSO instance instead of list_instances()
+                # This prevents profile mixing and security vulnerabilities
+
+                # Get SSO instance information from profile configuration
+                profiles = config.get("profiles", {})
+                if profile_to_use not in profiles:
+                    typer.echo(f"❌ Error: Profile '{profile_to_use}' not found in configuration.")
+                    raise typer.Exit(1)
+
+                profile_data = profiles[profile_to_use]
+                instance_arn = profile_data.get("sso_instance_arn")
+                identity_store_id = profile_data.get("identity_store_id")
+
+                if not instance_arn or not identity_store_id:
                     typer.echo(
-                        "Use --profile option or set a default profile with 'awsideman profile set-default'."
+                        f"❌ Error: No SSO instance configured for profile '{profile_to_use}'."
+                    )
+                    typer.echo(
+                        "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance."
                     )
                     raise typer.Exit(1)
 
-                aws_client = AWSClientManager(profile=profile_to_use)
-                sso_client = aws_client.get_identity_center_client()
-
-                # Get SSO instance information
-                instances = sso_client.list_instances()
-                if not instances.get("Instances"):
-                    typer.echo(
-                        "❌ Error: No SSO instances found. Cannot proceed with clone operation."
-                    )
-                    raise typer.Exit(1)
-
-                instance_arn = instances["Instances"][0]["InstanceArn"]
-                typer.echo(f"🔍 Discovered SSO instance: {instance_arn}")
+                typer.echo(f"🔍 Using configured SSO instance: {instance_arn}")
+                typer.echo(f"🔍 Identity Store ID: {identity_store_id}")
 
             except Exception as e:
                 typer.echo(f"❌ Error discovering SSO information: {e}")
@@ -79,15 +89,6 @@ def clone_permission_set(
                 raise typer.Exit(1)
 
         # Initialize AWS client manager
-        # Use the profile we discovered or the default profile
-        profile_to_use = profile or config.get("default_profile")
-        if not profile_to_use:
-            typer.echo("❌ Error: No profile specified and no default profile set.")
-            typer.echo(
-                "Use --profile option or set a default profile with 'awsideman profile set-default'."
-            )
-            raise typer.Exit(1)
-
         client_manager = AWSClientManager(profile=profile_to_use)
 
         if preview:

@@ -156,15 +156,55 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             client = self.idc_client.get_sso_admin_client()
             identity_store_client = self.idc_client.get_identity_store_client()
 
-            # Get all Identity Center instances
-            instances_response = client.list_instances()
-            instances = instances_response.get("Instances", [])
+            # CRITICAL FIX: Only check the SSO instance configured for this profile
+            # Do NOT call list_instances() as it returns ALL instances the credentials can access
+            # This was causing profile mixing and security issues
+
+            # Get the profile-specific SSO instance from the client manager
+            profile_name = getattr(self.idc_client, "profile", None)
+            if not profile_name:
+                self.logger.error("No profile name available in client manager")
+                raise StatusCheckError(
+                    "Profile isolation failed: no profile name available",
+                    "OrphanedAssignmentDetector",
+                )
+
+            # Get the profile configuration to find the SSO instance
+            from awsideman.utils.config import Config
+
+            config = Config()
+            profiles = config.get("profiles", {})
+
+            if profile_name not in profiles:
+                self.logger.error(f"Profile '{profile_name}' not found in configuration")
+                raise StatusCheckError(
+                    f"Profile isolation failed: profile '{profile_name}' not found",
+                    "OrphanedAssignmentDetector",
+                )
+
+            profile_data = profiles[profile_name]
+            instance_arn = profile_data.get("sso_instance_arn")
+            identity_store_id = profile_data.get("identity_store_id")
+
+            if not instance_arn or not identity_store_id:
+                self.logger.error(f"Profile '{profile_name}' missing SSO instance configuration")
+                raise StatusCheckError(
+                    f"Profile isolation failed: profile '{profile_name}' missing SSO instance",
+                    "OrphanedAssignmentDetector",
+                )
+
+            self.logger.info(
+                f"Checking orphaned assignments for profile '{profile_name}' with instance {instance_arn}"
+            )
+
+            # Only check the configured instance for this profile
+            instances = [{"InstanceArn": instance_arn, "IdentityStoreId": identity_store_id}]
 
             if not instances:
-                self.logger.warning("No Identity Center instances found")
+                self.logger.warning("No Identity Center instances configured for this profile")
                 return orphaned_assignments
 
-            # Check assignments for each instance
+            # Check assignments for each instance (should only be one for profile isolation)
             for instance in instances:
                 instance_arn = instance["InstanceArn"]
                 identity_store_id = instance.get("IdentityStoreId")
