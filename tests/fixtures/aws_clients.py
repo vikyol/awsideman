@@ -26,6 +26,36 @@ def mock_aws_client_manager():
     mock_iam = MagicMock()
     mock_manager.get_iam_client.return_value = mock_iam
 
+    # Add profile attribute as string (not Mock) to fix OperationStore profile isolation
+    mock_manager.profile = "test-profile"
+
+    return mock_manager
+
+
+@pytest.fixture
+def mock_aws_client_manager_with_profile():
+    """Mock AWS client manager with a specific profile name."""
+    mock_manager = MagicMock()
+
+    # Mock SSO Admin client
+    mock_sso_admin = MagicMock()
+    mock_manager.get_identity_center_client.return_value = mock_sso_admin
+
+    # Mock Identity Store client
+    mock_identity_store = MagicMock()
+    mock_manager.get_identity_store_client.return_value = mock_identity_store
+
+    # Mock Organizations client
+    mock_organizations = MagicMock()
+    mock_manager.get_organizations_client.return_value = mock_organizations
+
+    # Mock IAM client
+    mock_iam = MagicMock()
+    mock_manager.get_iam_client.return_value = mock_iam
+
+    # Add profile attribute as string (not Mock) to fix OperationStore profile isolation
+    mock_manager.profile = "test-profile"
+
     return mock_manager
 
 

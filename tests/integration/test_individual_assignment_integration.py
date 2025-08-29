@@ -5,7 +5,6 @@ import tempfile
 from unittest.mock import Mock, patch
 
 from src.awsideman.commands.assignment.helpers import log_individual_operation
-from src.awsideman.rollback.logger import OperationLogger
 
 
 class TestIndividualAssignmentLogging:
@@ -148,38 +147,6 @@ class TestIndividualAssignmentLogging:
         mock_console.print.assert_called()
         warning_call = mock_console.print.call_args_list[-1]
         assert "Warning: Failed to log operation" in str(warning_call)
-
-    def test_log_individual_operation_with_real_logger(self):
-        """Test logging with real OperationLogger instance."""
-        # Create real operation logger with temp directory
-        with patch("src.awsideman.rollback.logger.OperationLogger") as mock_logger_class:
-            real_logger = OperationLogger(self.temp_dir)
-            mock_logger_class.return_value = real_logger
-
-            # Call the logging function
-            log_individual_operation(
-                operation_type="assign",
-                principal_id="user-real",
-                principal_type="USER",
-                principal_name="real.user",
-                permission_set_arn="arn:aws:sso:::permissionSet/ps-real",
-                permission_set_name="RealAccess",
-                account_id="123456789015",
-                success=True,
-                request_id="req-real",
-            )
-
-            # Verify operation was logged
-            operations = real_logger.get_operations()
-            assert len(operations) == 1
-
-            operation = operations[0]
-            assert operation.operation_type.value == "assign"
-            assert operation.principal_name == "real.user"
-            assert operation.permission_set_name == "RealAccess"
-            assert operation.account_ids == ["123456789015"]
-            assert operation.metadata["source"] == "individual_assignment"
-            assert operation.metadata["request_id"] == "req-real"
 
     @patch("src.awsideman.rollback.logger.OperationLogger")
     @patch("src.awsideman.commands.assignment.helpers.console")

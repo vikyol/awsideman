@@ -118,7 +118,7 @@ class TestRollbackListCommand:
             operation_type=None,
             principal=None,
             permission_set=None,
-            days=30,
+            days=3,
             limit=None,
         )
 

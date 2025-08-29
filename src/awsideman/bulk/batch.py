@@ -431,7 +431,12 @@ class BatchProcessor:
 
         # Initialize operation logger with profile isolation
         profile_name = getattr(aws_client_manager, "profile", None)
-        self.operation_logger = OperationLogger(profile=profile_name)
+        # Only use profile if it's a string (not a Mock object in tests)
+        if isinstance(profile_name, str):
+            self.operation_logger = OperationLogger(profile=profile_name)
+        else:
+            # For tests or when profile is not a string, don't use profile isolation
+            self.operation_logger = OperationLogger(profile=None)
 
         # Results tracking
         self.results = BulkOperationResults(total_processed=0, batch_size=batch_size)

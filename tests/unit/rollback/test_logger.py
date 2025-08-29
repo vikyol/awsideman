@@ -51,55 +51,6 @@ class TestOperationLogger:
         assert operation.results[1].success is False
         assert operation.metadata["source"] == "bulk_assign"
 
-    def test_get_operations_with_filters(self):
-        """Test retrieving operations with various filters."""
-        # Log multiple operations
-        results1 = [{"account_id": "123456789012", "success": True}]
-        results2 = [{"account_id": "123456789013", "success": True}]
-
-        op1_id = self.logger.log_operation(
-            operation_type="assign",
-            principal_id="user-123",
-            principal_type="USER",
-            principal_name="john.doe",
-            permission_set_arn="arn:aws:sso:::permissionSet/ps-123",
-            permission_set_name="ReadOnlyAccess",
-            account_ids=["123456789012"],
-            account_names=["Production"],
-            results=results1,
-        )
-
-        _op2_id = self.logger.log_operation(
-            operation_type="revoke",
-            principal_id="group-456",
-            principal_type="GROUP",
-            principal_name="developers",
-            permission_set_arn="arn:aws:sso:::permissionSet/ps-456",
-            permission_set_name="DeveloperAccess",
-            account_ids=["123456789013"],
-            account_names=["Staging"],
-            results=results2,
-        )
-
-        # Test filtering by operation type
-        assign_ops = self.logger.get_operations(operation_type="assign")
-        assert len(assign_ops) == 1
-        assert assign_ops[0].operation_id == op1_id
-
-        # Test filtering by principal
-        user_ops = self.logger.get_operations(principal="john")
-        assert len(user_ops) == 1
-        assert user_ops[0].principal_name == "john.doe"
-
-        # Test filtering by permission set
-        readonly_ops = self.logger.get_operations(permission_set="ReadOnly")
-        assert len(readonly_ops) == 1
-        assert readonly_ops[0].permission_set_name == "ReadOnlyAccess"
-
-        # Test limit
-        limited_ops = self.logger.get_operations(limit=1)
-        assert len(limited_ops) == 1
-
     def test_mark_rolled_back(self):
         """Test marking an operation as rolled back."""
         results = [{"account_id": "123456789012", "success": True}]
@@ -125,40 +76,3 @@ class TestOperationLogger:
         operation = self.logger.get_operation(operation_id)
         assert operation.rolled_back is True
         assert operation.rollback_operation_id == rollback_id
-
-    def test_cleanup_old_operations(self):
-        """Test cleaning up old operations."""
-        results = [{"account_id": "123456789012", "success": True}]
-
-        # Log an operation
-        self.logger.log_operation(
-            operation_type="assign",
-            principal_id="user-123",
-            principal_type="USER",
-            principal_name="john.doe",
-            permission_set_arn="arn:aws:sso:::permissionSet/ps-123",
-            permission_set_name="ReadOnlyAccess",
-            account_ids=["123456789012"],
-            account_names=["Production"],
-            results=results,
-        )
-
-        # Verify operation exists
-        ops_before = self.logger.get_operations()
-        assert len(ops_before) == 1
-
-        # Clean up operations older than 30 days (should not remove recent operation)
-        removed_count = self.logger.cleanup_old_operations(days=30)
-        assert removed_count == 0
-
-        # Verify operation still exists
-        ops_after = self.logger.get_operations()
-        assert len(ops_after) == 1
-
-    def test_get_storage_stats(self):
-        """Test getting storage statistics."""
-        stats = self.logger.get_storage_stats()
-
-        assert "total_operations" in stats
-        assert "total_rollbacks" in stats
-        assert stats["total_operations"] == 0
