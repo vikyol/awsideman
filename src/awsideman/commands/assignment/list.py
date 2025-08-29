@@ -439,11 +439,13 @@ def list_assignments(
                         principal_cache[principal_cache_key] = principal_info
                     except typer.Exit:
                         # If we can't resolve the principal, use a placeholder
-                        principal_cache[principal_cache_key] = {"DisplayName": "Unknown Principal"}
+                        principal_cache[principal_cache_key] = {
+                            "PrincipalName": "Unknown Principal"
+                        }
 
                 # Add principal name to assignment info
                 assignment_info["PrincipalName"] = principal_cache[principal_cache_key].get(
-                    "DisplayName"
+                    "PrincipalName"
                 )
 
                 # Resolve account name if not already in cache

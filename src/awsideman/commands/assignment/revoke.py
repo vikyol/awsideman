@@ -216,6 +216,7 @@ def revoke_permission_set(
             principal_type=principal_type,
             force=force,
             profile=profile,
+            dry_run=dry_run,
         )
     else:
         # Multi-account revocation with explicit accounts
@@ -478,6 +479,86 @@ def revoke_multi_account_with_filter(
         if len(accounts) > 50:
             display_performance_recommendations(len(accounts), stats["duration_seconds"])
 
+        # Log bulk operations for rollback tracking (only if not dry run)
+        if not dry_run and results.successful_accounts:
+            try:
+                from ...rollback.logger import OperationLogger
+
+                # Create operation logger with profile isolation
+                logger = OperationLogger(profile=profile_name)
+
+                # Group successful results by principal and permission set for efficient logging
+                operation_groups = {}
+
+                for account_result in results.successful_accounts:
+                    # Create a key for grouping operations
+                    key = (
+                        account_result.principal_id,
+                        account_result.principal_type,
+                        account_result.permission_set_arn,
+                    )
+
+                    if key not in operation_groups:
+                        operation_groups[key] = {
+                            "principal_id": account_result.principal_id,
+                            "principal_type": account_result.principal_type,
+                            "principal_name": account_result.principal_name,
+                            "permission_set_arn": account_result.permission_set_arn,
+                            "permission_set_name": account_result.permission_set_name,
+                            "account_ids": [],
+                            "account_names": [],
+                            "results": [],
+                        }
+
+                    # Add account information
+                    operation_groups[key]["account_ids"].append(account_result.account_id)
+                    operation_groups[key]["account_names"].append(account_result.account_name)
+                    operation_groups[key]["results"].append(
+                        {
+                            "account_id": account_result.account_id,
+                            "success": True,
+                            "error": None,
+                            "duration_ms": int((account_result.processing_time or 0) * 1000),
+                        }
+                    )
+
+                # Log each operation group
+                for group_data in operation_groups.values():
+                    try:
+                        operation_id = logger.log_operation(
+                            operation_type="revoke",
+                            principal_id=group_data["principal_id"],
+                            principal_type=group_data["principal_type"],
+                            principal_name=group_data["principal_name"],
+                            permission_set_arn=group_data["permission_set_arn"],
+                            permission_set_name=group_data["permission_set_name"],
+                            account_ids=group_data["account_ids"],
+                            account_names=group_data["account_names"],
+                            results=group_data["results"],
+                            metadata={
+                                "source": "multi_account_revoke_with_filter",
+                                "account_filter": account_filter,
+                                "batch_size": batch_size,
+                                "total_accounts": len(accounts),
+                                "successful_count": len(results.successful_accounts),
+                                "failed_count": len(results.failed_accounts),
+                            },
+                        )
+
+                        console.print(f"[dim]Logged bulk revoke operation: {operation_id}[/dim]")
+
+                    except Exception as e:
+                        # Don't fail the main operation if logging fails
+                        console.print(
+                            f"[yellow]Warning: Failed to log bulk revoke operation: {str(e)}[/yellow]"
+                        )
+
+            except Exception as e:
+                # Don't fail the main operation if logging fails
+                console.print(
+                    f"[yellow]Warning: Failed to initialize bulk operation logging: {str(e)}[/yellow]"
+                )
+
     except ClientError as e:
         handle_aws_error(e, "MultiAccountRevoke")
     except Exception as e:
@@ -681,6 +762,86 @@ def revoke_multi_account_explicit(
         # Show performance recommendations if applicable
         if len(accounts) > 50:
             display_performance_recommendations(len(accounts), stats["duration_seconds"])
+
+        # Log bulk operations for rollback tracking (only if not dry run)
+        if not dry_run and results.successful_accounts:
+            try:
+                from ...rollback.logger import OperationLogger
+
+                # Create operation logger with profile isolation
+                logger = OperationLogger(profile=profile_name)
+
+                # Group successful results by principal and permission set for efficient logging
+                operation_groups = {}
+
+                for account_result in results.successful_accounts:
+                    # Create a key for grouping operations
+                    key = (
+                        account_result.principal_id,
+                        account_result.principal_type,
+                        account_result.permission_set_arn,
+                    )
+
+                    if key not in operation_groups:
+                        operation_groups[key] = {
+                            "principal_id": account_result.principal_id,
+                            "principal_type": account_result.principal_type,
+                            "principal_name": account_result.principal_name,
+                            "permission_set_arn": account_result.permission_set_arn,
+                            "permission_set_name": account_result.permission_set_name,
+                            "account_ids": [],
+                            "account_names": [],
+                            "results": [],
+                        }
+
+                    # Add account information
+                    operation_groups[key]["account_ids"].append(account_result.account_id)
+                    operation_groups[key]["account_names"].append(account_result.account_name)
+                    operation_groups[key]["results"].append(
+                        {
+                            "account_id": account_result.account_id,
+                            "success": True,
+                            "error": None,
+                            "duration_ms": int((account_result.processing_time or 0) * 1000),
+                        }
+                    )
+
+                # Log each operation group
+                for group_data in operation_groups.values():
+                    try:
+                        operation_id = logger.log_operation(
+                            operation_type="revoke",
+                            principal_id=group_data["principal_id"],
+                            principal_type=group_data["principal_type"],
+                            principal_name=group_data["principal_name"],
+                            permission_set_arn=group_data["permission_set_arn"],
+                            permission_set_name=group_data["permission_set_name"],
+                            account_ids=group_data["account_ids"],
+                            account_names=group_data["account_names"],
+                            results=group_data["results"],
+                            metadata={
+                                "source": "multi_account_revoke_explicit",
+                                "account_list": account_list,
+                                "batch_size": batch_size,
+                                "total_accounts": len(accounts),
+                                "successful_count": len(results.successful_accounts),
+                                "failed_count": len(results.failed_accounts),
+                            },
+                        )
+
+                        console.print(f"[dim]Logged bulk revoke operation: {operation_id}[/dim]")
+
+                    except Exception as e:
+                        # Don't fail the main operation if logging fails
+                        console.print(
+                            f"[yellow]Warning: Failed to log bulk revoke operation: {str(e)}[/yellow]"
+                        )
+
+            except Exception as e:
+                # Don't fail the main operation if logging fails
+                console.print(
+                    f"[yellow]Warning: Failed to initialize bulk operation logging: {str(e)}[/yellow]"
+                )
 
     except ClientError as e:
         from ...utils.error_handler import handle_aws_error
@@ -920,6 +1081,87 @@ def revoke_multi_account_advanced(
         if len(accounts) > 50:
             display_performance_recommendations(len(accounts), stats["duration_seconds"])
 
+        # Log bulk operations for rollback tracking (only if not dry run)
+        if not dry_run and results.successful_accounts:
+            try:
+                from ...rollback.logger import OperationLogger
+
+                # Create operation logger with profile isolation
+                logger = OperationLogger(profile=profile_name)
+
+                # Group successful results by principal and permission set for efficient logging
+                operation_groups = {}
+
+                for account_result in results.successful_accounts:
+                    # Create a key for grouping operations
+                    key = (
+                        account_result.principal_id,
+                        account_result.principal_type,
+                        account_result.permission_set_arn,
+                    )
+
+                    if key not in operation_groups:
+                        operation_groups[key] = {
+                            "principal_id": account_result.principal_id,
+                            "principal_type": account_result.principal_type,
+                            "principal_name": account_result.principal_name,
+                            "permission_set_arn": account_result.permission_set_arn,
+                            "permission_set_name": account_result.permission_set_name,
+                            "account_ids": [],
+                            "account_names": [],
+                            "results": [],
+                        }
+
+                    # Add account information
+                    operation_groups[key]["account_ids"].append(account_result.account_id)
+                    operation_groups[key]["account_names"].append(account_result.account_name)
+                    operation_groups[key]["results"].append(
+                        {
+                            "account_id": account_result.account_id,
+                            "success": True,
+                            "error": None,
+                            "duration_ms": int((account_result.processing_time or 0) * 1000),
+                        }
+                    )
+
+                # Log each operation group
+                for group_data in operation_groups.values():
+                    try:
+                        operation_id = logger.log_operation(
+                            operation_type="revoke",
+                            principal_id=group_data["principal_id"],
+                            principal_type=group_data["principal_type"],
+                            principal_name=group_data["principal_name"],
+                            permission_set_arn=group_data["permission_set_arn"],
+                            permission_set_name=group_data["permission_set_name"],
+                            account_ids=group_data["account_ids"],
+                            account_names=group_data["account_names"],
+                            results=group_data["results"],
+                            metadata={
+                                "source": "multi_account_revoke_advanced",
+                                "ou_filter": ou_filter,
+                                "account_pattern": account_pattern,
+                                "batch_size": batch_size,
+                                "total_accounts": len(accounts),
+                                "successful_count": len(results.successful_accounts),
+                                "failed_count": len(results.failed_accounts),
+                            },
+                        )
+
+                        console.print(f"[dim]Logged bulk revoke operation: {operation_id}[/dim]")
+
+                    except Exception as e:
+                        # Don't fail the main operation if logging fails
+                        console.print(
+                            f"[yellow]Warning: Failed to log bulk revoke operation: {str(e)}[/yellow]"
+                        )
+
+            except Exception as e:
+                # Don't fail the main operation if logging fails
+                console.print(
+                    f"[yellow]Warning: Failed to initialize bulk operation logging: {str(e)}[/yellow]"
+                )
+
     except ClientError as e:
         from ...utils.error_handler import handle_aws_error
 
@@ -937,6 +1179,7 @@ def revoke_single_account(
     principal_type: str = "USER",
     force: bool = False,
     profile: Optional[str] = None,
+    dry_run: bool = False,
 ) -> None:
     """Revoke a permission set assignment from a principal.
 
@@ -1005,7 +1248,7 @@ def revoke_single_account(
     with console.status("[blue]Resolving permission set name...[/blue]"):
         try:
             permission_set_arn = resolve_permission_set_identifier(
-                aws_client, instance_arn, permission_set_name
+                sso_admin_client, instance_arn, permission_set_name, identity_store_id
             )
         except typer.Exit:
             # Error already handled by resolve_permission_set_identifier
@@ -1036,6 +1279,20 @@ def revoke_single_account(
         except Exception as e:
             console.print(f"[red]Error resolving principal name: {str(e)}[/red]")
             raise typer.Exit(1)
+
+    # Handle dry-run mode early to avoid hanging API calls
+    if dry_run:
+        console.print("[green]✓ DRY RUN MODE - No changes will be made[/green]")
+        console.print()
+        console.print("[bold]Assignment that would be revoked:[/bold]")
+        console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+        console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+        console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+        console.print()
+        console.print(
+            "[yellow]This is a preview. Use --force to actually revoke the assignment.[/yellow]"
+        )
+        return
 
     # Display a message indicating that we're checking the assignment
     with console.status("[blue]Checking assignment details...[/blue]"):
@@ -1164,6 +1421,7 @@ def revoke_single_account(
                     account_id,
                     success=True,
                     request_id=request_id,
+                    profile=profile_name,
                 )
 
                 # Invalidate cache to ensure assignment data is fresh
@@ -1201,6 +1459,7 @@ def revoke_single_account(
                     account_id,
                     success=True,
                     request_id=request_id,
+                    profile=profile_name,
                 )
             elif status == "FAILED":
                 failure_reason = assignment_status.get("FailureReason", "Unknown error")
@@ -1306,6 +1565,3 @@ def revoke_single_account(
                 "[yellow]This could be due to an unexpected error. Please try again or contact support.[/yellow]"
             )
             raise typer.Exit(1)
-
-
-# Multi-account revocation functions are now properly implemented above

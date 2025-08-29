@@ -113,9 +113,18 @@ class TestOrphanedAssignmentDetector:
             "DisplayName": "Test User",
         }
 
+        # Mock the new paginator calls for users and groups
+        mock_user_paginator = Mock()
+        mock_user_paginator.paginate.return_value = [{"Users": [{"UserId": "user-789"}]}]
+        identity_store_client.get_paginator.return_value = mock_user_paginator
+
         # Mock organizations client
-        org_client = mock_idc_client.client_manager.get_organizations_client()
-        org_client.describe_account.return_value = {"Name": "Test Account"}
+        org_client = mock_idc_client.get_organizations_client.return_value
+        mock_org_paginator = Mock()
+        mock_org_paginator.paginate.return_value = [
+            {"Accounts": [{"Id": "123456789012", "Name": "Test Account"}]}
+        ]
+        org_client.get_paginator.return_value = mock_org_paginator
 
         result = await detector.check_status()
 
@@ -271,11 +280,11 @@ class TestOrphanedAssignmentDetector:
         result = await detector.check_status()
 
         assert isinstance(result, OrphanedAssignmentStatus)
-        # The error is handled gracefully, so we get HEALTHY status with no orphaned assignments
-        assert result.status == StatusLevel.HEALTHY
-        assert "No orphaned assignments found" in result.message
+        # When detection fails completely, we get CRITICAL status
+        assert result.status == StatusLevel.CRITICAL
+        assert "Orphaned assignment detection failed" in result.message
         assert len(result.orphaned_assignments) == 0
-        assert result.cleanup_available is True
+        assert result.cleanup_available is False  # No cleanup available when detection fails
 
     @pytest.mark.asyncio
     async def test_check_principal_exists_user_exists(self, detector, mock_idc_client):

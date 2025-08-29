@@ -429,8 +429,9 @@ class BatchProcessor:
         self.sso_admin_client = aws_client_manager.get_identity_center_client()
         self.identity_store_client = aws_client_manager.get_identity_store_client()
 
-        # Initialize operation logger
-        self.operation_logger = OperationLogger()
+        # Initialize operation logger with profile isolation
+        profile_name = getattr(aws_client_manager, "profile", None)
+        self.operation_logger = OperationLogger(profile=profile_name)
 
         # Results tracking
         self.results = BulkOperationResults(total_processed=0, batch_size=batch_size)

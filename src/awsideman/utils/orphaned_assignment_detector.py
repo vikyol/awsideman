@@ -145,7 +145,14 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
 
     async def _detect_orphaned_assignments(self) -> List[OrphanedAssignment]:
         """
-        Detect orphaned permission set assignments.
+        Detect orphaned permission set assignments using a direct comparison approach.
+
+        This approach:
+        1. Gets ALL users and groups from the Identity Store
+        2. Gets ALL assignments for each account
+        3. Compares directly to find orphaned assignments
+
+        This is much more reliable than trying to iterate through permission sets.
 
         Returns:
             List[OrphanedAssignment]: List of orphaned assignments found
@@ -155,10 +162,6 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         try:
             client = self.idc_client.get_sso_admin_client()
             identity_store_client = self.idc_client.get_identity_store_client()
-
-            # CRITICAL FIX: Only check the SSO instance configured for this profile
-            # Do NOT call list_instances() as it returns ALL instances the credentials can access
-            # This was causing profile mixing and security issues
 
             # Get the profile-specific SSO instance from the client manager
             profile_name = getattr(self.idc_client, "profile", None)
@@ -178,95 +181,183 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             if profile_name not in profiles:
                 self.logger.error(f"Profile '{profile_name}' not found in configuration")
                 raise StatusCheckError(
-                    f"Profile isolation failed: profile '{profile_name}' not found",
+                    f"Profile '{profile_name}' not found in configuration",
                     "OrphanedAssignmentDetector",
                 )
 
-            profile_data = profiles[profile_name]
-            instance_arn = profile_data.get("sso_instance_arn")
-            identity_store_id = profile_data.get("identity_store_id")
+            profile_config = profiles[profile_name]
+            instance_arn = profile_config.get("sso_instance_arn")
+            identity_store_id = profile_config.get("identity_store_id")
 
             if not instance_arn or not identity_store_id:
-                self.logger.error(f"Profile '{profile_name}' missing SSO instance configuration")
+                self.logger.error(
+                    f"Missing SSO instance ARN or identity store ID for profile '{profile_name}'"
+                )
                 raise StatusCheckError(
-                    f"Profile isolation failed: profile '{profile_name}' missing SSO instance",
+                    f"Missing SSO instance ARN or identity store ID for profile '{profile_name}'",
                     "OrphanedAssignmentDetector",
                 )
 
-            self.logger.info(
-                f"Checking orphaned assignments for profile '{profile_name}' with instance {instance_arn}"
-            )
+            self.logger.info(f"Using direct comparison approach for profile '{profile_name}'")
 
-            # Only check the configured instance for this profile
-            instances = [{"InstanceArn": instance_arn, "IdentityStoreId": identity_store_id}]
+            # Step 1: Get ALL users in the Identity Store
+            self.logger.info("Getting all users from Identity Store...")
+            user_ids = set()
+            try:
+                user_paginator = identity_store_client.get_paginator("list_users")
+                for page in user_paginator.paginate(IdentityStoreId=identity_store_id):
+                    for user in page.get("Users", []):
+                        user_ids.add(user["UserId"])
+                self.logger.info(f"Found {len(user_ids)} users in Identity Store")
+            except Exception as e:
+                self.logger.warning(f"Error getting users from Identity Store: {str(e)}")
+                user_ids = set()
 
-            if not instances:
-                self.logger.warning("No Identity Center instances configured for this profile")
-                return orphaned_assignments
+            # Step 2: Get ALL groups in the Identity Store
+            self.logger.info("Getting all groups from Identity Store...")
+            group_ids = set()
+            try:
+                group_paginator = identity_store_client.get_paginator("list_groups")
+                for page in group_paginator.paginate(IdentityStoreId=identity_store_id):
+                    for group in page.get("Groups", []):
+                        group_ids.add(group["GroupId"])
+                self.logger.info(f"Found {len(group_ids)} groups in Identity Store")
+            except Exception as e:
+                self.logger.warning(f"Error getting groups from Identity Store: {str(e)}")
+                group_ids = set()
 
-            # Check assignments for each instance (should only be one for profile isolation)
-            for instance in instances:
-                instance_arn = instance["InstanceArn"]
-                identity_store_id = instance.get("IdentityStoreId")
+            # Step 3: Get all accounts in the organization (for account names)
+            try:
+                org_client = self.idc_client.get_organizations_client()
+                org_paginator = org_client.get_paginator("list_accounts")
+                all_accounts = {}
+                for page in org_paginator.paginate():
+                    for account in page.get("Accounts", []):
+                        all_accounts[account["Id"]] = account.get("Name", account["Id"])
 
-                if not identity_store_id:
-                    self.logger.warning(f"No identity store ID found for instance {instance_arn}")
-                    continue
+                self.logger.info(f"Found {len(all_accounts)} accounts in organization")
+            except Exception as e:
+                self.logger.warning(f"Error accessing Organizations API: {str(e)}")
+                all_accounts = {}
 
-                try:
-                    # Get all permission sets for this instance
-                    ps_response = client.list_permission_sets(InstanceArn=instance_arn)
-                    permission_sets = ps_response.get("PermissionSets", [])
+            # Step 4: Get ALL assignments for each account and check for orphaned ones
+            self.logger.info("Checking all accounts for orphaned assignments...")
 
-                    # Check assignments for each permission set
-                    for ps_arn in permission_sets:
-                        try:
-                            # Get permission set details
-                            ps_details = client.describe_permission_set(
-                                InstanceArn=instance_arn, PermissionSetArn=ps_arn
-                            )
-                            ps_name = ps_details.get("PermissionSet", {}).get(
-                                "Name", ps_arn.split("/")[-1]
-                            )
+            # Get all accounts that have permission sets provisioned
+            try:
+                # First, get all permission sets
+                ps_response = client.list_permission_sets(InstanceArn=instance_arn)
+                permission_sets = ps_response.get("PermissionSets", [])
+                self.logger.info(f"Found {len(permission_sets)} permission sets")
 
-                            # Get all accounts with assignments for this permission set
-                            accounts_response = client.list_accounts_for_provisioned_permission_set(
-                                InstanceArn=instance_arn, PermissionSetArn=ps_arn
-                            )
+                # Get permission set names for better reporting
+                permission_set_names = {}
+                for ps_arn in permission_sets:
+                    try:
+                        ps_details = client.describe_permission_set(
+                            InstanceArn=instance_arn, PermissionSetArn=ps_arn
+                        )
+                        ps_name = ps_details.get("PermissionSet", {}).get(
+                            "Name", ps_arn.split("/")[-1]
+                        )
+                        permission_set_names[ps_arn] = ps_name
+                    except Exception:
+                        ps_name = ps_arn.split("/")[-1]
+                        permission_set_names[ps_arn] = ps_name
 
-                            for account_id in accounts_response.get("AccountIds", []):
-                                # Check assignments for this permission set and account
-                                orphaned_in_account = await self._check_assignments_for_account(
-                                    instance_arn,
-                                    ps_arn,
-                                    ps_name,
-                                    account_id,
-                                    identity_store_id,
-                                    client,
-                                    identity_store_client,
+                # Check each permission set for assignments
+                for ps_arn in permission_sets:
+                    ps_name = permission_set_names[ps_arn]
+                    self.logger.debug(f"Checking permission set: {ps_name}")
+
+                    try:
+                        # Get all accounts with this permission set provisioned
+                        accounts_response = client.list_accounts_for_provisioned_permission_set(
+                            InstanceArn=instance_arn, PermissionSetArn=ps_arn
+                        )
+
+                        for account_id in accounts_response.get("AccountIds", []):
+                            try:
+                                # Get ALL assignments for this permission set and account
+                                assignments_response = client.list_account_assignments(
+                                    InstanceArn=instance_arn,
+                                    AccountId=account_id,
+                                    PermissionSetArn=ps_arn,
                                 )
-                                orphaned_assignments.extend(orphaned_in_account)
 
-                        except ClientError as e:
-                            error_code = e.response.get("Error", {}).get("Code", "Unknown")
-                            if error_code not in ["AccessDenied", "ResourceNotFound"]:
+                                assignments = assignments_response.get("AccountAssignments", [])
+                                if assignments:
+                                    self.logger.debug(
+                                        f"Found {len(assignments)} assignments for {ps_name} in account {account_id}"
+                                    )
+
+                                    # Check each assignment for orphaned principals
+                                    for assignment in assignments:
+                                        principal_id = assignment.get("PrincipalId")
+                                        principal_type = assignment.get("PrincipalType")
+
+                                        if not principal_id or not principal_type:
+                                            continue
+
+                                        # Check if the principal still exists
+                                        principal_exists = False
+                                        if principal_type == "USER":
+                                            principal_exists = principal_id in user_ids
+                                        elif principal_type == "GROUP":
+                                            principal_exists = principal_id in group_ids
+
+                                        if not principal_exists:
+                                            # This is an orphaned assignment!
+                                            self.logger.info(
+                                                f"Found orphaned assignment: {ps_name} -> {principal_id} in {account_id}"
+                                            )
+
+                                            # Get account name
+                                            account_name = all_accounts.get(account_id, account_id)
+
+                                            # Create orphaned assignment object
+                                            orphaned_assignment = OrphanedAssignment(
+                                                assignment_id=f"{ps_arn}#{principal_id}#{account_id}",
+                                                permission_set_arn=ps_arn,
+                                                permission_set_name=ps_name,
+                                                account_id=account_id,
+                                                account_name=account_name,
+                                                principal_id=principal_id,
+                                                principal_type=PrincipalType(principal_type),
+                                                principal_name=None,  # Principal no longer exists
+                                                error_message=f"Principal {principal_type.lower()} with ID {principal_id} no longer exists in Identity Store",
+                                                created_date=assignment.get("CreatedDate")
+                                                or datetime.now(timezone.utc),
+                                                last_accessed=None,
+                                            )
+
+                                            orphaned_assignments.append(orphaned_assignment)
+
+                            except ClientError as e:
+                                error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                                if error_code not in ["AccessDenied", "ResourceNotFound"]:
+                                    self.logger.warning(
+                                        f"Error checking assignments for account {account_id}: {str(e)}"
+                                    )
+                            except Exception as e:
                                 self.logger.warning(
-                                    f"Error checking assignments for permission set {ps_arn}: {str(e)}"
+                                    f"Unexpected error checking account {account_id}: {str(e)}"
                                 )
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Unexpected error checking permission set {ps_arn}: {str(e)}"
-                            )
 
-                except ClientError as e:
-                    error_code = e.response.get("Error", {}).get("Code", "Unknown")
-                    self.logger.warning(
-                        f"Error listing permission sets for instance {instance_arn}: {error_code}"
-                    )
-                except Exception as e:
-                    self.logger.warning(
-                        f"Unexpected error processing instance {instance_arn}: {str(e)}"
-                    )
+                    except ClientError as e:
+                        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                        if error_code not in ["AccessDenied", "ResourceNotFound"]:
+                            self.logger.warning(f"Error checking permission set {ps_arn}: {str(e)}")
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Unexpected error checking permission set {ps_arn}: {str(e)}"
+                        )
+
+            except Exception as e:
+                self.logger.error(f"Error in assignment detection: {str(e)}")
+                raise StatusCheckError(
+                    f"Failed to detect orphaned assignments: {str(e)}", "OrphanedAssignmentDetector"
+                )
 
         except Exception as e:
             self.logger.error(f"Error detecting orphaned assignments: {str(e)}")
@@ -274,6 +365,9 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                 f"Failed to detect orphaned assignments: {str(e)}", "OrphanedAssignmentDetector"
             )
 
+        self.logger.info(
+            f"Orphaned assignment detection completed. Found {len(orphaned_assignments)} orphaned assignments."
+        )
         return orphaned_assignments
 
     async def _check_assignments_for_account(
@@ -307,7 +401,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             # Get account name for display
             try:
                 # Try to get account name from Organizations
-                org_client = self.idc_client.client_manager.get_organizations_client()
+                org_client = self.idc_client.get_organizations_client()
                 account_details = org_client.describe_account(account_id)
                 account_name = account_details.get("Name", account_id)
             except Exception:
@@ -414,9 +508,31 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             error_message = e.response.get("Error", {}).get("Message", str(e))
 
             # These error codes indicate the principal no longer exists
-            if error_code in ["ResourceNotFoundException", "ResourceNotFound"]:
+            if error_code in [
+                "ResourceNotFoundException",
+                "ResourceNotFound",
+                "NoSuchEntity",
+                "NotFound",
+            ]:
                 aws_error_msg = f"AWS Error {error_code}: {error_message}"
+                self.logger.debug(
+                    f"Principal {principal_id} ({principal_type}) not found: {aws_error_msg}"
+                )
                 return False, None, aws_error_msg
+
+            # These error codes might also indicate the principal doesn't exist
+            elif error_code in ["ValidationException", "InvalidParameterValue"]:
+                # Check if the error message suggests the principal doesn't exist
+                error_lower = error_message.lower()
+                if any(
+                    keyword in error_lower
+                    for keyword in ["not found", "does not exist", "invalid", "not exist"]
+                ):
+                    aws_error_msg = f"AWS Error {error_code}: {error_message}"
+                    self.logger.debug(
+                        f"Principal {principal_id} ({principal_type}) appears invalid: {aws_error_msg}"
+                    )
+                    return False, None, aws_error_msg
 
             # Other errors might indicate permission issues or temporary problems
             elif error_code in ["AccessDenied", "UnauthorizedOperation"]:

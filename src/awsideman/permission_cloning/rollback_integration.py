@@ -157,6 +157,7 @@ class PermissionCloningRollbackIntegration:
 
             # Create operation record
             operation_record = PermissionSetCloningOperationRecord.create(
+                operation_type=OperationType.CLONE_PERMISSION_SET,
                 source_permission_set_name=source_permission_set_name,
                 source_permission_set_arn=source_permission_set_arn,
                 target_permission_set_name=target_permission_set_name,

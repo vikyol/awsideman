@@ -456,6 +456,105 @@ def assign_multi_account_with_filter(
         if len(accounts) > 50:
             display_performance_recommendations(len(accounts), stats["duration_seconds"])
 
+        # Log bulk operations for rollback tracking (only if not dry run)
+        if not dry_run and results.successful_accounts:
+            try:
+                from ...rollback.logger import OperationLogger
+
+                # Create operation logger with profile isolation
+                logger = OperationLogger(profile=profile_name)
+
+                # Get principal ID and permission set ARN from the resolved multi_assignment
+                # We need to resolve these since they're not in AccountResult objects
+                try:
+                    # Create a temporary resolver to get the principal ID and permission set ARN
+                    from ...bulk.resolver import ResourceResolver
+
+                    resolver = ResourceResolver(
+                        aws_client_manager=aws_client,
+                        instance_arn=instance_arn,
+                        identity_store_id=identity_store_id,
+                    )
+
+                    # Resolve principal ID
+                    principal_result = resolver.resolve_principal_name(
+                        principal_name, principal_type
+                    )
+                    if not principal_result.success:
+                        console.print(
+                            f"[yellow]Warning: Could not resolve principal ID for logging: {principal_result.error_message}[/yellow]"
+                        )
+                        return
+
+                    principal_id = principal_result.resolved_value
+
+                    # Resolve permission set ARN
+                    permission_set_arn = resolve_permission_set_identifier(
+                        aws_client.get_sso_admin_client(),
+                        instance_arn,
+                        permission_set_name,
+                        identity_store_id,
+                    )
+
+                except Exception as e:
+                    console.print(
+                        f"[yellow]Warning: Could not resolve resources for logging: {str(e)}[/yellow]"
+                    )
+                    return
+
+                # Group successful results by account for efficient logging
+                account_ids = []
+                account_names = []
+                results_data = []
+
+                for account_result in results.successful_accounts:
+                    account_ids.append(account_result.account_id)
+                    account_names.append(account_result.account_name)
+                    results_data.append(
+                        {
+                            "account_id": account_result.account_id,
+                            "success": True,
+                            "error": None,
+                            "duration_ms": int((account_result.processing_time or 0) * 1000),
+                        }
+                    )
+
+                # Log the bulk operation
+                try:
+                    operation_id = logger.log_operation(
+                        operation_type="assign",
+                        principal_id=principal_id,
+                        principal_type=principal_type,
+                        principal_name=principal_name,
+                        permission_set_arn=permission_set_arn,
+                        permission_set_name=permission_set_name,
+                        account_ids=account_ids,
+                        account_names=account_names,
+                        results=results_data,
+                        metadata={
+                            "source": "multi_account_assign_explicit",
+                            "account_count": len(accounts),
+                            "batch_size": batch_size,
+                            "total_accounts": len(accounts),
+                            "successful_count": len(results.successful_accounts),
+                            "failed_count": len(results.failed_accounts),
+                        },
+                    )
+
+                    console.print(f"[dim]Logged bulk assign operation: {operation_id}[/dim]")
+
+                except Exception as e:
+                    # Don't fail the main operation if logging fails
+                    console.print(
+                        f"[yellow]Warning: Failed to log bulk assign operation: {str(e)}[/yellow]"
+                    )
+
+            except Exception as e:
+                # Don't fail the main operation if logging fails
+                console.print(
+                    f"[yellow]Warning: Failed to initialize bulk operation logging: {str(e)}[/yellow]"
+                )
+
     except ClientError as e:
         handle_aws_error(e, "MultiAccountAssign")
     except Exception as e:
@@ -640,6 +739,7 @@ def assign_single_account(
                     account_id,
                     success=True,
                     request_id=request_id,
+                    profile=profile_name,
                 )
 
                 # Clear internal data storage to ensure fresh data
@@ -674,6 +774,7 @@ def assign_single_account(
                     account_id,
                     success=True,
                     request_id=request_id,
+                    profile=profile_name,
                 )
             elif status == "FAILED":
                 failure_reason = assignment_status.get("FailureReason", "Unknown error")
@@ -918,6 +1019,105 @@ def assign_multi_account_explicit(
         if len(accounts) > 50:
             display_performance_recommendations(len(accounts), stats["duration_seconds"])
 
+        # Log bulk operations for rollback tracking (only if not dry run)
+        if not dry_run and results.successful_accounts:
+            try:
+                from ...rollback.logger import OperationLogger
+
+                # Create operation logger with profile isolation
+                logger = OperationLogger(profile=profile_name)
+
+                # Get principal ID and permission set ARN from the resolved multi_assignment
+                # We need to resolve these since they're not in AccountResult objects
+                try:
+                    # Create a temporary resolver to get the principal ID and permission set ARN
+                    from ...bulk.resolver import ResourceResolver
+
+                    resolver = ResourceResolver(
+                        aws_client_manager=aws_client,
+                        instance_arn=instance_arn,
+                        identity_store_id=identity_store_id,
+                    )
+
+                    # Resolve principal ID
+                    principal_result = resolver.resolve_principal_name(
+                        principal_name, principal_type
+                    )
+                    if not principal_result.success:
+                        console.print(
+                            f"[yellow]Warning: Could not resolve principal ID for logging: {principal_result.error_message}[/yellow]"
+                        )
+                        return
+
+                    principal_id = principal_result.resolved_value
+
+                    # Resolve permission set ARN
+                    permission_set_arn = resolve_permission_set_identifier(
+                        aws_client.get_sso_admin_client(),
+                        instance_arn,
+                        permission_set_name,
+                        identity_store_id,
+                    )
+
+                except Exception as e:
+                    console.print(
+                        f"[yellow]Warning: Could not resolve resources for logging: {str(e)}[/yellow]"
+                    )
+                    return
+
+                # Group successful results by account for efficient logging
+                account_ids = []
+                account_names = []
+                results_data = []
+
+                for account_result in results.successful_accounts:
+                    account_ids.append(account_result.account_id)
+                    account_names.append(account_result.account_name)
+                    results_data.append(
+                        {
+                            "account_id": account_result.account_id,
+                            "success": True,
+                            "error": None,
+                            "duration_ms": int((account_result.processing_time or 0) * 1000),
+                        }
+                    )
+
+                # Log the bulk operation
+                try:
+                    operation_id = logger.log_operation(
+                        operation_type="assign",
+                        principal_id=principal_id,
+                        principal_type=principal_type,
+                        principal_name=principal_name,
+                        permission_set_arn=permission_set_arn,
+                        permission_set_name=permission_set_name,
+                        account_ids=account_ids,
+                        account_names=account_names,
+                        results=results_data,
+                        metadata={
+                            "source": "multi_account_assign_explicit",
+                            "account_count": len(accounts),
+                            "batch_size": batch_size,
+                            "total_accounts": len(accounts),
+                            "successful_count": len(results.successful_accounts),
+                            "failed_count": len(results.failed_accounts),
+                        },
+                    )
+
+                    console.print(f"[dim]Logged bulk assign operation: {operation_id}[/dim]")
+
+                except Exception as e:
+                    # Don't fail the main operation if logging fails
+                    console.print(
+                        f"[yellow]Warning: Failed to log bulk assign operation: {str(e)}[/yellow]"
+                    )
+
+            except Exception as e:
+                # Don't fail the main operation if logging fails
+                console.print(
+                    f"[yellow]Warning: Failed to initialize bulk operation logging: {str(e)}[/yellow]"
+                )
+
     except ClientError as e:
         handle_aws_error(e, "MultiAccountAssign")
     except Exception as e:
@@ -1138,6 +1338,106 @@ def assign_multi_account_advanced(
         # Show performance recommendations if applicable
         if len(accounts) > 50:
             display_performance_recommendations(len(accounts), stats["duration_seconds"])
+
+        # Log bulk operations for rollback tracking (only if not dry run)
+        if not dry_run and results.successful_accounts:
+            try:
+                from ...rollback.logger import OperationLogger
+
+                # Create operation logger with profile isolation
+                logger = OperationLogger(profile=profile_name)
+
+                # Get principal ID and permission set ARN from the resolved multi_assignment
+                # We need to resolve these since they're not in AccountResult objects
+                try:
+                    # Create a temporary resolver to get the principal ID and permission set ARN
+                    from ...bulk.resolver import ResourceResolver
+
+                    resolver = ResourceResolver(
+                        aws_client_manager=aws_client,
+                        instance_arn=instance_arn,
+                        identity_store_id=identity_store_id,
+                    )
+
+                    # Resolve principal ID
+                    principal_result = resolver.resolve_principal_name(
+                        principal_name, principal_type
+                    )
+                    if not principal_result.success:
+                        console.print(
+                            f"[yellow]Warning: Could not resolve principal ID for logging: {principal_result.error_message}[/yellow]"
+                        )
+                        return
+
+                    principal_id = principal_result.resolved_value
+
+                    # Resolve permission set ARN
+                    permission_set_arn = resolve_permission_set_identifier(
+                        aws_client.get_sso_admin_client(),
+                        instance_arn,
+                        permission_set_name,
+                        identity_store_id,
+                    )
+
+                except Exception as e:
+                    console.print(
+                        f"[yellow]Warning: Could not resolve resources for logging: {str(e)}[/yellow]"
+                    )
+                    return
+
+                # Group successful results by account for efficient logging
+                account_ids = []
+                account_names = []
+                results_data = []
+
+                for account_result in results.successful_accounts:
+                    account_ids.append(account_result.account_id)
+                    account_names.append(account_result.account_name)
+                    results_data.append(
+                        {
+                            "account_id": account_result.account_id,
+                            "success": True,
+                            "error": None,
+                            "duration_ms": int((account_result.processing_time or 0) * 1000),
+                        }
+                    )
+
+                # Log the bulk operation
+                try:
+                    operation_id = logger.log_operation(
+                        operation_type="assign",
+                        principal_id=principal_id,
+                        principal_type=principal_type,
+                        principal_name=principal_name,
+                        permission_set_arn=permission_set_arn,
+                        permission_set_name=permission_set_name,
+                        account_ids=account_ids,
+                        account_names=account_names,
+                        results=results_data,
+                        metadata={
+                            "source": "multi_account_assign_advanced",
+                            "ou_filter": ou_filter,
+                            "account_pattern": account_pattern,
+                            "batch_size": batch_size,
+                            "total_accounts": len(accounts),
+                            "successful_count": len(results.successful_accounts),
+                            "failed_count": len(results.failed_accounts),
+                        },
+                    )
+
+                    console.print(f"[dim]Logged bulk assign operation: {operation_id}[/dim]")
+
+                except Exception as e:
+                    # Don't fail the main operation if logging fails
+                    console.print(
+                        f"[yellow]Warning: Failed to log bulk assign operation: {str(e)}[/yellow]"
+                    )
+
+            except Exception as e:
+                # Don't fail the main operation if logging fails
+                console.print(
+                    f"[yellow]Warning: Failed to initialize bulk operation logging: {str(e)}[/yellow]"
+                )
 
     except ClientError as e:
         handle_aws_error(e, "MultiAccountAssign")

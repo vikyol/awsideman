@@ -308,6 +308,7 @@ class PermissionSetCloningOperationRecord:
 
     operation_id: str
     timestamp: datetime
+    operation_type: OperationType
     source_permission_set_name: str
     source_permission_set_arn: str
     target_permission_set_name: str
@@ -320,6 +321,7 @@ class PermissionSetCloningOperationRecord:
     @classmethod
     def create(
         cls,
+        operation_type: OperationType,
         source_permission_set_name: str,
         source_permission_set_arn: str,
         target_permission_set_name: str,
@@ -331,6 +333,7 @@ class PermissionSetCloningOperationRecord:
         return cls(
             operation_id=str(uuid.uuid4()),
             timestamp=datetime.now(timezone.utc),
+            operation_type=operation_type,
             source_permission_set_name=source_permission_set_name,
             source_permission_set_arn=source_permission_set_arn,
             target_permission_set_name=target_permission_set_name,
@@ -344,6 +347,7 @@ class PermissionSetCloningOperationRecord:
         return {
             "operation_id": self.operation_id,
             "timestamp": self.timestamp.isoformat(),
+            "operation_type": self.operation_type.value,
             "source_permission_set_name": self.source_permission_set_name,
             "source_permission_set_arn": self.source_permission_set_arn,
             "target_permission_set_name": self.target_permission_set_name,
@@ -360,6 +364,7 @@ class PermissionSetCloningOperationRecord:
         return cls(
             operation_id=data["operation_id"],
             timestamp=datetime.fromisoformat(data["timestamp"]),
+            operation_type=OperationType(data.get("operation_type", "clone_permission_set")),
             source_permission_set_name=data["source_permission_set_name"],
             source_permission_set_arn=data["source_permission_set_arn"],
             target_permission_set_name=data["target_permission_set_name"],

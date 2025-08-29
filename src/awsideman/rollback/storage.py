@@ -11,17 +11,22 @@ from .models import OperationRecord
 class OperationStore:
     """JSON-based storage for operation records."""
 
-    def __init__(self, storage_directory: Optional[str] = None):
+    def __init__(self, storage_directory: Optional[str] = None, profile: Optional[str] = None):
         """Initialize the operation store.
 
         Args:
             storage_directory: Directory to store operation files.
                              Defaults to ~/.awsideman/operations/
+            profile: AWS profile name for isolation.
         """
         if storage_directory:
             self.storage_dir = Path(storage_directory).expanduser()
         else:
             self.storage_dir = Path.home() / ".awsideman" / "operations"
+
+        # Add profile isolation
+        if profile:
+            self.storage_dir = self.storage_dir / "profiles" / profile
 
         self.operations_file = self.storage_dir / "operations.json"
         self.rollbacks_file = self.storage_dir / "rollbacks.json"

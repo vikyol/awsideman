@@ -45,6 +45,206 @@ from ..rollback.logger import OperationLogger
 from ..utils.config import Config
 from ..utils.validators import validate_profile
 
+
+def select_operation_interactively(profile: Optional[str], dry_run: bool = False) -> Optional[str]:
+    """Interactive operation selection for rollback apply command.
+
+    Args:
+        profile: AWS profile to use
+        dry_run: Whether this is a dry run
+
+    Returns:
+        Selected operation ID or None if cancelled
+    """
+    try:
+        # Validate profile
+        profile_name, profile_data = validate_profile(profile)
+
+        # Get operations from the last 30 days for selection
+        logger = OperationLogger(profile=profile_name)
+        operations = logger.get_operations(days=30)
+
+        if not operations:
+            console.print("[yellow]No operations found in the last 30 days.[/yellow]")
+            return None
+
+        # Sort operations by timestamp (newest first)
+        operations.sort(key=lambda x: x.timestamp, reverse=True)
+
+        # Display operations with indices
+        console.print("[bold blue]Select operation to rollback:[/bold blue]")
+        console.print(f"[dim]Profile: {profile_name}[/dim]")
+        if dry_run:
+            console.print("[dim]Mode: Dry run (no changes will be made)[/dim]")
+        console.print()
+
+        # Create a compact table for selection
+        selection_table = Table(
+            title="Available Operations",
+            show_header=True,
+            header_style="bold blue",
+            title_style="bold blue",
+        )
+
+        selection_table.add_column("Index", style="cyan", width=6, no_wrap=True)
+        selection_table.add_column("Date", style="green", width=10, no_wrap=True)
+        selection_table.add_column("Type", style="yellow", width=8, no_wrap=True)
+        selection_table.add_column("Principal", style="blue", width=15, no_wrap=True)
+        selection_table.add_column("Permission Set", style="magenta", width=20, no_wrap=True)
+        selection_table.add_column("Accounts", style="white", width=12, no_wrap=True)
+        selection_table.add_column("Status", style="white", width=8, no_wrap=True)
+
+        # Add rows with indices
+        for i, operation in enumerate(operations[:20]):  # Limit to 20 for readability
+            # Format timestamp
+            formatted_date = operation.timestamp.strftime("%Y-%m-%d %H:%M")
+
+            # Format operation type
+            op_type = operation.operation_type.value.upper()
+
+            # Format principal name
+            if hasattr(operation, "principal_name"):
+                principal_name = operation.principal_name
+            elif hasattr(operation, "source_entity_name"):
+                if operation.operation_type.value == "copy_assignments":
+                    principal_name = (
+                        f"{operation.source_entity_name} → {operation.target_entity_name}"
+                    )
+                else:
+                    principal_name = operation.source_entity_name
+            elif hasattr(operation, "source_permission_set_name"):
+                principal_name = f"{operation.source_permission_set_name} → {operation.target_permission_set_name}"
+            else:
+                principal_name = "Unknown"
+
+            if len(principal_name) > 15:
+                principal_name = principal_name[:12] + "..."
+
+            # Format permission set name
+            if hasattr(operation, "permission_set_name"):
+                ps_name = operation.permission_set_name
+            elif (
+                hasattr(operation, "permission_sets_involved")
+                and operation.permission_sets_involved
+            ):
+                ps_name = operation.permission_sets_involved[0].split("/")[-1]
+            elif hasattr(operation, "source_permission_set_name"):
+                ps_name = operation.source_permission_set_name
+            else:
+                ps_name = "Unknown"
+
+            if len(ps_name) > 18:
+                ps_name = ps_name[:15] + "..."
+
+            # Format account count
+            if hasattr(operation, "account_ids"):
+                account_count = len(operation.account_ids)
+            elif hasattr(operation, "accounts_affected"):
+                account_count = len(operation.accounts_affected)
+            else:
+                account_count = 0
+
+            accounts_text = f"{account_count} account{'s' if account_count != 1 else ''}"
+
+            # Format status
+            if operation.rolled_back:
+                status = "[red]Rolled Back[/red]"
+            else:
+                if hasattr(operation, "results"):
+                    successful_results = sum(1 for r in operation.results if r.success)
+                    total_results = len(operation.results)
+                elif hasattr(operation, "assignments_copied"):
+                    successful_results = len(operation.assignments_copied)
+                    total_results = (
+                        len(operation.accounts_affected)
+                        if hasattr(operation, "accounts_affected")
+                        else successful_results
+                    )
+                else:
+                    successful_results = 0
+                    total_results = 0
+
+                if total_results == 0:
+                    status = "[yellow]Unknown[/yellow]"
+                elif successful_results == total_results:
+                    status = "[green]Success[/green]"
+                elif successful_results == 0:
+                    status = "[red]Failed[/red]"
+                else:
+                    status = f"[yellow]Partial ({successful_results}/{total_results})[/yellow]"
+
+            selection_table.add_row(
+                str(i + 1),
+                formatted_date,
+                op_type,
+                principal_name,
+                ps_name,
+                accounts_text,
+                status,
+            )
+
+        # Display the table
+        console.print(selection_table)
+
+        if len(operations) > 20:
+            console.print(
+                f"[dim]... and {len(operations) - 20} more operations (showing most recent 20)[/dim]"
+            )
+
+        # Show full operation IDs for the displayed operations
+        console.print("\n[bold cyan]Full Operation IDs:[/bold cyan]")
+        for i, operation in enumerate(operations[:20]):
+            console.print(f"[cyan]{i+1}.[/cyan] {operation.operation_id}")
+
+        # Get user selection
+        while True:
+            try:
+                selection = console.input(
+                    "\n[bold green]Enter operation index (1-20) or 'q' to quit:[/bold green] "
+                ).strip()
+
+                if selection.lower() in ["q", "quit", "exit"]:
+                    console.print("[yellow]Operation cancelled.[/yellow]")
+                    return None
+
+                index = int(selection)
+                if 1 <= index <= len(operations[:20]):
+                    selected_operation = operations[index - 1]
+                    console.print("\n[bold green]Selected operation:[/bold green]")
+                    console.print(f"[green]Index:[/green] {index}")
+                    console.print(f"[green]Operation ID:[/green] {selected_operation.operation_id}")
+                    console.print(
+                        f"[green]Type:[/green] {selected_operation.operation_type.value.upper()}"
+                    )
+                    console.print(
+                        f"[green]Date:[/green] {selected_operation.timestamp.strftime('%Y-%m-%d %H:%M')}"
+                    )
+
+                    if hasattr(selected_operation, "principal_name"):
+                        console.print(
+                            f"[green]Principal:[/green] {selected_operation.principal_name}"
+                        )
+                    if hasattr(selected_operation, "permission_set_name"):
+                        console.print(
+                            f"[green]Permission Set:[/green] {selected_operation.permission_set_name}"
+                        )
+
+                    return selected_operation.operation_id
+                else:
+                    console.print(
+                        f"[red]Invalid index. Please enter a number between 1 and {len(operations[:20])}.[/red]"
+                    )
+            except ValueError:
+                console.print("[red]Invalid input. Please enter a number or 'q' to quit.[/red]")
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Operation cancelled.[/yellow]")
+                return None
+
+    except Exception as e:
+        console.print(f"[red]Error during interactive selection: {e}[/red]")
+        return None
+
+
 app = typer.Typer(
     help="View and rollback permission set operations. Track and undo assignment changes safely."
 )
@@ -64,12 +264,15 @@ def list_operations(
         None, "--permission-set", "-s", help="Filter by permission set name or ARN (partial match)"
     ),
     days: int = typer.Option(
-        30, "--days", "-d", help="Show operations from the last N days (default: 30)"
+        3, "--days", "-d", help="Show operations from the last N days (default: 3)"
     ),
     limit: Optional[int] = typer.Option(
         None, "--limit", "-l", help="Maximum number of operations to show"
     ),
     format: str = typer.Option("table", "--format", "-f", help="Output format (table or json)"),
+    copy_id: bool = typer.Option(
+        False, "--copy-id", "-c", help="Copy operation ID to clipboard for easy use"
+    ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
 ):
     """List historical permission set operations with filtering options.
@@ -83,7 +286,7 @@ def list_operations(
       --operation-type: Filter by "assign" or "revoke" operations
       --principal: Filter by principal name or ID (supports partial matching)
       --permission-set: Filter by permission set name or ARN (supports partial matching)
-      --days: Show operations from the last N days (default: 30)
+      --days: Show operations from the last N days (default: 3)
       --limit: Limit the number of results returned
 
     OUTPUT FORMATS:
@@ -93,7 +296,7 @@ def list_operations(
 
     EXAMPLES:
 
-      # List all operations from the last 30 days
+      # List all operations from the last 3 days (default)
       $ awsideman rollback list
 
       # List only assignment operations
@@ -116,6 +319,7 @@ def list_operations(
       - Operations are tracked automatically when using assignment commands
       - Only operations that can be rolled back are shown
       - Use the operation ID from this list with 'rollback apply' command
+      - Default shows last 3 days for recent operations; use --days to see older history
     """
     # Validate input parameters
     if operation_type and operation_type.lower() not in ["assign", "revoke"]:
@@ -139,9 +343,9 @@ def list_operations(
     # Validate profile (for consistency, even though we don't need AWS clients for listing)
     profile_name, _ = validate_profile(profile)
 
-    # Create operation logger
+    # Create operation logger with profile isolation
     try:
-        logger = OperationLogger()
+        logger = OperationLogger(profile=profile_name)
     except Exception as e:
         console.print(f"[red]Error: Failed to initialize operation logger: {str(e)}[/red]")
         raise typer.Exit(1)
@@ -182,6 +386,9 @@ def list_operations(
         else:
             console.print(
                 "[yellow]No operations have been logged yet. Operations are tracked automatically when using assignment commands.[/yellow]"
+            )
+            console.print(
+                "[yellow]Use --days 7 or --days 30 to see operations from a longer period.[/yellow]"
             )
 
         raise typer.Exit(0)
@@ -350,7 +557,12 @@ def list_operations(
 
 @app.command("apply")
 def apply_rollback(
-    operation_id: str = typer.Argument(..., help="Operation ID to rollback"),
+    operation_id: Optional[str] = typer.Argument(
+        None, help="Operation ID to rollback (not needed with --interactive)"
+    ),
+    interactive: bool = typer.Option(
+        False, "--interactive", "-i", help="Interactive mode: select operation from list"
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview rollback actions without applying changes"
     ),
@@ -401,16 +613,28 @@ def apply_rollback(
       # Use specific AWS profile
       $ awsideman rollback apply abc123-def456-ghi789 --profile production
 
+      # Interactive mode: select operation from list
+      $ awsideman rollback apply --interactive
+
     NOTES:
 
       - Operation IDs can be found using 'rollback list' command
+      - Use --interactive to select operations from a numbered list
       - Rollback operations are also tracked and can be rolled back themselves
       - Use dry-run mode to verify the rollback plan before applying
       - Partial failures are handled gracefully with detailed reporting
     """
     # Validate input parameters
-    if not operation_id.strip():
-        console.print("[red]Error: Operation ID cannot be empty.[/red]")
+    if interactive:
+        # Interactive mode: get operation ID from user selection
+        operation_id = select_operation_interactively(profile, dry_run)
+        if not operation_id:
+            console.print("[yellow]No operation selected. Exiting.[/yellow]")
+            return
+    elif not operation_id or not operation_id.strip():
+        console.print(
+            "[red]Error: Operation ID cannot be empty. Use --interactive to select from list.[/red]"
+        )
         raise typer.Exit(1)
 
     if batch_size <= 0 or batch_size > 50:
@@ -426,9 +650,9 @@ def apply_rollback(
     console.print(f"[dim]Batch size: {batch_size}[/dim]")
     console.print()
 
-    # Create operation logger
+    # Create operation logger with profile isolation
     try:
-        logger = OperationLogger()
+        logger = OperationLogger(profile=profile_name)
     except Exception as e:
         console.print(f"[red]Error: Failed to initialize operation logger: {str(e)}[/red]")
         raise typer.Exit(1)
@@ -542,6 +766,9 @@ def apply_rollback(
     # Step 4: Execute rollback using appropriate processor
     console.print("\n[blue]Step 3: Executing rollback operation...[/blue]")
 
+    # Import required modules for rollback processing
+    from ..rollback.processor import RollbackProcessor
+
     # Check if this is a permission set cloning operation
     if hasattr(operation, "source_permission_set_name"):
         # This is a permission set cloning operation - use specialized rollback integration
@@ -557,7 +784,6 @@ def apply_rollback(
             from ..permission_cloning.rollback_integration import (
                 PermissionCloningRollbackIntegration,
             )
-            from ..rollback.processor import RollbackProcessor
 
             # Initialize rollback processor for the integration
             rollback_processor = RollbackProcessor(
@@ -673,9 +899,12 @@ def apply_rollback(
         region = profile_data.get("region")
         aws_client_manager = AWSClientManager(profile=profile_name, region=region)
 
-        # Initialize RollbackProcessor
+        # Initialize RollbackProcessor with the same storage directory as the logger
         rollback_processor = RollbackProcessor(
-            aws_client_manager=aws_client_manager, config=config, show_progress=False
+            storage_directory=str(logger.store.storage_dir),
+            aws_client_manager=aws_client_manager,
+            config=config,
+            show_progress=False,
         )
 
         # Generate rollback plan
@@ -963,10 +1192,71 @@ def _create_operation_details_panel(operation) -> Panel:
         for key, value in operation.metadata.items():
             details_content.append(f"  {key}: [dim]{value}[/dim]")
 
-    content_text = "\n".join(details_content)
+    # Build rich content with proper formatting
+    from rich.console import Group
+    from rich.text import Text
+
+    # Convert each line to rich Text objects
+    rich_lines = []
+    for line in details_content:
+        if line.startswith("[bold"):
+            # Handle bold headers
+            if "[bold blue]" in line:
+                rich_lines.append(
+                    Text(
+                        line.replace("[bold blue]", "").replace("[/bold blue]", ""),
+                        style="bold blue",
+                    )
+                )
+            elif "[bold cyan]" in line:
+                rich_lines.append(
+                    Text(
+                        line.replace("[bold cyan]", "").replace("[/bold cyan]", ""),
+                        style="bold cyan",
+                    )
+                )
+            elif "[bold white]" in line:
+                rich_lines.append(
+                    Text(
+                        line.replace("[bold white]", "").replace("[/bold white]", ""),
+                        style="bold white",
+                    )
+                )
+            elif "[bold dim]" in line:
+                rich_lines.append(
+                    Text(
+                        line.replace("[bold dim]", "").replace("[/bold dim]", ""), style="bold dim"
+                    )
+                )
+            else:
+                rich_lines.append(
+                    Text(line.replace("[bold]", "").replace("[/bold]", ""), style="bold")
+                )
+        elif "[cyan]" in line:
+            rich_lines.append(Text(line.replace("[cyan]", "").replace("[/cyan]", ""), style="cyan"))
+        elif "[magenta]" in line:
+            rich_lines.append(
+                Text(line.replace("[magenta]", "").replace("[/magenta]", ""), style="magenta")
+            )
+        elif "[green]" in line:
+            rich_lines.append(
+                Text(line.replace("[green]", "").replace("[/green]", ""), style="green")
+            )
+        elif "[red]" in line:
+            rich_lines.append(Text(line.replace("[red]", "").replace("[/red]", ""), style="red"))
+        elif "[blue]" in line:
+            rich_lines.append(Text(line.replace("[blue]", "").replace("[/blue]", ""), style="blue"))
+        elif "[white]" in line:
+            rich_lines.append(
+                Text(line.replace("[white]", "").replace("[/white]", ""), style="white")
+            )
+        elif "[dim]" in line:
+            rich_lines.append(Text(line.replace("[dim]", "").replace("[/dim]", ""), style="dim"))
+        else:
+            rich_lines.append(Text(line))
 
     return Panel(
-        content_text,
+        Group(*rich_lines),
         title="[bold]Operation Details[/bold]",
         title_align="left",
         border_style="blue",
@@ -1093,9 +1383,9 @@ def show_status(
     console.print(f"[dim]Profile: {profile_name}[/dim]")
     console.print()
 
-    # Create operation logger
+    # Create operation logger with profile isolation
     try:
-        logger = OperationLogger()
+        logger = OperationLogger(profile=profile_name)
     except Exception as e:
         console.print(f"[red]Error: Failed to initialize operation logger: {str(e)}[/red]")
         raise typer.Exit(1)

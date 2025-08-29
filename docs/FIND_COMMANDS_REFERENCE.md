@@ -92,7 +92,7 @@ The command displays results in a table with columns:
 
 ## Group Find Command
 
-### Command
+###Command
 ```bash
 awsideman group find <pattern> [OPTIONS]
 ```

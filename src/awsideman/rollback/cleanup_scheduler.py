@@ -18,6 +18,7 @@ class CleanupScheduler:
             config: Configuration instance. If None, creates a new one.
         """
         self.config = config or Config()
+        # For global cleanup, use default storage (no profile isolation)
         self.logger = OperationLogger()
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None

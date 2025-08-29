@@ -9,13 +9,33 @@ from .storage import OperationStore
 class OperationLogger:
     """Logger for tracking permission set operations."""
 
-    def __init__(self, storage_directory: Optional[str] = None):
+    def __init__(self, storage_directory: Optional[str] = None, profile: Optional[str] = None):
         """Initialize the operation logger.
 
         Args:
             storage_directory: Directory to store operation files.
+            profile: AWS profile name for isolation.
         """
-        self.store = OperationStore(storage_directory)
+        self.profile = profile
+
+        # Load configuration to get rollback settings
+        try:
+            from ..utils.config import Config
+
+            config = Config()
+            rollback_config = config.get_rollback_config()
+
+            # Always use configured storage directory if available and rollback is enabled
+            if rollback_config.get("enabled", True):
+                configured_storage = rollback_config.get("storage_directory")
+                if configured_storage:
+                    storage_directory = configured_storage
+
+        except Exception:
+            # If config loading fails, continue with provided storage_directory
+            pass
+
+        self.store = OperationStore(storage_directory, profile)
 
     def log_operation(
         self,

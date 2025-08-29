@@ -230,6 +230,7 @@ def log_individual_operation(
     success: bool = True,
     error: Optional[str] = None,
     request_id: Optional[str] = None,
+    profile: Optional[str] = None,
 ) -> None:
     """Log an individual assignment operation for rollback tracking.
 
@@ -248,8 +249,8 @@ def log_individual_operation(
     from ...rollback.logger import OperationLogger
 
     try:
-        # Create operation logger instance
-        logger = OperationLogger()
+        # Create operation logger instance with profile isolation
+        logger = OperationLogger(profile=profile)
 
         # Create result for this single account operation
         result = {
