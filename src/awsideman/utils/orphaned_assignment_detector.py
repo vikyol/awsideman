@@ -145,14 +145,14 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
 
     async def _detect_orphaned_assignments(self) -> List[OrphanedAssignment]:
         """
-        Detect orphaned permission set assignments using a direct comparison approach.
+        Detect orphaned permission set assignments using robust principal existence checking.
 
         This approach:
-        1. Gets ALL users and groups from the Identity Store
-        2. Gets ALL assignments for each account
-        3. Compares directly to find orphaned assignments
+        1. Gets ALL assignments for each permission set and account
+        2. Uses individual API calls to verify each principal exists
+        3. Has robust error handling to avoid false positives
 
-        This is much more reliable than trying to iterate through permission sets.
+        This is much more reliable than bulk listing users/groups which can fail.
 
         Returns:
             List[OrphanedAssignment]: List of orphaned assignments found
@@ -198,39 +198,15 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                     "OrphanedAssignmentDetector",
                 )
 
-            self.logger.info(f"Using direct comparison approach for profile '{profile_name}'")
+            self.logger.info(
+                f"Using robust principal checking approach for profile '{profile_name}'"
+            )
 
-            # Step 1: Get ALL users in the Identity Store
-            self.logger.info("Getting all users from Identity Store...")
-            user_ids = set()
-            try:
-                user_paginator = identity_store_client.get_paginator("list_users")
-                for page in user_paginator.paginate(IdentityStoreId=identity_store_id):
-                    for user in page.get("Users", []):
-                        user_ids.add(user["UserId"])
-                self.logger.info(f"Found {len(user_ids)} users in Identity Store")
-            except Exception as e:
-                self.logger.warning(f"Error getting users from Identity Store: {str(e)}")
-                user_ids = set()
-
-            # Step 2: Get ALL groups in the Identity Store
-            self.logger.info("Getting all groups from Identity Store...")
-            group_ids = set()
-            try:
-                group_paginator = identity_store_client.get_paginator("list_groups")
-                for page in group_paginator.paginate(IdentityStoreId=identity_store_id):
-                    for group in page.get("Groups", []):
-                        group_ids.add(group["GroupId"])
-                self.logger.info(f"Found {len(group_ids)} groups in Identity Store")
-            except Exception as e:
-                self.logger.warning(f"Error getting groups from Identity Store: {str(e)}")
-                group_ids = set()
-
-            # Step 3: Get all accounts in the organization (for account names)
+            # Get all accounts in the organization (for account names)
+            all_accounts = {}
             try:
                 org_client = self.idc_client.get_organizations_client()
                 org_paginator = org_client.get_paginator("list_accounts")
-                all_accounts = {}
                 for page in org_paginator.paginate():
                     for account in page.get("Accounts", []):
                         all_accounts[account["Id"]] = account.get("Name", account["Id"])
@@ -240,10 +216,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                 self.logger.warning(f"Error accessing Organizations API: {str(e)}")
                 all_accounts = {}
 
-            # Step 4: Get ALL assignments for each account and check for orphaned ones
-            self.logger.info("Checking all accounts for orphaned assignments...")
-
-            # Get all accounts that have permission sets provisioned
+            # Get all permission sets and check assignments
             try:
                 # First, get all permission sets
                 ps_response = client.list_permission_sets(InstanceArn=instance_arn)
@@ -291,7 +264,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                                         f"Found {len(assignments)} assignments for {ps_name} in account {account_id}"
                                     )
 
-                                    # Check each assignment for orphaned principals
+                                    # Check each assignment for orphaned principals using robust checking
                                     for assignment in assignments:
                                         principal_id = assignment.get("PrincipalId")
                                         principal_type = assignment.get("PrincipalType")
@@ -299,12 +272,15 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                                         if not principal_id or not principal_type:
                                             continue
 
-                                        # Check if the principal still exists
-                                        principal_exists = False
-                                        if principal_type == "USER":
-                                            principal_exists = principal_id in user_ids
-                                        elif principal_type == "GROUP":
-                                            principal_exists = principal_id in group_ids
+                                        # Use robust principal existence checking
+                                        principal_exists, principal_name, error_message = (
+                                            await self._check_principal_exists(
+                                                identity_store_id,
+                                                principal_id,
+                                                principal_type,
+                                                identity_store_client,
+                                            )
+                                        )
 
                                         if not principal_exists:
                                             # This is an orphaned assignment!
@@ -324,8 +300,9 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                                                 account_name=account_name,
                                                 principal_id=principal_id,
                                                 principal_type=PrincipalType(principal_type),
-                                                principal_name=None,  # Principal no longer exists
-                                                error_message=f"Principal {principal_type.lower()} with ID {principal_id} no longer exists in Identity Store",
+                                                principal_name=principal_name,  # Use the name we found or None
+                                                error_message=error_message
+                                                or f"Principal {principal_type.lower()} with ID {principal_id} no longer exists in Identity Store",
                                                 created_date=assignment.get("CreatedDate")
                                                 or datetime.now(timezone.utc),
                                                 last_accessed=None,
