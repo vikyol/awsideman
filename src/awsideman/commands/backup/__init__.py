@@ -25,6 +25,7 @@ from . import (
     config,
     create,
     delete,
+    diff,
     export,
     health,
     monitor,
@@ -38,6 +39,7 @@ from . import (
 # Import command functions
 from .create import create_backup
 from .delete import delete_backup
+from .diff import diff_backups
 from .export import export_backup
 from .health import check_backup_health
 from .import_backup import import_backup
@@ -63,6 +65,7 @@ app.command("create")(create_backup)
 app.command("list")(list_backups)
 app.command("validate")(validate_backup)
 app.command("delete")(delete_backup)
+app.command("diff")(diff_backups)
 
 # Schedule subcommands
 schedule_app = typer.Typer(help="Manage backup schedules")
@@ -103,6 +106,7 @@ __all__ = [
     "create",
     "validate",
     "delete",
+    "diff",
     "schedule",
     "export",
     "import",

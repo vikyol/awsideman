@@ -133,6 +133,10 @@ class CachedAWSClient:
         if not callable(original_method):
             return original_method
 
+        # Special handling for get_paginator - always pass through without caching
+        if name == "get_paginator":
+            return original_method
+
         # Determine if this is a read or write operation
         is_read_operation = self._is_read_operation(name)
         is_write_operation = self._is_write_operation(name)

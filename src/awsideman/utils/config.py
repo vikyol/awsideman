@@ -324,16 +324,32 @@ class Config:
 
     def get(self, key: str, default: Any = None) -> Any:
         """
-        Get a configuration value.
+        Get a configuration value with dot notation support.
 
         Args:
-            key: Configuration key
+            key: Configuration key (supports dot notation like "backup.storage.default_backend")
             default: Default value if key doesn't exist
 
         Returns:
             Configuration value
         """
         self._ensure_config_loaded()
+
+        # Handle dot notation
+        if "." in key:
+            keys = key.split(".")
+            value = self.config_data
+            try:
+                for k in keys:
+                    if isinstance(value, dict) and k in value:
+                        value = value[k]
+                    else:
+                        return default
+                return value
+            except (KeyError, TypeError):
+                return default
+
+        # Simple key access
         return self.config_data.get(key, default)
 
     def set(self, key: str, value: Any):

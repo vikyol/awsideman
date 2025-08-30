@@ -129,6 +129,21 @@ def validate_profile_with_cache(
             auto_configure_cache=True,
         )
 
+        # Validate that the session is active and credentials are valid
+        if not aws_client.validate_session():
+            console.print("[red]❌ Error: AWS session validation failed.[/red]")
+            console.print("\n[yellow]This usually means:[/yellow]")
+            console.print("1. Your AWS SSO token has expired")
+            console.print("2. Your AWS credentials are invalid")
+            console.print("3. Your profile configuration is incorrect")
+            console.print("\n[yellow]To fix this issue:[/yellow]")
+            console.print(
+                "1. Refresh your SSO login: [cyan]aws sso login --profile your-profile[/cyan]"
+            )
+            console.print("2. Or use a different profile: [cyan]--profile other-profile[/cyan]")
+            console.print("3. Verify your AWS configuration")
+            raise typer.Exit(1)
+
         logger.debug(
             f"Created AWS client manager: profile={profile_name}, region={effective_region}, caching={enable_caching}"
         )

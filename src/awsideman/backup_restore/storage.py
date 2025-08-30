@@ -13,6 +13,13 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+try:
+    from botocore.exceptions import NoCredentialsError, TokenRetrievalError
+
+    HAS_BOTOCORE = True
+except ImportError:
+    HAS_BOTOCORE = False
+
 from .interfaces import EncryptionProviderInterface, StorageBackendInterface, StorageEngineInterface
 from .models import BackupData, BackupMetadata, ValidationResult
 from .serialization import BackupSerializer
@@ -73,7 +80,7 @@ class StorageEngine(StorageEngineInterface):
                 logger.debug(f"Compressed backup data for {backup_id}")
 
             # Encrypt if provider is available
-            encryption_metadata = {}
+            encryption_metadata: Dict[str, Any] = {}
             if self.encryption_provider:
                 serialized_data, encryption_metadata = await self.encryption_provider.encrypt(
                     serialized_data
@@ -164,6 +171,12 @@ class StorageEngine(StorageEngineInterface):
             return backup_data
 
         except Exception as e:
+            # Check for authentication errors first
+            if HAS_BOTOCORE and isinstance(e, (TokenRetrievalError, NoCredentialsError)):
+                logger.error(f"Authentication error retrieving backup {backup_id}: {e}")
+                # Re-raise authentication errors so they can be handled properly
+                raise
+
             logger.error(f"Failed to retrieve backup {backup_id}: {e}")
             return None
 
@@ -281,9 +294,9 @@ class StorageEngine(StorageEngineInterface):
         try:
             logger.info(f"Verifying integrity of backup {backup_id}")
 
-            errors = []
-            warnings = []
-            details = {}
+            errors: List[str] = []
+            warnings: List[str] = []
+            details: Dict[str, Any] = {}
 
             # Check if backup exists
             metadata_key = f"backups/{backup_id}/metadata.json"

@@ -54,6 +54,12 @@ def create_backup(
         "--include-inactive",
         help="Include inactive users in backup (overrides config default)",
     ),
+    skip_duplicate_check: bool = typer.Option(
+        False, "--skip-duplicate-check", help="Skip duplicate backup detection"
+    ),
+    delete_duplicates: bool = typer.Option(
+        False, "--delete-duplicates", help="Delete duplicate backups if found (use with caution)"
+    ),
     output_format: str = typer.Option(
         "table", "--format", "-f", help="Output format: table or json"
     ),
@@ -177,6 +183,8 @@ def create_backup(
             include_inactive_users=include_inactive,
             encryption_enabled=not no_encryption,
             compression_enabled=not no_compression,
+            skip_duplicate_check=skip_duplicate_check,
+            delete_duplicates=delete_duplicates,
         )
 
         # Initialize storage backend
@@ -342,9 +350,16 @@ def create_backup(
                         )
                     # Remove the "Unknown" case - don't display size if it can't be calculated
             else:
-                # Backup was skipped (no changes)
-                console.print("[blue]No changes detected since last backup[/blue]")
-                console.print("[green]Incremental backup skipped successfully![/green]")
+                # Backup was skipped (duplicate detected or no changes)
+                if "Duplicate backup detected" in backup_result.message:
+                    console.print(
+                        "[blue]Duplicate backup detected - no changes since last backup[/blue]"
+                    )
+                    console.print("[green]Backup skipped successfully![/green]")
+                else:
+                    console.print("[blue]No changes detected since last backup[/blue]")
+                    console.print("[green]Incremental backup skipped successfully![/green]")
+
                 if backup_result.warnings:
                     for warning in backup_result.warnings:
                         console.print(f"[yellow]Note: {warning}[/yellow]")

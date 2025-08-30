@@ -111,6 +111,33 @@ class AWSClientManager:
 
         self.session = boto3.Session(**session_kwargs)
 
+    def validate_session(self) -> bool:
+        """
+        Validate that the AWS session is active and credentials are valid.
+
+        This method performs a simple test call to verify that the session
+        can successfully make AWS API calls.
+
+        Returns:
+            True if the session is valid, False otherwise
+
+        Raises:
+            RuntimeError: If session is not initialized
+            Exception: If session validation fails
+        """
+        if self.session is None:
+            raise RuntimeError("Session not initialized")
+
+        try:
+            # Try to get caller identity using STS - this is a lightweight operation
+            # that will fail if credentials are invalid or expired
+            sts_client = self.session.client("sts")
+            sts_client.get_caller_identity()
+            return True
+        except Exception as e:
+            logger.debug(f"Session validation failed: {e}")
+            return False
+
     @classmethod
     def with_cache_integration(
         cls,

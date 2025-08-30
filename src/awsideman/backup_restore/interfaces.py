@@ -316,6 +316,34 @@ class CollectorInterface(ABC):
         """
         pass
 
+    @abstractmethod
+    async def validate_cross_account_access(
+        self, cross_account_configs: List[Any]
+    ) -> ValidationResult:
+        """
+        Validate cross-account access configurations.
+
+        Args:
+            cross_account_configs: List of cross-account configuration objects
+
+        Returns:
+            ValidationResult containing validation status and details
+        """
+        pass
+
+    @abstractmethod
+    async def collect_cross_account_data(self, options: BackupOptions) -> Dict[str, BackupData]:
+        """
+        Collect data from multiple accounts using cross-account configurations.
+
+        Args:
+            options: Backup options including cross-account configurations
+
+        Returns:
+            Dictionary mapping account IDs to their backup data
+        """
+        pass
+
 
 class ExportImportManagerInterface(ABC):
     """Interface for export and import operations."""
@@ -791,7 +819,7 @@ class PerformanceOptimizerInterface(ABC):
 
     @abstractmethod
     async def process_parallel_collection(
-        self, collection_tasks: List[Any], *args, **kwargs
+        self, collection_tasks: List[Any], *args: Any, **kwargs: Any
     ) -> List[Any]:
         """
         Process data collection tasks in parallel.

@@ -16,6 +16,7 @@ import aiofiles.os
 
 try:
     import aioboto3
+    from botocore.exceptions import NoCredentialsError, TokenRetrievalError
 
     HAS_BOTO3 = True
 except ImportError:
@@ -339,6 +340,12 @@ class S3StorageBackend(StorageBackendInterface):
             return True
 
         except Exception as e:
+            # Check for authentication errors first
+            if isinstance(e, (TokenRetrievalError, NoCredentialsError)):
+                logger.error(f"Authentication error writing to S3 key {key}: {e}")
+                # Re-raise authentication errors so they can be handled properly
+                raise
+
             logger.error(f"Failed to write data to S3 key {key}: {e}")
             return False
 
@@ -364,6 +371,12 @@ class S3StorageBackend(StorageBackendInterface):
             return data
 
         except Exception as e:
+            # Check for authentication errors first
+            if isinstance(e, (TokenRetrievalError, NoCredentialsError)):
+                logger.error(f"Authentication error reading S3 key {key}: {e}")
+                # Re-raise authentication errors so they can be handled properly
+                raise
+
             if "NoSuchKey" in str(e):
                 logger.debug(f"S3 key not found: {s3_key}")
             else:
@@ -391,6 +404,12 @@ class S3StorageBackend(StorageBackendInterface):
             return True
 
         except Exception as e:
+            # Check for authentication errors first
+            if isinstance(e, (TokenRetrievalError, NoCredentialsError)):
+                logger.error(f"Authentication error deleting S3 key {key}: {e}")
+                # Re-raise authentication errors so they can be handled properly
+                raise
+
             logger.error(f"Failed to delete S3 key {key}: {e}")
             return False
 

@@ -220,15 +220,54 @@ class BackupManager(BackupManagerInterface):
                 if cross_account_data:
                     await self._merge_cross_account_data(backup_data, cross_account_data)
 
-            # Generate unique backup ID
+            # Step 5: Detect duplicates before creating metadata (if enabled)
+            if not options.skip_duplicate_check:
+                await self._update_progress(operation_id, 5, "Checking for duplicates")
+                duplicate_backup_id = await self._detect_duplicate_backup(backup_data)
+
+                if duplicate_backup_id:
+                    logger.info(f"Duplicate backup detected, identical to {duplicate_backup_id}")
+
+                    # Handle duplicate based on options
+                    if options.delete_duplicates:
+                        logger.info(f"Deleting duplicate backup {duplicate_backup_id}")
+                        try:
+                            await self.storage_engine.delete_backup(duplicate_backup_id)
+                            logger.info(
+                                f"Successfully deleted duplicate backup {duplicate_backup_id}"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to delete duplicate backup {duplicate_backup_id}: {e}"
+                            )
+
+                    await self._complete_operation(
+                        operation_id,
+                        True,
+                        f"Duplicate backup detected, identical to {duplicate_backup_id}",
+                    )
+
+                    return BackupResult(
+                        success=True,
+                        backup_id=None,
+                        message=f"Duplicate backup detected, identical to {duplicate_backup_id}",
+                        warnings=["Backup skipped - no changes detected since last backup"],
+                        metadata=None,
+                        duration=datetime.now() - start_time,
+                    )
+            else:
+                await self._update_progress(operation_id, 5, "Skipping duplicate check")
+                logger.info("Duplicate detection skipped by user request")
+
+            # Step 6: Generate unique backup ID
             backup_id = f"{options.backup_type.value}-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
-            # Step 5: Create and populate metadata
-            await self._update_progress(operation_id, 5, "Creating metadata")
+            # Step 7: Create and populate metadata
+            await self._update_progress(operation_id, 7, "Creating metadata")
             backup_data.metadata = self._create_backup_metadata(backup_id, options, backup_data)
 
-            # Step 6: Validate backup data
-            await self._update_progress(operation_id, 6, "Validating backup data")
+            # Step 8: Validate backup data
+            await self._update_progress(operation_id, 8, "Validating backup data")
             self._active_operations[operation_id]["status"] = "validating"
 
             validation_result = await self.validator.validate_backup_data(backup_data)
@@ -246,8 +285,8 @@ class BackupManager(BackupManagerInterface):
                         warnings=validation_result.warnings,
                     )
 
-            # Step 7: Optimize backup data for storage
-            await self._update_progress(operation_id, 7, "Optimizing backup data")
+            # Step 9: Optimize backup data for storage
+            await self._update_progress(operation_id, 9, "Optimizing backup data")
             self._active_operations[operation_id]["status"] = "optimizing"
 
             try:
@@ -267,8 +306,8 @@ class BackupManager(BackupManagerInterface):
                 )
                 optimization_metadata = {}
 
-            # Step 8: Store backup
-            await self._update_progress(operation_id, 8, "Storing backup")
+            # Step 10: Store backup
+            await self._update_progress(operation_id, 10, "Storing backup")
             self._active_operations[operation_id]["status"] = "storing"
 
             # Store backup data
@@ -280,8 +319,8 @@ class BackupManager(BackupManagerInterface):
                     errors=["Storage operation failed"],
                 )
 
-            # Step 9: Verify stored backup integrity
-            await self._update_progress(operation_id, 9, "Verifying integrity")
+            # Step 11: Verify stored backup integrity
+            await self._update_progress(operation_id, 11, "Verifying integrity")
             integrity_result = await self.storage_engine.verify_integrity(stored_backup_id)
             if not integrity_result.is_valid:
                 logger.error(f"Backup integrity verification failed for {stored_backup_id}")
@@ -502,7 +541,7 @@ class BackupManager(BackupManagerInterface):
 
     def _calculate_backup_steps(self, options: BackupOptions) -> int:
         """Calculate total number of steps for progress tracking."""
-        base_steps = 8  # validate, cross-account-validate, collect, cross-account-collect, metadata, validate, store, verify
+        base_steps = 11  # validate, cross-account-validate, collect, cross-account-collect, duplicate-check, metadata, validate, optimize, store, verify
 
         # Add steps for cross-account operations
         if options.cross_account_configs:
@@ -635,7 +674,7 @@ class BackupManager(BackupManagerInterface):
 
         return relationships
 
-    async def _update_progress(self, operation_id: str, step: int, message: str):
+    async def _update_progress(self, operation_id: str, step: int, message: str) -> None:
         """Update progress for an operation."""
         if self.progress_reporter:
             await self.progress_reporter.update_progress(operation_id, step, message)
@@ -643,7 +682,7 @@ class BackupManager(BackupManagerInterface):
         if self.backup_monitor:
             await self.backup_monitor.update_operation_progress(operation_id, step, message)
 
-    async def _complete_operation(self, operation_id: str, success: bool, message: str):
+    async def _complete_operation(self, operation_id: str, success: bool, message: str) -> None:
         """Complete an operation."""
         if self.progress_reporter:
             await self.progress_reporter.complete_operation(operation_id, success, message)
@@ -728,3 +767,183 @@ class BackupManager(BackupManagerInterface):
             f"{len(main_backup.groups)} groups, {len(main_backup.permission_sets)} permission sets, "
             f"{len(main_backup.assignments)} assignments"
         )
+
+    async def _detect_duplicate_backup(self, current_backup: BackupData) -> Optional[str]:
+        """
+        Detect if the current backup is a duplicate of the most recent backup.
+
+        This method performs a comprehensive comparison between the current backup data
+        and the most recent stored backup to determine if they are identical.
+
+        Args:
+            current_backup: The backup data that was just collected
+
+        Returns:
+            Backup ID of the duplicate if found, None if no duplicate detected
+        """
+        try:
+            # Get the most recent backup
+            recent_backups = await self.storage_engine.list_backups()
+            if not recent_backups:
+                logger.debug("No recent backups found for duplicate detection")
+                return None
+
+            # Sort by timestamp and get the most recent
+            recent_backups.sort(key=lambda x: x.timestamp, reverse=True)
+            latest_backup_metadata = recent_backups[0]
+
+            logger.debug(
+                f"Comparing against most recent backup: {latest_backup_metadata.backup_id} from {latest_backup_metadata.timestamp}"
+            )
+
+            if not latest_backup_metadata:
+                return None
+
+            # Load the actual backup data for comparison
+            latest_backup_data = await self.storage_engine.retrieve_backup(
+                latest_backup_metadata.backup_id
+            )
+            if not latest_backup_data:
+                logger.warning(
+                    f"Could not load latest backup {latest_backup_metadata.backup_id} for comparison"
+                )
+                return None
+
+            # Compare resource counts first (quick check)
+            current_counts = {
+                "users": len(current_backup.users),
+                "groups": len(current_backup.groups),
+                "permission_sets": len(current_backup.permission_sets),
+                "assignments": len(current_backup.assignments),
+            }
+
+            latest_counts = latest_backup_data.metadata.resource_counts or {}
+
+            # If resource counts don't match, definitely not a duplicate
+            if current_counts != latest_counts:
+                logger.debug("Resource counts differ, not a duplicate")
+                return None
+
+            # If counts match, perform deeper content comparison
+            # This is more expensive but necessary for accurate duplicate detection
+
+            # Compare users (by user_name and attributes)
+            if not self._compare_users(current_backup.users, latest_backup_data.users):
+                logger.debug("User data differs, not a duplicate")
+                return None
+
+            # Compare groups (by display_name and members)
+            if not self._compare_groups(current_backup.groups, latest_backup_data.groups):
+                logger.debug("Group data differs, not a duplicate")
+                return None
+
+            # Compare permission sets (by name and attributes)
+            if not self._compare_permission_sets(
+                current_backup.permission_sets, latest_backup_data.permission_sets
+            ):
+                logger.debug("Permission set data differs, not a duplicate")
+                return None
+
+            # Compare assignments (by unique combination of fields)
+            if not self._compare_assignments(
+                current_backup.assignments, latest_backup_data.assignments
+            ):
+                logger.debug("Assignment data differs, not a duplicate")
+                return None
+
+            # If we get here, all data is identical - this is a duplicate
+            logger.info(
+                f"Duplicate backup detected: identical to {latest_backup_metadata.backup_id}"
+            )
+            return latest_backup_metadata.backup_id
+
+        except Exception as e:
+            logger.warning(f"Error during duplicate detection: {e}")
+            return None
+
+    def _compare_users(self, current_users: List, latest_users: List) -> bool:
+        """Compare user data for duplicate detection."""
+        if len(current_users) != len(latest_users):
+            return False
+
+        # Create lookup maps for efficient comparison
+        current_user_map = {user.user_name: user for user in current_users}
+        latest_user_map = {user.user_name: user for user in latest_users}
+
+        for user_name, current_user in current_user_map.items():
+            if user_name not in latest_user_map:
+                return False
+            latest_user = latest_user_map[user_name]
+
+            # Compare key attributes that would indicate changes
+            if (
+                current_user.display_name != latest_user.display_name
+                or current_user.active != latest_user.active
+                or current_user.email != latest_user.email
+            ):
+                return False
+
+        return True
+
+    def _compare_groups(self, current_groups: List, latest_groups: List) -> bool:
+        """Compare group data for duplicate detection."""
+        if len(current_groups) != len(latest_groups):
+            return False
+
+        # Create lookup maps for efficient comparison
+        current_group_map = {group.display_name: group for group in current_groups}
+        latest_group_map = {group.display_name: group for group in latest_groups}
+
+        for group_name, current_group in current_group_map.items():
+            if group_name not in latest_group_map:
+                return False
+            latest_group = latest_group_map[group_name]
+
+            # Compare key attributes and members
+            if current_group.description != latest_group.description or set(
+                current_group.members
+            ) != set(latest_group.members):
+                return False
+
+        return True
+
+    def _compare_permission_sets(self, current_ps: List, latest_ps: List) -> bool:
+        """Compare permission set data for duplicate detection."""
+        if len(current_ps) != len(latest_ps):
+            return False
+
+        # Create lookup maps for efficient comparison
+        current_ps_map = {ps.name: ps for ps in current_ps}
+        latest_ps_map = {ps.name: ps for ps in latest_ps}
+
+        for ps_name, current_ps_obj in current_ps_map.items():
+            if ps_name not in latest_ps_map:
+                return False
+            latest_ps_obj = latest_ps_map[ps_name]
+
+            # Compare key attributes
+            if (
+                current_ps_obj.description != latest_ps_obj.description
+                or current_ps_obj.relay_state != latest_ps_obj.relay_state
+            ):
+                return False
+
+        return True
+
+    def _compare_assignments(self, current_assignments: List, latest_assignments: List) -> bool:
+        """Compare assignment data for duplicate detection."""
+        if len(current_assignments) != len(latest_assignments):
+            return False
+
+        # Create lookup maps for efficient comparison
+        current_assignment_map = {
+            (a.account_id, a.permission_set_arn, a.principal_type, a.principal_id): a
+            for a in current_assignments
+        }
+        latest_assignment_map = {
+            (a.account_id, a.permission_set_arn, a.principal_type, a.principal_id): a
+            for a in latest_assignments
+        }
+
+        # All assignments should be identical
+        return current_assignment_map == latest_assignment_map

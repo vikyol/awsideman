@@ -316,21 +316,65 @@ class IdentityCenterCollector(CollectorInterface):
         assignments = []
 
         try:
-            # Get all accounts from Organizations
-            accounts = await self._get_organization_accounts()
-
-            # Get all permission sets
+            # Get all permission sets first
             permission_set_arns = await self._get_permission_set_arns()
 
-            # Use parallel processing to collect assignments
-            if options.parallel_collection:
-                assignments = await self._collect_assignments_parallel(
-                    accounts, permission_set_arns
-                )
-            else:
-                assignments = await self._collect_assignments_sequential(
-                    accounts, permission_set_arns
-                )
+            # For each permission set, get the accounts where it's provisioned
+            for ps_arn in permission_set_arns:
+                try:
+                    # Get accounts where this permission set is provisioned
+                    accounts_response = (
+                        self.identity_center_client.list_accounts_for_provisioned_permission_set(
+                            InstanceArn=self.instance_arn,
+                            PermissionSetArn=ps_arn,
+                        )
+                    )
+
+                    provisioned_accounts = accounts_response.get("AccountIds", [])
+
+                    # For each provisioned account, get assignments
+                    for account_id in provisioned_accounts:
+                        try:
+                            # Get all assignments for this account and permission set
+                            paginator = self.identity_center_client.get_paginator(
+                                "list_account_assignments"
+                            )
+                            page_iterator = paginator.paginate(
+                                InstanceArn=self.instance_arn,
+                                AccountId=account_id,
+                                PermissionSetArn=ps_arn,
+                            )
+
+                            for page in page_iterator:
+                                for assignment in page.get("AccountAssignments", []):
+                                    assignments.append(
+                                        AssignmentData(
+                                            account_id=account_id,
+                                            permission_set_arn=ps_arn,
+                                            principal_type=assignment["PrincipalType"],
+                                            principal_id=assignment["PrincipalId"],
+                                        )
+                                    )
+
+                        except ClientError as e:
+                            # Some accounts might not have assignments, which is normal
+                            if e.response["Error"]["Code"] not in [
+                                "ResourceNotFoundException",
+                                "AccessDeniedException",
+                            ]:
+                                logger.warning(
+                                    f"Failed to get assignments for account {account_id}: {e}"
+                                )
+
+                except ClientError as e:
+                    # Some permission sets might not be provisioned anywhere
+                    if e.response["Error"]["Code"] not in [
+                        "ResourceNotFoundException",
+                        "AccessDeniedException",
+                    ]:
+                        logger.warning(
+                            f"Failed to get provisioned accounts for permission set {ps_arn}: {e}"
+                        )
 
             self._collection_stats["assignments"]["count"] = len(assignments)
             self._collection_stats["assignments"]["duration"] = time.time() - start_time
@@ -421,7 +465,7 @@ class IdentityCenterCollector(CollectorInterface):
 
         # Collect all resource types in parallel if enabled
         if account_options.parallel_collection:
-            tasks = []
+            tasks: List[Any] = []
 
             if (
                 ResourceType.ALL in account_options.resource_types
@@ -449,17 +493,20 @@ class IdentityCenterCollector(CollectorInterface):
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Process results
-            users = results[0] if len(results) > 0 and not isinstance(results[0], Exception) else []
-            groups = (
-                results[1] if len(results) > 1 and not isinstance(results[1], Exception) else []
-            )
-            permission_sets = (
-                results[2] if len(results) > 2 and not isinstance(results[2], Exception) else []
-            )
-            assignments = (
-                results[3] if len(results) > 3 and not isinstance(results[3], Exception) else []
-            )
+            # Process results with proper type handling
+            users: List[UserData] = []
+            groups: List[GroupData] = []
+            permission_sets: List[PermissionSetData] = []
+            assignments: List[AssignmentData] = []
+
+            if len(results) > 0 and not isinstance(results[0], Exception):
+                users = results[0]  # type: ignore[assignment]
+            if len(results) > 1 and not isinstance(results[1], Exception):
+                groups = results[1]  # type: ignore[assignment]
+            if len(results) > 2 and not isinstance(results[2], Exception):
+                permission_sets = results[2]  # type: ignore[assignment]
+            if len(results) > 3 and not isinstance(results[3], Exception):
+                assignments = results[3]  # type: ignore[assignment]
 
         else:
             # Sequential collection
@@ -537,9 +584,9 @@ class IdentityCenterCollector(CollectorInterface):
                 details={"validated_accounts": 0},
             )
 
-        errors = []
-        warnings = []
-        details = {"validated_accounts": len(configs), "account_results": []}
+        errors: List[str] = []
+        warnings: List[str] = []
+        details: Dict[str, Any] = {"validated_accounts": len(configs), "account_results": []}
 
         # Validate boundary conditions first
         boundary_result = await self.cross_account_manager.validate_cross_account_boundaries(
@@ -619,7 +666,7 @@ class IdentityCenterCollector(CollectorInterface):
 
         # Collect all resource types in parallel if enabled
         if incremental_options.parallel_collection:
-            tasks = []
+            tasks: List[Any] = []
 
             if (
                 ResourceType.ALL in incremental_options.resource_types
@@ -647,17 +694,20 @@ class IdentityCenterCollector(CollectorInterface):
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Process results
-            users = results[0] if len(results) > 0 and not isinstance(results[0], Exception) else []
-            groups = (
-                results[1] if len(results) > 1 and not isinstance(results[1], Exception) else []
-            )
-            permission_sets = (
-                results[2] if len(results) > 2 and not isinstance(results[2], Exception) else []
-            )
-            assignments = (
-                results[3] if len(results) > 3 and not isinstance(results[3], Exception) else []
-            )
+            # Process results with proper type handling
+            users: List[UserData] = []
+            groups: List[GroupData] = []
+            permission_sets: List[PermissionSetData] = []
+            assignments: List[AssignmentData] = []
+
+            if len(results) > 0 and not isinstance(results[0], Exception):
+                users = results[0]  # type: ignore[assignment]
+            if len(results) > 1 and not isinstance(results[1], Exception):
+                groups = results[1]  # type: ignore[assignment]
+            if len(results) > 2 and not isinstance(results[2], Exception):
+                permission_sets = results[2]  # type: ignore[assignment]
+            if len(results) > 3 and not isinstance(results[3], Exception):
+                assignments = results[3]  # type: ignore[assignment]
 
         else:
             # Sequential collection

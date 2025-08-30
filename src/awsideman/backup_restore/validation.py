@@ -7,6 +7,7 @@ used in the backup-restore system, ensuring data integrity and consistency.
 
 import re
 from datetime import datetime
+from typing import List
 
 from .models import (
     AssignmentData,
@@ -193,8 +194,8 @@ class DataValidator:
         Returns:
             ValidationResult with validation status and details
         """
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         # Validate target resources
         if not options.target_resources:
@@ -420,8 +421,8 @@ class DataValidator:
         Returns:
             ValidationResult with validation status and details
         """
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         # Validate required fields
         if not assignment.account_id:

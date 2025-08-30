@@ -486,6 +486,11 @@ class TestIdentityCenterCollector:
             with patch.object(collector, "_get_permission_set_arns") as mock_get_ps_arns:
                 mock_get_ps_arns.return_value = ["arn:aws:sso:::permissionSet/test-instance/ps-1"]
 
+                # Mock the accounts where permission set is provisioned
+                mock_identity_center_client.list_accounts_for_provisioned_permission_set.return_value = {
+                    "AccountIds": ["123456789012", "123456789013"]
+                }
+
                 # Mock assignment collection
                 mock_paginator = Mock()
                 mock_page_iterator = [
@@ -521,6 +526,11 @@ class TestIdentityCenterCollector:
 
             with patch.object(collector, "_get_permission_set_arns") as mock_get_ps_arns:
                 mock_get_ps_arns.return_value = ["arn:aws:sso:::permissionSet/test-instance/ps-1"]
+
+                # Mock the accounts where permission set is provisioned
+                mock_identity_center_client.list_accounts_for_provisioned_permission_set.return_value = {
+                    "AccountIds": ["123456789012"]
+                }
 
                 # Mock no assignments
                 mock_paginator = Mock()

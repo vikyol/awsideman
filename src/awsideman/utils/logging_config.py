@@ -39,7 +39,7 @@ class LoggingConfig:
     format_type: LogFormat = LogFormat.DETAILED
     enable_file_logging: bool = True
     enable_console_logging: bool = True
-    log_directory: str = "logs"
+    log_directory: str = ".awsideman/logs"
     log_filename: str = "awsideman-status.log"
     max_file_size_mb: int = 10
     backup_count: int = 5

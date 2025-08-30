@@ -34,7 +34,7 @@ class TestLoggingConfig:
         assert config.format_type == LogFormat.DETAILED
         assert config.enable_file_logging is True
         assert config.enable_console_logging is True
-        assert config.log_directory == "logs"
+        assert config.log_directory == ".awsideman/logs"
         assert config.log_filename == "awsideman-status.log"
         assert config.max_file_size_mb == 10
         assert config.backup_count == 5

@@ -107,6 +107,7 @@ class BackupMetadata:
     checksum: Optional[str] = None
     storage_backend: Optional[str] = None  # 'filesystem' or 's3'
     storage_location: Optional[str] = None  # Path or bucket/prefix
+    optimization_info: Optional[Dict[str, Any]] = None  # Performance optimization metadata
 
     def __post_init__(self):
         """Post-initialization validation."""
@@ -143,6 +144,7 @@ class BackupMetadata:
             "checksum": self.checksum,
             "storage_backend": self.storage_backend,
             "storage_location": self.storage_location,
+            "optimization_info": self.optimization_info,
         }
 
     @classmethod
@@ -163,6 +165,7 @@ class BackupMetadata:
             checksum=data.get("checksum"),
             storage_backend=data.get("storage_backend"),
             storage_location=data.get("storage_location"),
+            optimization_info=data.get("optimization_info"),
         )
 
 
@@ -426,6 +429,8 @@ class BackupOptions:
     cross_account_configs: List[CrossAccountConfig] = field(
         default_factory=list
     )  # For cross-account backups
+    skip_duplicate_check: bool = False  # Skip duplicate backup detection
+    delete_duplicates: bool = False  # Delete duplicate backups if found
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -438,6 +443,8 @@ class BackupOptions:
             "compression_enabled": self.compression_enabled,
             "parallel_collection": self.parallel_collection,
             "cross_account_configs": [config.to_dict() for config in self.cross_account_configs],
+            "skip_duplicate_check": self.skip_duplicate_check,
+            "delete_duplicates": self.delete_duplicates,
         }
 
     @classmethod
@@ -455,6 +462,8 @@ class BackupOptions:
                 CrossAccountConfig.from_dict(config)
                 for config in data.get("cross_account_configs", [])
             ],
+            skip_duplicate_check=data.get("skip_duplicate_check", False),
+            delete_duplicates=data.get("delete_duplicates", False),
         )
 
 
