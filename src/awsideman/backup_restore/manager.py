@@ -260,7 +260,7 @@ class BackupManager(BackupManagerInterface):
                 logger.info("Duplicate detection skipped by user request")
 
             # Step 6: Generate unique backup ID
-            backup_id = f"{options.backup_type.value}-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
+            backup_id = f"{options.backup_type.value}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}-{uuid.uuid4().hex[:8]}"
 
             # Step 7: Create and populate metadata
             await self._update_progress(operation_id, 7, "Creating metadata")

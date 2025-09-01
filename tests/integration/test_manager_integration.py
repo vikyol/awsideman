@@ -238,6 +238,7 @@ class TestBackupManagerIntegration:
                     resource_types=[ResourceType.USERS, ResourceType.GROUPS],
                     encryption_enabled=False,
                     compression_enabled=False,
+                    skip_duplicate_check=True,  # Disable duplicate detection for testing
                 )
 
                 result = await backup_manager_integration.create_backup(options)
@@ -245,7 +246,7 @@ class TestBackupManagerIntegration:
                 backup_ids.append(result.backup_id)
 
                 # Small delay to ensure different timestamps
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.01)
 
             # Verify all backups are listed
             backups = await backup_manager_integration.list_backups()
