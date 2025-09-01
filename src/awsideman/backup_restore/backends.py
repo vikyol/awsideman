@@ -35,16 +35,22 @@ class FileSystemStorageBackend(StorageBackendInterface):
     file organization and metadata tracking.
     """
 
-    def __init__(self, base_path: str, create_dirs: bool = True):
+    def __init__(self, base_path: str, create_dirs: bool = True, profile: Optional[str] = None):
         """
         Initialize filesystem storage backend.
 
         Args:
             base_path: Base directory path for storing backups
             create_dirs: Whether to create directories if they don't exist
+            profile: AWS profile name for isolation
         """
         self.base_path = Path(base_path)
         self.create_dirs = create_dirs
+        self.profile = profile
+
+        # Add profile isolation
+        profile_name = profile or "default"
+        self.base_path = self.base_path / "profiles" / profile_name
 
         if create_dirs:
             self.base_path.mkdir(parents=True, exist_ok=True)
@@ -264,6 +270,7 @@ class S3StorageBackend(StorageBackendInterface):
         region_name: Optional[str] = None,
         endpoint_url: Optional[str] = None,
         profile_name: Optional[str] = None,
+        profile: Optional[str] = None,
     ):
         """
         Initialize S3 storage backend.
@@ -277,13 +284,24 @@ class S3StorageBackend(StorageBackendInterface):
             region_name: AWS region name
             endpoint_url: Custom S3 endpoint URL (for S3-compatible services)
             profile_name: AWS profile name (for SSO or named profiles)
+            profile: AWS profile name for isolation (adds to prefix)
         """
         if not HAS_BOTO3:
             raise ImportError("boto3 and aioboto3 are required for S3 storage backend")
 
         self.bucket_name = bucket_name
-        self.prefix = prefix.rstrip("/") + "/" if prefix else ""
         self.profile_name = profile_name
+        self.profile = profile
+
+        # Build prefix with profile isolation
+        # For S3, profile is mandatory - each account should have its own bucket/data
+        if not profile:
+            raise ValueError(
+                "Profile is required for S3 storage backend. Each AWS account should have its own S3 storage."
+            )
+
+        base_prefix = prefix.rstrip("/") + "/" if prefix else ""
+        self.prefix = f"{base_prefix}profiles/{profile}/"
 
         # AWS credentials and configuration
         self.aws_config = {

@@ -22,16 +22,18 @@ class FileBackend(CacheBackend):
     Maintains backward compatibility with existing cache files.
     """
 
-    def __init__(self, cache_dir: Optional[str] = None):
+    def __init__(self, cache_dir: Optional[str] = None, profile: Optional[str] = None):
         """
         Initialize file backend.
 
         Args:
             cache_dir: Optional custom cache directory path.
                       Defaults to ~/.awsideman/cache/
+            profile: AWS profile name for isolation
         """
         self.cache_dir = cache_dir
-        self.path_manager = CachePathManager(cache_dir)
+        self.profile = profile
+        self.path_manager = CachePathManager(cache_dir, profile)
         self.backend_type = "file"
 
         # Ensure cache directory exists

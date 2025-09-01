@@ -160,7 +160,9 @@ def get_profile_cache_config(profile_name: str) -> AdvancedCacheConfig:
         return get_default_cache_config()
 
 
-def create_cache_manager(config: Optional[AdvancedCacheConfig] = None) -> "CacheManager":
+def create_cache_manager(
+    config: Optional[AdvancedCacheConfig] = None, profile: Optional[str] = None
+) -> "CacheManager":
     """
     Create a unified cache manager instance (singleton pattern).
 
@@ -169,6 +171,7 @@ def create_cache_manager(config: Optional[AdvancedCacheConfig] = None) -> "Cache
 
     Args:
         config: Optional AdvancedCacheConfig instance (ignored for singleton)
+        profile: AWS profile name for isolation
 
     Returns:
         CacheManager singleton instance
@@ -177,10 +180,12 @@ def create_cache_manager(config: Optional[AdvancedCacheConfig] = None) -> "Cache
 
     # The CacheManager is a singleton, so we just return the instance
     # Configuration is handled internally by the singleton
-    logger.debug("Getting CacheManager singleton instance")
-    cache_manager = CacheManager()
+    logger.debug(f"Getting CacheManager singleton instance (profile: {profile or 'default'})")
+    cache_manager = CacheManager(profile=profile)
 
-    logger.info("Successfully retrieved unified cache manager singleton")
+    logger.info(
+        f"Successfully retrieved unified cache manager singleton (profile: {profile or 'default'})"
+    )
     return cache_manager
 
 
@@ -271,8 +276,10 @@ def create_aws_client_manager(
                 cache_config = get_default_cache_config()
 
         try:
-            cache_manager = create_cache_manager(cache_config)
-            logger.debug("Auto-configured cache manager for AWS client manager")
+            cache_manager = create_cache_manager(cache_config, profile)
+            logger.debug(
+                f"Auto-configured cache manager for AWS client manager (profile: {profile or 'default'})"
+            )
         except Exception as e:
             logger.warning(f"Failed to auto-configure cache manager: {e}")
 

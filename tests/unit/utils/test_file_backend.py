@@ -36,9 +36,9 @@ class TestFileBackend:
         """Test backend initialization with default cache directory."""
         backend = FileBackend()
         assert backend.backend_type == "file"
-        # Should use default cache directory
+        # Should use default cache directory with profile isolation
         cache_dir = backend.path_manager.get_cache_directory()
-        assert cache_dir.name == "cache"
+        assert cache_dir.name == "default"
 
     def test_init_directory_creation_error(self):
         """Test initialization error when cache directory cannot be created."""

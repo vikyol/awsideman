@@ -396,7 +396,10 @@ class TestS3StorageBackend:
         pytest.importorskip("aioboto3")
 
         return S3StorageBackend(
-            bucket_name="test-bucket", prefix="test-prefix", region_name="us-east-1"
+            bucket_name="test-bucket",
+            prefix="test-prefix",
+            region_name="us-east-1",
+            profile="test-profile",
         )
 
     @pytest.mark.asyncio
@@ -415,7 +418,7 @@ class TestS3StorageBackend:
             # Verify the call arguments
             call_kwargs = client.put_object.call_args[1]
             assert call_kwargs["Bucket"] == "test-bucket"
-            assert call_kwargs["Key"] == "test-prefix/test/data.bin"
+            assert call_kwargs["Key"] == "test-prefix/profiles/test-profile/test/data.bin"
             assert call_kwargs["Body"] == data
             assert call_kwargs["ServerSideEncryption"] == "AES256"
             assert "Metadata" in call_kwargs
@@ -426,7 +429,7 @@ class TestS3StorageBackend:
         pytest.importorskip("boto3")
         pytest.importorskip("aioboto3")
 
-        backend = S3StorageBackend(bucket_name="test-bucket")
+        backend = S3StorageBackend(bucket_name="test-bucket", profile="test-profile")
 
         # Create proper session and client mocks
         session = Mock()
@@ -452,7 +455,7 @@ class TestS3StorageBackend:
             assert result is True
             client.put_object.assert_called_once()
             call_kwargs = client.put_object.call_args[1]
-            assert call_kwargs["Key"] == "test/data.bin"  # No prefix
+            assert call_kwargs["Key"] == "profiles/test-profile/test/data.bin"  # No prefix
 
     @pytest.mark.asyncio
     async def test_write_data_error(self, s3_backend, mock_s3_session):
@@ -485,7 +488,7 @@ class TestS3StorageBackend:
 
             assert result == expected_data
             client.get_object.assert_called_once_with(
-                Bucket="test-bucket", Key="test-prefix/test/data.bin"
+                Bucket="test-bucket", Key="test-prefix/profiles/test-profile/test/data.bin"
             )
 
     @pytest.mark.asyncio
@@ -512,7 +515,7 @@ class TestS3StorageBackend:
 
             assert result is True
             client.delete_object.assert_called_once_with(
-                Bucket="test-bucket", Key="test-prefix/test/data.bin"
+                Bucket="test-bucket", Key="test-prefix/profiles/test-profile/test/data.bin"
             )
 
     @pytest.mark.asyncio
@@ -539,7 +542,7 @@ class TestS3StorageBackend:
 
             assert result is True
             client.head_object.assert_called_once_with(
-                Bucket="test-bucket", Key="test-prefix/test/data.bin"
+                Bucket="test-bucket", Key="test-prefix/profiles/test-profile/test/data.bin"
             )
 
     @pytest.mark.asyncio
@@ -578,7 +581,7 @@ class TestS3StorageBackend:
             assert metadata["size"] == 1024
             assert metadata["backend"] == "s3"
             assert metadata["bucket"] == "test-bucket"
-            assert metadata["key"] == "test-prefix/test/data.bin"
+            assert metadata["key"] == "test-prefix/profiles/test-profile/test/data.bin"
             assert metadata["custom_metadata"] == {"custom": "value"}
             assert "etag" in metadata
             assert "storage_class" in metadata
@@ -632,10 +635,11 @@ class TestS3StorageBackend:
             aws_secret_access_key="test-secret",
             region_name="eu-west-1",
             endpoint_url="https://custom.s3.endpoint",
+            profile="test-profile",
         )
 
         assert backend.bucket_name == "custom-bucket"
-        assert backend.prefix == "custom/prefix/"
+        assert backend.prefix == "custom/prefix/profiles/test-profile/"
         assert backend.aws_config["aws_access_key_id"] == "test-key"
         assert backend.aws_config["region_name"] == "eu-west-1"
         assert backend.aws_config["endpoint_url"] == "https://custom.s3.endpoint"
@@ -645,18 +649,18 @@ class TestS3StorageBackend:
         key = "test/file.bin"
         s3_key = s3_backend._get_s3_key(key)
 
-        assert s3_key == "test-prefix/test/file.bin"
+        assert s3_key == "test-prefix/profiles/test-profile/test/file.bin"
 
     def test_get_s3_key_without_prefix(self):
         """Test S3 key generation without prefix."""
         pytest.importorskip("boto3")
         pytest.importorskip("aioboto3")
 
-        backend = S3StorageBackend(bucket_name="test-bucket")
+        backend = S3StorageBackend(bucket_name="test-bucket", profile="test-profile")
         key = "test/file.bin"
         s3_key = backend._get_s3_key(key)
 
-        assert s3_key == "test/file.bin"
+        assert s3_key == "profiles/test-profile/test/file.bin"
 
 
 class TestStorageBackendFactory:
@@ -667,7 +671,7 @@ class TestStorageBackendFactory:
         backend = StorageBackendFactory.create_filesystem_backend("/tmp/test")
 
         assert isinstance(backend, FileSystemStorageBackend)
-        assert str(backend.base_path) == "/tmp/test"
+        assert str(backend.base_path) == "/tmp/test/profiles/default"
 
     def test_create_filesystem_backend_with_options(self):
         """Test creating filesystem backend with additional options."""
@@ -681,7 +685,7 @@ class TestStorageBackendFactory:
         pytest.importorskip("boto3")
         pytest.importorskip("aioboto3")
 
-        backend = StorageBackendFactory.create_s3_backend("test-bucket")
+        backend = StorageBackendFactory.create_s3_backend("test-bucket", profile="test-profile")
 
         assert isinstance(backend, S3StorageBackend)
         assert backend.bucket_name == "test-bucket"
@@ -692,12 +696,12 @@ class TestStorageBackendFactory:
         pytest.importorskip("aioboto3")
 
         backend = StorageBackendFactory.create_s3_backend(
-            "test-bucket", prefix="test-prefix", region_name="us-west-2"
+            "test-bucket", prefix="test-prefix", region_name="us-west-2", profile="test-profile"
         )
 
         assert isinstance(backend, S3StorageBackend)
         assert backend.bucket_name == "test-bucket"
-        assert backend.prefix == "test-prefix/"
+        assert backend.prefix == "test-prefix/profiles/test-profile/"
         assert backend.aws_config["region_name"] == "us-west-2"
 
     def test_create_backend_filesystem(self):
@@ -711,7 +715,9 @@ class TestStorageBackendFactory:
         pytest.importorskip("boto3")
         pytest.importorskip("aioboto3")
 
-        backend = StorageBackendFactory.create_backend("s3", bucket_name="test-bucket")
+        backend = StorageBackendFactory.create_backend(
+            "s3", bucket_name="test-bucket", profile="test-profile"
+        )
 
         assert isinstance(backend, S3StorageBackend)
 
@@ -722,7 +728,9 @@ class TestStorageBackendFactory:
         pytest.importorskip("boto3")
         pytest.importorskip("aioboto3")
 
-        backend2 = StorageBackendFactory.create_backend("S3", bucket_name="test-bucket")
+        backend2 = StorageBackendFactory.create_backend(
+            "S3", bucket_name="test-bucket", profile="test-profile"
+        )
 
         assert isinstance(backend1, FileSystemStorageBackend)
         assert isinstance(backend2, S3StorageBackend)

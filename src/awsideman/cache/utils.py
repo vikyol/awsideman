@@ -8,17 +8,22 @@ from typing import Optional
 class CachePathManager:
     """Manages cache directory structure and file path utilities."""
 
-    def __init__(self, base_cache_dir: Optional[str] = None):
+    def __init__(self, base_cache_dir: Optional[str] = None, profile: Optional[str] = None):
         """Initialize cache path manager.
 
         Args:
             base_cache_dir: Optional custom cache directory path.
                           Defaults to ~/.awsideman/cache/
+            profile: AWS profile name for isolation
         """
         if base_cache_dir:
             self.cache_dir = Path(base_cache_dir)
         else:
             self.cache_dir = Path.home() / ".awsideman" / "cache"
+
+        # Add profile isolation
+        profile_name = profile or "default"
+        self.cache_dir = self.cache_dir / "profiles" / profile_name
 
     def ensure_cache_directory(self) -> None:
         """Create cache directory if it doesn't exist.

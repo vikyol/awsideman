@@ -135,7 +135,9 @@ def preview_restore(
         # Initialize storage backend
         if storage_backend.lower() == "filesystem":
             storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
-            storage_backend_obj = FileSystemStorageBackend(base_path=storage_path)
+            storage_backend_obj = FileSystemStorageBackend(
+                base_path=storage_path, profile=profile_name
+            )
         elif storage_backend.lower() == "s3":
             if not storage_path:
                 console.print("[red]Error: S3 storage requires --storage-path parameter.[/red]")
@@ -147,7 +149,7 @@ def preview_restore(
             )
 
             # Configure S3 backend with profile support
-            s3_config = {"bucket_name": bucket_name, "prefix": prefix}
+            s3_config = {"bucket_name": bucket_name, "prefix": prefix, "profile": profile_name}
 
             # Use profile name for SSO and named profiles
             if profile_name:

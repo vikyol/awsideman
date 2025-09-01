@@ -92,7 +92,7 @@ class TestProfileCacheIntegration:
         mock_get_profile_config.assert_called_once_with("prod")
 
         # Verify that cache manager was created with profile-specific config
-        mock_create_cache.assert_called_once_with(mock_profile_config)
+        mock_create_cache.assert_called_once_with(mock_profile_config, "prod")
 
         # Verify that client manager was created with cache manager
         mock_client_manager_class.assert_called_once_with(
@@ -144,7 +144,7 @@ class TestProfileCacheIntegration:
         mock_get_default.assert_called_once()
 
         # Verify that cache manager was created with default config
-        mock_create_cache.assert_called_once_with(mock_default_config)
+        mock_create_cache.assert_called_once_with(mock_default_config, None)
 
         # Verify that client manager was created with cache manager
         mock_client_manager_class.assert_called_once_with(

@@ -522,7 +522,10 @@ class TestS3StorageBackend:
         pytest.importorskip("aioboto3")
 
         return S3StorageBackend(
-            bucket_name="test-bucket", prefix="test-prefix", region_name="us-east-1"
+            bucket_name="test-bucket",
+            prefix="test-prefix",
+            region_name="us-east-1",
+            profile="test-profile",
         )
 
     @pytest.mark.asyncio
@@ -542,7 +545,7 @@ class TestS3StorageBackend:
             # Verify the call arguments
             call_args = mock_s3_client.put_object.call_args
             assert call_args[1]["Bucket"] == "test-bucket"
-            assert call_args[1]["Key"] == "test-prefix/test/data.bin"
+            assert call_args[1]["Key"] == "test-prefix/profiles/test-profile/test/data.bin"
             assert call_args[1]["Body"] == data
 
     @pytest.mark.asyncio
@@ -563,7 +566,7 @@ class TestS3StorageBackend:
 
             assert result == expected_data
             mock_s3_client.get_object.assert_called_once_with(
-                Bucket="test-bucket", Key="test-prefix/test/data.bin"
+                Bucket="test-bucket", Key="test-prefix/profiles/test-profile/test/data.bin"
             )
 
     @pytest.mark.asyncio
@@ -593,7 +596,7 @@ class TestS3StorageBackend:
 
             assert result is True
             mock_s3_client.delete_object.assert_called_once_with(
-                Bucket="test-bucket", Key="test-prefix/test/data.bin"
+                Bucket="test-bucket", Key="test-prefix/profiles/test-profile/test/data.bin"
             )
 
     @pytest.mark.asyncio
@@ -608,7 +611,7 @@ class TestS3StorageBackend:
 
             assert result is True
             mock_s3_client.head_object.assert_called_once_with(
-                Bucket="test-bucket", Key="test-prefix/test/data.bin"
+                Bucket="test-bucket", Key="test-prefix/profiles/test-profile/test/data.bin"
             )
 
     @pytest.mark.asyncio
@@ -666,13 +669,13 @@ class TestStorageBackendFactory:
         backend = StorageBackendFactory.create_filesystem_backend("/tmp/test")
 
         assert isinstance(backend, FileSystemStorageBackend)
-        assert str(backend.base_path) == "/tmp/test"
+        assert str(backend.base_path) == "/tmp/test/profiles/default"
 
     def test_create_s3_backend(self):
         """Test creating S3 backend."""
         pytest.importorskip("boto3")
 
-        backend = StorageBackendFactory.create_s3_backend("test-bucket")
+        backend = StorageBackendFactory.create_s3_backend("test-bucket", profile="test-profile")
 
         assert isinstance(backend, S3StorageBackend)
         assert backend.bucket_name == "test-bucket"
@@ -687,7 +690,9 @@ class TestStorageBackendFactory:
         """Test creating backend via factory method - S3."""
         pytest.importorskip("boto3")
 
-        backend = StorageBackendFactory.create_backend("s3", bucket_name="test-bucket")
+        backend = StorageBackendFactory.create_backend(
+            "s3", bucket_name="test-bucket", profile="test-profile"
+        )
 
         assert isinstance(backend, S3StorageBackend)
 

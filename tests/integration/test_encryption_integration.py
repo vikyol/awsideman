@@ -122,7 +122,7 @@ class TestEncryptionIntegration:
         assert backup_id == sample_backup_data.metadata.backup_id
 
         # Verify files were created
-        backup_dir = Path(temp_storage_dir) / "backups" / backup_id
+        backup_dir = Path(temp_storage_dir) / "profiles" / "default" / "backups" / backup_id
         assert (backup_dir / "data").exists()
         assert (backup_dir / "metadata.json").exists()
 
@@ -164,7 +164,7 @@ class TestEncryptionIntegration:
         assert retrieved_backup.metadata.backup_id == backup_id
 
         # Verify that the stored data is encrypted by checking raw file
-        backup_dir = Path(temp_storage_dir) / "backups" / backup_id
+        backup_dir = Path(temp_storage_dir) / "profiles" / "default" / "backups" / backup_id
         with open(backup_dir / "data", "rb") as f:
             raw_data = f.read()
 
@@ -230,7 +230,7 @@ class TestEncryptionIntegration:
 
         # Verify that the stored data is NOT encrypted by checking raw file
         # Note: Data might still be compressed, so we need to decompress first
-        backup_dir = Path(temp_storage_dir) / "backups" / backup_id
+        backup_dir = Path(temp_storage_dir) / "profiles" / "default" / "backups" / backup_id
         with open(backup_dir / "data", "rb") as f:
             raw_data = f.read()
 

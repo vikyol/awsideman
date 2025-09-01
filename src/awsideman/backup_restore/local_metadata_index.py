@@ -28,12 +28,13 @@ class LocalMetadataIndex:
     - Offline access to backup information
     """
 
-    def __init__(self, index_path: str = None):
+    def __init__(self, index_path: str = None, profile: Optional[str] = None):
         """
         Initialize the local metadata index.
 
         Args:
             index_path: Path to store the metadata index (defaults to ~/.awsideman/metadata)
+            profile: AWS profile name for isolation
         """
         if index_path is None:
             from awsideman.utils.config import CONFIG_DIR
@@ -41,6 +42,10 @@ class LocalMetadataIndex:
             self.index_path = Path(CONFIG_DIR) / "metadata"
         else:
             self.index_path = Path(index_path)
+
+        # Add profile isolation
+        profile_name = profile or "default"
+        self.index_path = self.index_path / "profiles" / profile_name
 
         self.index_path.mkdir(parents=True, exist_ok=True)
         self.metadata_file = self.index_path / "backup_index.json"

@@ -54,12 +54,13 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             if hasattr(cls, "_init_kwargs"):
                 delattr(cls, "_init_kwargs")
 
-    def __init__(self, default_ttl: Optional[timedelta] = None):
+    def __init__(self, default_ttl: Optional[timedelta] = None, profile: Optional[str] = None):
         """
         Initialize the unified cache manager.
 
         Args:
             default_ttl: Default TTL for cache entries. Defaults to 15 minutes.
+            profile: AWS profile name for isolation
         """
         # Only initialize once (singleton pattern)
         if hasattr(self, "_initialized"):
@@ -71,6 +72,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
         self._initialized = True
         self._lock = threading.RLock()  # Reentrant lock for nested operations
         self._cache: Dict[str, Dict[str, Any]] = {}
+        self._profile = profile
 
         # Always use the stored kwargs from first creation for consistency
         if hasattr(self.__class__, "_init_kwargs") and self.__class__._init_kwargs:
@@ -113,9 +115,11 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
         try:
             from .backends.file import FileBackend
 
-            # Create file backend with default cache directory
-            self._backend = FileBackend()
-            logger.info("Initialized file backend for persistent caching")
+            # Create file backend with profile-specific cache directory
+            self._backend = FileBackend(profile=self._profile)
+            logger.info(
+                f"Initialized file backend for persistent caching (profile: {self._profile or 'default'})"
+            )
 
         except Exception as e:
             logger.warning(f"Failed to initialize file backend: {e}")

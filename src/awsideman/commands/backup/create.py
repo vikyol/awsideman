@@ -192,7 +192,9 @@ def create_backup(
             storage_path = storage_path or backup_config.get("storage", {}).get(
                 "filesystem", {}
             ).get("path", "~/.awsideman/backups")
-            backend_instance = FileSystemStorageBackend(base_path=storage_path)
+            backend_instance = FileSystemStorageBackend(
+                base_path=storage_path, profile=profile_name
+            )
         elif storage_backend.lower() == "s3":
             # Use configured S3 bucket if no storage path provided
             if not storage_path:
@@ -216,7 +218,7 @@ def create_backup(
                 storage_path.split("/", 1) if "/" in storage_path else (storage_path, "")
             )
             # Configure S3 backend with profile support
-            s3_config = {"bucket_name": bucket_name, "prefix": prefix}
+            s3_config = {"bucket_name": bucket_name, "prefix": prefix, "profile": profile_name}
 
             # Use profile name for SSO and named profiles
             if profile_name:
