@@ -384,9 +384,10 @@ def cache_status(
             from ...cache.utilities import create_cache_manager, get_profile_cache_config
 
             config = get_profile_cache_config(profile_param)
-            cache_manager = create_cache_manager(config)
+            cache_manager = create_cache_manager(config, profile=profile_param)
         else:
             # Try to get profile-specific cache manager for current profile
+            current_profile = None
             try:
                 from ...cache.utilities import get_profile_cache_config
                 from ...utils.config import Config
@@ -399,7 +400,7 @@ def cache_status(
                 if current_profile:
                     # Use profile-specific cache configuration
                     profile_config = get_profile_cache_config(current_profile)
-                    cache_manager = create_cache_manager(profile_config)
+                    cache_manager = create_cache_manager(profile_config, profile=current_profile)
                     console.print(
                         f"[dim]Using cache configuration for profile: {current_profile}[/dim]"
                     )

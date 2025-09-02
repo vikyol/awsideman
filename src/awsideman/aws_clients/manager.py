@@ -234,7 +234,7 @@ class AWSClientManager:
                     logger.warning(f"Could not auto-configure cache manager: {e}")
                     from ..cache.manager import CacheManager
 
-                    self.cache_manager = CacheManager()
+                    self.cache_manager = CacheManager(profile=self.profile)
             self._cached_client = CachedAwsClient(self, self.cache_manager)
         return self._cached_client
 
@@ -262,7 +262,7 @@ class AWSClientManager:
             from ..cache.aws_client import CachedIdentityCenterClient
             from ..cache.manager import CacheManager
 
-            cache_manager = self.cache_manager or CacheManager()
+            cache_manager = self.cache_manager or CacheManager(profile=self.profile)
             raw_client = self.get_raw_identity_center_client()
             return CachedIdentityCenterClient(raw_client, cache_manager)
         else:
@@ -280,7 +280,7 @@ class AWSClientManager:
             from ..cache.aws_client import CachedIdentityStoreClient
             from ..cache.manager import CacheManager
 
-            cache_manager = self.cache_manager or CacheManager()
+            cache_manager = self.cache_manager or CacheManager(profile=self.profile)
             raw_client = self.get_raw_identity_store_client()
             return CachedIdentityStoreClient(raw_client, cache_manager)
         else:

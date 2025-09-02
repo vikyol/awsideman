@@ -11,7 +11,6 @@ from ..common import (
     handle_aws_error,
     profile_option,
     region_option,
-    show_cache_info,
     validate_profile_with_cache,
 )
 from .helpers import console, get_single_key, validate_sso_instance
@@ -45,13 +44,23 @@ def list_users(
         # Extract and process standard command parameters
         profile, region, enable_caching = extract_standard_params(profile, region)
 
-        # Show cache information if verbose
-        show_cache_info(verbose)
-
         # Validate profile and get AWS client with cache integration
         profile_name, profile_data, aws_client = validate_profile_with_cache(
             profile=profile, enable_caching=enable_caching, region=region
         )
+
+        # Show cache information if verbose (using the same cache manager as the client)
+        if verbose:
+            cache_manager = aws_client.get_cache_manager()
+            if cache_manager:
+                stats = cache_manager.get_cache_stats()
+                console.print(
+                    f"[blue]Cache: {stats.get('backend_type', 'unknown')} backend, "
+                    f"{stats.get('total_entries', 0)} entries, "
+                    f"{stats.get('hit_rate', 0):.1f}% hit rate[/blue]"
+                )
+            else:
+                console.print("[blue]Cache: Disabled[/blue]")
 
         # Check if AWS_DEFAULT_REGION environment variable is set
         if os.environ.get("AWS_DEFAULT_REGION") and verbose:

@@ -43,6 +43,7 @@ class DynamoDBBackend(CacheBackend):
         self.table_name = table_name
         self.region = region
         self.profile = profile
+        self.backend_type = "dynamodb"
         self._client = None
         self._table = None
         self._table_exists = None  # Cache table existence check

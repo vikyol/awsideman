@@ -113,16 +113,25 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
     def _initialize_backend(self) -> None:
         """Initialize the persistent cache backend."""
         try:
-            from .backends.file import FileBackend
+            from .factory import BackendFactory
+            from .utilities import get_default_cache_config, get_profile_cache_config
 
-            # Create file backend with profile-specific cache directory
-            self._backend = FileBackend(profile=self._profile)
+            # Get the appropriate cache configuration
+            if self._profile:
+                config = get_profile_cache_config(self._profile)
+                logger.debug(f"Using profile-specific cache config for {self._profile}")
+            else:
+                config = get_default_cache_config()
+                logger.debug("Using default cache config")
+
+            # Create backend using BackendFactory with fallback
+            self._backend = BackendFactory.create_backend_with_fallback(config)
             logger.info(
-                f"Initialized file backend for persistent caching (profile: {self._profile or 'default'})"
+                f"Initialized {config.backend_type} backend for persistent caching (profile: {self._profile or 'default'})"
             )
 
         except Exception as e:
-            logger.warning(f"Failed to initialize file backend: {e}")
+            logger.warning(f"Failed to initialize cache backend: {e}")
             logger.info("Falling back to in-memory only caching")
             self._backend = None
 
@@ -137,6 +146,18 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                 self.default_ttl = int(self._manager._default_ttl.total_seconds())
                 self.max_size_mb = 100  # Default 100MB limit
                 self.max_size = 1000  # Default 1000 entries limit
+
+                # Get actual configuration values for encryption
+                self._actual_config = None
+                try:
+                    from .utilities import get_default_cache_config, get_profile_cache_config
+
+                    if manager._profile:
+                        self._actual_config = get_profile_cache_config(manager._profile)
+                    else:
+                        self._actual_config = get_default_cache_config()
+                except Exception:
+                    pass
 
             @property
             def backend_type(self):
@@ -156,7 +177,11 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
 
             @property
             def encryption_enabled(self):
-                """Dynamically check if backend has encryption enabled."""
+                """Get encryption status from actual configuration."""
+                if self._actual_config:
+                    return self._actual_config.encryption_enabled
+
+                # Fallback to checking actual cache files if no config available
                 if self._manager._backend and hasattr(self._manager._backend, "get_stats"):
                     try:
                         backend_stats = self._manager._backend.get_stats()
@@ -194,7 +219,11 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
 
             @property
             def encryption_type(self):
-                """Dynamically check encryption type."""
+                """Get encryption type from actual configuration."""
+                if self._actual_config:
+                    return self._actual_config.encryption_type
+
+                # Fallback to checking if encryption is enabled
                 if self.encryption_enabled:
                     return "aes"
                 return "none"
@@ -257,9 +286,16 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                 if self._backend and hasattr(self._backend, "get_stats"):
                     try:
                         backend_stats = self._backend.get_stats()
-                        backend_entries = backend_stats.get("total_entries", 0)
-                        backend_size_bytes = backend_stats.get("total_size_bytes", 0)
-                        backend_size_mb = backend_stats.get("total_size_mb", 0)
+                        # Map backend-specific fields to standard fields
+                        backend_entries = backend_stats.get(
+                            "total_entries", 0
+                        ) or backend_stats.get("item_count", 0)
+                        backend_size_bytes = backend_stats.get(
+                            "total_size_bytes", 0
+                        ) or backend_stats.get("table_size_bytes", 0)
+                        backend_size_mb = backend_stats.get("total_size_mb", 0) or (
+                            backend_size_bytes / (1024 * 1024) if backend_size_bytes > 0 else 0
+                        )
                         total_entries += backend_entries
                         logger.debug(
                             f"Backend stats: {backend_stats}, backend_entries: {backend_entries}, total_entries: {total_entries}"
@@ -290,7 +326,11 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                 # Return compatibility format
                 return {
                     "enabled": True,  # CacheManager is always enabled
-                    "backend_type": "file" if self._backend else "memory",
+                    "backend_type": (
+                        getattr(self._backend, "backend_type", "memory")
+                        if self._backend
+                        else "memory"
+                    ),
                     "total_entries": total_entries,
                     "valid_entries": total_entries - expired_count,
                     "expired_entries": expired_count,
@@ -416,8 +456,21 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                             }
                         )
 
-                # If we have a backend, also get entries from there
-                if self._backend and hasattr(self._backend, "path_manager"):
+                # If we have a backend with get_recent_entries method, use it
+                if self._backend and hasattr(self._backend, "get_recent_entries"):
+                    try:
+                        backend_entries = self._backend.get_recent_entries(limit)
+                        # Add backend entries to our list
+                        recent_entries.extend(backend_entries)
+                        # Sort all entries by creation time and limit
+                        recent_entries.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+                        return recent_entries[:limit]
+                    except Exception as e:
+                        logger.debug(f"Failed to get recent entries from backend: {e}")
+                        # Continue with file-based backend fallback if available
+
+                # Fallback: If we have a file-based backend, also get entries from there
+                elif self._backend and hasattr(self._backend, "path_manager"):
                     try:
                         # Get actual cache files from the backend
                         cache_files = self._backend.path_manager.list_cache_files()

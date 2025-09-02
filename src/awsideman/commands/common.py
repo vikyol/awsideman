@@ -176,6 +176,12 @@ def get_aws_client_manager(
         Configured AWSClientManager instance
     """
     try:
+        # Reset cache manager instance to ensure correct profile configuration
+        if enable_caching:
+            from ..cache.manager import CacheManager
+
+            CacheManager.reset_instance()
+
         aws_client = create_aws_client_manager(
             profile=profile, region=region, enable_caching=enable_caching, auto_configure_cache=True
         )
@@ -214,9 +220,12 @@ def handle_aws_error(error: Exception, operation: str, verbose: bool = False) ->
         console.print_exception()
 
 
-def get_cache_status_summary() -> Dict[str, Any]:
+def get_cache_status_summary(profile: Optional[str] = None) -> Dict[str, Any]:
     """
     Get a summary of current cache status for command output.
+
+    Args:
+        profile: AWS profile name for cache isolation
 
     Returns:
         Dictionary with cache status information
@@ -224,7 +233,7 @@ def get_cache_status_summary() -> Dict[str, Any]:
     try:
         from ..commands.cache.helpers import get_cache_manager
 
-        cache_manager = get_cache_manager()
+        cache_manager = get_cache_manager(profile=profile)
         stats = cache_manager.get_cache_stats()
 
         return {
@@ -238,15 +247,16 @@ def get_cache_status_summary() -> Dict[str, Any]:
         return {"enabled": False, "backend_type": "unknown", "total_entries": 0, "hit_rate": 0}
 
 
-def show_cache_info(verbose: bool = False) -> None:
+def show_cache_info(verbose: bool = False, profile: Optional[str] = None) -> None:
     """
     Show cache information if verbose mode is enabled.
 
     Args:
         verbose: Whether to show cache information
+        profile: AWS profile name for cache isolation
     """
     if verbose:
-        cache_status = get_cache_status_summary()
+        cache_status = get_cache_status_summary(profile=profile)
         if cache_status["enabled"]:
             console.print(
                 f"[blue]Cache: {cache_status['backend_type']} backend, "

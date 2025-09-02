@@ -58,19 +58,24 @@ def validate_cache_config(config: AdvancedCacheConfig) -> bool:
     return True
 
 
-def get_cache_manager() -> CacheManager:
+def get_cache_manager(profile: Optional[str] = None) -> CacheManager:
     """
     Get the unified cache manager singleton instance.
 
     This function now returns the CacheManager singleton,
     ensuring consistent cache behavior across all commands.
+
+    Args:
+        profile: AWS profile name for cache isolation
     """
     try:
-        # Use the new utility function to get the singleton
-        logger.debug("Getting unified cache manager singleton")
-        cache_manager = create_cache_manager()
+        # Use the new utility function to get the singleton with profile
+        logger.debug(f"Getting unified cache manager singleton (profile: {profile or 'default'})")
+        cache_manager = create_cache_manager(profile=profile)
 
-        logger.info("Successfully retrieved unified cache manager singleton")
+        logger.info(
+            f"Successfully retrieved unified cache manager singleton (profile: {profile or 'default'})"
+        )
         return cache_manager
 
     except Exception as e:
@@ -78,7 +83,7 @@ def get_cache_manager() -> CacheManager:
 
         # Fall back to creating a new singleton instance
         logger.info("Falling back to direct CacheManager instantiation")
-        return CacheManager()
+        return CacheManager(profile=profile)
 
 
 def get_aws_client_manager_with_cache(

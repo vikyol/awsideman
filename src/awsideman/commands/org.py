@@ -18,7 +18,6 @@ from .common import (
     handle_aws_error,
     profile_option,
     region_option,
-    show_cache_info,
 )
 
 app = typer.Typer(
@@ -89,9 +88,6 @@ def tree(
             profile, region, no_cache
         )
 
-        # Show cache information if verbose
-        show_cache_info(verbose)
-
         # Get AWS client manager with cache integration
         client_manager = get_aws_client_manager(
             profile=profile_param,
@@ -99,6 +95,20 @@ def tree(
             enable_caching=enable_caching,
             verbose=verbose,
         )
+
+        # Show cache information if verbose (using the same cache manager as the client)
+        if verbose:
+            cache_manager = client_manager.get_cache_manager()
+            if cache_manager:
+                stats = cache_manager.get_cache_stats()
+                if stats.get("enabled", False):
+                    console.print(
+                        f"[blue]Cache: {stats.get('backend_type', 'unknown')} backend, "
+                        f"{stats.get('total_entries', 0)} entries, "
+                        f"{stats.get('hit_rate', 0):.1f}% hit rate[/blue]"
+                    )
+                else:
+                    console.print("[blue]Cache: Disabled[/blue]")
         organizations_client = client_manager.get_organizations_client()
 
         # Build the organization hierarchy
@@ -139,9 +149,6 @@ def account(
             profile, region, no_cache
         )
 
-        # Show cache information if verbose
-        show_cache_info(verbose)
-
         # Validate account ID format (12-digit number)
         if not _is_valid_account_id(account_id):
             console.print(
@@ -156,6 +163,20 @@ def account(
             enable_caching=enable_caching,
             verbose=verbose,
         )
+
+        # Show cache information if verbose (using the same cache manager as the client)
+        if verbose:
+            cache_manager = client_manager.get_cache_manager()
+            if cache_manager:
+                stats = cache_manager.get_cache_stats()
+                if stats.get("enabled", False):
+                    console.print(
+                        f"[blue]Cache: {stats.get('backend_type', 'unknown')} backend, "
+                        f"{stats.get('total_entries', 0)} entries, "
+                        f"{stats.get('hit_rate', 0):.1f}% hit rate[/blue]"
+                    )
+                else:
+                    console.print("[blue]Cache: Disabled[/blue]")
         organizations_client = client_manager.get_organizations_client()
 
         # Get account details
@@ -198,9 +219,6 @@ def search(
             profile, region, no_cache
         )
 
-        # Show cache information if verbose
-        show_cache_info(verbose)
-
         # Parse tag filter if provided
         tag_filter = None
         if tag:
@@ -213,6 +231,20 @@ def search(
             enable_caching=enable_caching,
             verbose=verbose,
         )
+
+        # Show cache information if verbose (using the same cache manager as the client)
+        if verbose:
+            cache_manager = client_manager.get_cache_manager()
+            if cache_manager:
+                stats = cache_manager.get_cache_stats()
+                if stats.get("enabled", False):
+                    console.print(
+                        f"[blue]Cache: {stats.get('backend_type', 'unknown')} backend, "
+                        f"{stats.get('total_entries', 0)} entries, "
+                        f"{stats.get('hit_rate', 0):.1f}% hit rate[/blue]"
+                    )
+                else:
+                    console.print("[blue]Cache: Disabled[/blue]")
         organizations_client = client_manager.get_organizations_client()
 
         # Perform the search
@@ -267,9 +299,6 @@ def trace_policies(
             profile, region, no_cache
         )
 
-        # Show cache information if verbose
-        show_cache_info(verbose)
-
         # Validate account ID format (12-digit number)
         if not _is_valid_account_id(account_id):
             console.print(
@@ -284,6 +313,20 @@ def trace_policies(
             enable_caching=enable_caching,
             verbose=verbose,
         )
+
+        # Show cache information if verbose (using the same cache manager as the client)
+        if verbose:
+            cache_manager = client_manager.get_cache_manager()
+            if cache_manager:
+                stats = cache_manager.get_cache_stats()
+                if stats.get("enabled", False):
+                    console.print(
+                        f"[blue]Cache: {stats.get('backend_type', 'unknown')} backend, "
+                        f"{stats.get('total_entries', 0)} entries, "
+                        f"{stats.get('hit_rate', 0):.1f}% hit rate[/blue]"
+                    )
+                else:
+                    console.print("[blue]Cache: Disabled[/blue]")
         organizations_client = client_manager.get_organizations_client()
 
         # Initialize policy resolver
