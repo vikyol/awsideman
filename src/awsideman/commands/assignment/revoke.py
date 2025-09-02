@@ -123,14 +123,16 @@ def revoke_permission_set(
     account_pattern: Optional[str] = typer.Option(
         None, "--account-pattern", help="Regex pattern for account name matching"
     ),
-    principal_type: str = typer.Option(
-        "USER", "--principal-type", help="Principal type (USER or GROUP)"
-    ),
     force: bool = typer.Option(
         False, "--force", "-f", help="Force revocation without confirmation"
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview operations without making changes"
+    ),
+    skip_verification: bool = typer.Option(
+        False,
+        "--skip-verification",
+        help="Skip assignment existence verification (faster but less safe)",
     ),
     batch_size: int = typer.Option(
         10,
@@ -162,7 +164,7 @@ def revoke_permission_set(
         $ awsideman assignment revoke ReadOnlyAccess john.doe@company.com --filter "*"
 
         # Multi-account revocation with tag filter
-        $ awsideman assignment revoke PowerUserAccess developers --filter "tag:Environment=Production" --principal-type GROUP
+        $ awsideman assignment revoke PowerUserAccess developers --filter "tag:Environment=Production"
 
         # Multi-account revocation from specific accounts
         $ awsideman assignment revoke ViewOnlyAccess jane.doe@company.com --accounts "123456789012,987654321098"
@@ -213,10 +215,10 @@ def revoke_permission_set(
             permission_set_name=permission_set_name,
             principal_name=principal_name,
             account_id=account_id,
-            principal_type=principal_type,
             force=force,
             profile=profile,
             dry_run=dry_run,
+            skip_verification=skip_verification,
         )
     else:
         # Multi-account revocation with explicit accounts
@@ -235,7 +237,6 @@ def revoke_permission_set(
                 permission_set_name=permission_set_name,
                 principal_name=principal_name,
                 account_list=account_list,
-                principal_type=principal_type,
                 force=force,
                 dry_run=dry_run,
                 batch_size=batch_size,
@@ -249,7 +250,6 @@ def revoke_permission_set(
                 permission_set_name=permission_set_name,
                 principal_name=principal_name,
                 account_filter=account_filter,
-                principal_type=principal_type,
                 force=force,
                 dry_run=dry_run,
                 batch_size=batch_size,
@@ -263,7 +263,6 @@ def revoke_permission_set(
                 principal_name=principal_name,
                 ou_filter=ou_filter,
                 account_pattern=account_pattern,
-                principal_type=principal_type,
                 force=force,
                 dry_run=dry_run,
                 batch_size=batch_size,
@@ -276,7 +275,6 @@ def revoke_multi_account_with_filter(
     permission_set_name: str,
     principal_name: str,
     account_filter: str,
-    principal_type: str = "USER",
     force: bool = False,
     dry_run: bool = False,
     batch_size: int = 10,
@@ -289,7 +287,6 @@ def revoke_multi_account_with_filter(
         permission_set_name: Name of the permission set to revoke
         principal_name: Name of the principal (user or group)
         account_filter: Account filter string (* for all accounts, or tag:Key=Value)
-        principal_type: Type of principal (USER or GROUP)
         force: Whether to force revocation without confirmation
         dry_run: Whether to preview operations without making changes
         batch_size: Number of accounts to process concurrently
@@ -309,14 +306,6 @@ def revoke_multi_account_with_filter(
         console.print("[red]Error: Account filter cannot be empty.[/red]")
         raise typer.Exit(1)
 
-    # Validate principal type
-    if principal_type.upper() not in ["USER", "GROUP"]:
-        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
-        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
-        raise typer.Exit(1)
-
-    principal_type = principal_type.upper()
-
     # Validate batch size
     if batch_size <= 0:
         console.print("[red]Error: Batch size must be greater than 0.[/red]")
@@ -331,6 +320,38 @@ def revoke_multi_account_with_filter(
 
         # Create AWS client manager
         aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Auto-detect principal type
+        from ...bulk.resolver import ResourceResolver
+
+        resolver = ResourceResolver(
+            aws_client_manager=aws_client,
+            instance_arn=instance_arn,
+            identity_store_id=identity_store_id,
+        )
+
+        # Try to resolve as USER first, then GROUP if that fails
+        principal_result = resolver.resolve_principal_name(principal_name, "USER")
+        principal_type = "USER"
+
+        if not principal_result.success:
+            # Try as GROUP if USER failed
+            console.print(
+                f"[yellow]Principal '{principal_name}' not found as USER. Trying as GROUP...[/yellow]"
+            )
+            principal_result = resolver.resolve_principal_name(principal_name, "GROUP")
+            principal_type = "GROUP"
+
+            if not principal_result.success:
+                console.print(f"[red]Error: {principal_result.error_message}[/red]")
+                console.print(
+                    "[yellow]Use 'awsideman user list' or 'awsideman group list' to see available principals.[/yellow]"
+                )
+                raise typer.Exit(1)
+            else:
+                console.print(f"[green]Found '{principal_name}' as GROUP.[/green]")
+        else:
+            console.print(f"[green]Found '{principal_name}' as USER.[/green]")
 
         # Resolve accounts based on filter
         console.print(f"[blue]Resolving accounts using filter: {account_filter}[/blue]")
@@ -571,7 +592,6 @@ def revoke_multi_account_explicit(
     permission_set_name: str,
     principal_name: str,
     account_list: list,
-    principal_type: str = "USER",
     force: bool = False,
     dry_run: bool = False,
     batch_size: int = 10,
@@ -584,7 +604,6 @@ def revoke_multi_account_explicit(
         permission_set_name: Name of the permission set to revoke
         principal_name: Name of the principal (user or group)
         account_list: List of account IDs to revoke from
-        principal_type: Type of principal (USER or GROUP)
         force: Whether to force revocation without confirmation
         dry_run: Whether to preview operations without making changes
         batch_size: Number of accounts to process concurrently
@@ -604,14 +623,6 @@ def revoke_multi_account_explicit(
         console.print("[red]Error: Account list cannot be empty.[/red]")
         raise typer.Exit(1)
 
-    # Validate principal type
-    if principal_type.upper() not in ["USER", "GROUP"]:
-        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
-        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
-        raise typer.Exit(1)
-
-    principal_type = principal_type.upper()
-
     # Validate batch size
     if batch_size <= 0:
         console.print("[red]Error: Batch size must be greater than 0.[/red]")
@@ -626,6 +637,38 @@ def revoke_multi_account_explicit(
 
         # Create AWS client manager
         aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Auto-detect principal type
+        from ...bulk.resolver import ResourceResolver
+
+        resolver = ResourceResolver(
+            aws_client_manager=aws_client,
+            instance_arn=instance_arn,
+            identity_store_id=identity_store_id,
+        )
+
+        # Try to resolve as USER first, then GROUP if that fails
+        principal_result = resolver.resolve_principal_name(principal_name, "USER")
+        principal_type = "USER"
+
+        if not principal_result.success:
+            # Try as GROUP if USER failed
+            console.print(
+                f"[yellow]Principal '{principal_name}' not found as USER. Trying as GROUP...[/yellow]"
+            )
+            principal_result = resolver.resolve_principal_name(principal_name, "GROUP")
+            principal_type = "GROUP"
+
+            if not principal_result.success:
+                console.print(f"[red]Error: {principal_result.error_message}[/red]")
+                console.print(
+                    "[yellow]Use 'awsideman user list' or 'awsideman group list' to see available principals.[/yellow]"
+                )
+                raise typer.Exit(1)
+            else:
+                console.print(f"[green]Found '{principal_name}' as GROUP.[/green]")
+        else:
+            console.print(f"[green]Found '{principal_name}' as USER.[/green]")
 
         # Convert account IDs to AccountInfo objects
         from ...utils.models import AccountInfo
@@ -858,7 +901,6 @@ def revoke_multi_account_advanced(
     principal_name: str,
     ou_filter: Optional[str] = None,
     account_pattern: Optional[str] = None,
-    principal_type: str = "USER",
     force: bool = False,
     dry_run: bool = False,
     batch_size: int = 10,
@@ -872,7 +914,6 @@ def revoke_multi_account_advanced(
         principal_name: Name of the principal (user or group)
         ou_filter: Organizational unit path filter (e.g., 'Root/Production')
         account_pattern: Regex pattern for account name matching
-        principal_type: Type of principal (USER or GROUP)
         force: Whether to force revocation without confirmation
         dry_run: Whether to preview operations without making changes
         batch_size: Number of accounts to process concurrently
@@ -892,14 +933,6 @@ def revoke_multi_account_advanced(
         console.print("[red]Error: Either OU filter or account pattern must be specified.[/red]")
         raise typer.Exit(1)
 
-    # Validate principal type
-    if principal_type.upper() not in ["USER", "GROUP"]:
-        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
-        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
-        raise typer.Exit(1)
-
-    principal_type = principal_type.upper()
-
     # Validate batch size
     if batch_size <= 0:
         console.print("[red]Error: Batch size must be greater than 0.[/red]")
@@ -914,6 +947,38 @@ def revoke_multi_account_advanced(
 
         # Create AWS client manager
         aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Auto-detect principal type
+        from ...bulk.resolver import ResourceResolver
+
+        resolver = ResourceResolver(
+            aws_client_manager=aws_client,
+            instance_arn=instance_arn,
+            identity_store_id=identity_store_id,
+        )
+
+        # Try to resolve as USER first, then GROUP if that fails
+        principal_result = resolver.resolve_principal_name(principal_name, "USER")
+        principal_type = "USER"
+
+        if not principal_result.success:
+            # Try as GROUP if USER failed
+            console.print(
+                f"[yellow]Principal '{principal_name}' not found as USER. Trying as GROUP...[/yellow]"
+            )
+            principal_result = resolver.resolve_principal_name(principal_name, "GROUP")
+            principal_type = "GROUP"
+
+            if not principal_result.success:
+                console.print(f"[red]Error: {principal_result.error_message}[/red]")
+                console.print(
+                    "[yellow]Use 'awsideman user list' or 'awsideman group list' to see available principals.[/yellow]"
+                )
+                raise typer.Exit(1)
+            else:
+                console.print(f"[green]Found '{principal_name}' as GROUP.[/green]")
+        else:
+            console.print(f"[green]Found '{principal_name}' as USER.[/green]")
 
         # Resolve accounts based on advanced filters
         console.print("[blue]Resolving accounts using advanced filters...[/blue]")
@@ -1176,10 +1241,10 @@ def revoke_single_account(
     permission_set_name: str,
     principal_name: str,
     account_id: str,
-    principal_type: str = "USER",
     force: bool = False,
     profile: Optional[str] = None,
     dry_run: bool = False,
+    skip_verification: bool = False,
 ) -> None:
     """Revoke a permission set assignment from a principal.
 
@@ -1191,7 +1256,7 @@ def revoke_single_account(
         $ awsideman assignment revoke ReadOnlyAccess john.doe@company.com 123456789012
 
         # Revoke a permission set assignment from a group
-        $ awsideman assignment revoke PowerUserAccess developers 123456789012 --principal-type GROUP
+        $ awsideman assignment revoke PowerUserAccess developers 123456789012
 
         # Force revocation without confirmation
         $ awsideman assignment revoke ReadOnlyAccess john.doe@company.com 123456789012 --force
@@ -1202,14 +1267,7 @@ def revoke_single_account(
     # Validate SSO instance and get instance ARN and identity store ID
     instance_arn, identity_store_id = validate_sso_instance(profile_data)
 
-    # Validate principal type
-    if principal_type.upper() not in ["USER", "GROUP"]:
-        console.print(f"[red]Error: Invalid principal type '{principal_type}'.[/red]")
-        console.print("[yellow]Principal type must be either 'USER' or 'GROUP'.[/yellow]")
-        raise typer.Exit(1)
-
-    # Convert principal type to uppercase
-    principal_type = principal_type.upper()
+    # Auto-detect principal type - will be resolved later
 
     # Validate permission set name format (basic validation - should not be empty)
     if not permission_set_name.strip():
@@ -1263,13 +1321,28 @@ def revoke_single_account(
                 identity_store_id=identity_store_id,
             )
 
-            principal_result = resolver.resolve_principal_name(principal_name, principal_type)
+            # Try to resolve as USER first, then GROUP if that fails
+            principal_result = resolver.resolve_principal_name(principal_name, "USER")
+            principal_type = "USER"
+
             if not principal_result.success:
-                console.print(f"[red]Error: {principal_result.error_message}[/red]")
+                # Try as GROUP if USER failed
                 console.print(
-                    "[yellow]Use 'awsideman user list' or 'awsideman group list' to see available principals.[/yellow]"
+                    f"[yellow]Principal '{principal_name}' not found as USER. Trying as GROUP...[/yellow]"
                 )
-                raise typer.Exit(1)
+                principal_result = resolver.resolve_principal_name(principal_name, "GROUP")
+                principal_type = "GROUP"
+
+                if not principal_result.success:
+                    console.print(f"[red]Error: {principal_result.error_message}[/red]")
+                    console.print(
+                        "[yellow]Use 'awsideman user list' or 'awsideman group list' to see available principals.[/yellow]"
+                    )
+                    raise typer.Exit(1)
+                else:
+                    console.print(f"[green]Found '{principal_name}' as GROUP.[/green]")
+            else:
+                console.print(f"[green]Found '{principal_name}' as USER.[/green]")
 
             principal_id = principal_result.resolved_value
             if principal_id is None:
@@ -1294,274 +1367,482 @@ def revoke_single_account(
         )
         return
 
-    # Display a message indicating that we're checking the assignment
-    with console.status("[blue]Checking assignment details...[/blue]"):
-        try:
-            # First, check if the assignment exists
-            list_params = {
-                "InstanceArn": instance_arn,
-                "AccountId": account_id,
-                "PermissionSetArn": permission_set_arn,
-            }
+    # Skip assignment verification if requested
+    if skip_verification:
+        console.print(
+            "[yellow]⚠️  Skipping assignment verification (--skip-verification flag used)[/yellow]"
+        )
+        console.print(
+            "[yellow]This will attempt to revoke the assignment without checking if it exists.[/yellow]"
+        )
+        console.print()
 
-            # Check for existing assignment
-            existing_response = sso_admin_client.list_account_assignments(**list_params)
-            all_assignments = existing_response.get("AccountAssignments", [])
-
-            # Filter assignments by principal ID and type locally
-            existing_assignments = [
-                assignment
-                for assignment in all_assignments
-                if assignment.get("PrincipalId") == principal_id
-                and assignment.get("PrincipalType") == principal_type
-            ]
-
-            if not existing_assignments:
-                console.print("[red]Error: Assignment not found.[/red]")
-                console.print("[yellow]No assignment found for:[/yellow]")
-                console.print(f"  Permission Set: {permission_set_name}")
-                console.print(f"  Principal: {principal_name} ({principal_type})")
-                console.print(f"  Account ID: {account_id}")
-                console.print(
-                    "[yellow]Use 'awsideman assignment list' to see all available assignments.[/yellow]"
-                )
-                raise typer.Exit(1)
-
-            # Resolve names for display
-            try:
-                permission_set_info = resolve_permission_set_info(
-                    instance_arn, permission_set_arn, sso_admin_client
-                )
-                permission_set_display_name = permission_set_info.get("Name", "Unknown")
-            except typer.Exit:
-                permission_set_display_name = "Unknown"
-
-            try:
-                principal_info = resolve_principal_info(
-                    identity_store_id, principal_id, principal_type, identity_store_client
-                )
-                principal_display_name = principal_info.get("DisplayName", "Unknown")
-            except typer.Exit:
-                principal_display_name = "Unknown"
-
-            # Show confirmation prompt unless force flag is used
-            if not force:
-                console.print()
-                console.print(
-                    "[bold red]⚠️  WARNING: You are about to revoke a permission set assignment[/bold red]"
-                )
-                console.print()
-                console.print("[bold]Assignment to be revoked:[/bold]")
-                console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
-                console.print(
-                    f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
-                )
-                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
-                console.print()
-                console.print(
-                    "[red]This will remove the principal's access to the specified account through this permission set.[/red]"
-                )
-                console.print()
-
-                # Get user confirmation
-                confirm = typer.confirm("Are you sure you want to revoke this assignment?")
-                if not confirm:
-                    console.print("[yellow]Assignment revocation cancelled.[/yellow]")
-                    raise typer.Exit(0)
-
-            # Revoke the assignment
-            # Create the revocation parameters
-            delete_params = {
-                "InstanceArn": instance_arn,
-                "TargetId": account_id,
-                "TargetType": "AWS_ACCOUNT",
-                "PermissionSetArn": permission_set_arn,
-                "PrincipalType": principal_type,
-                "PrincipalId": principal_id,
-            }
-
-            # Make the API call to delete the assignment
-            response = sso_admin_client.delete_account_assignment(**delete_params)
-
-            # Extract the request ID for tracking
-            request_id = response.get("AccountAssignmentDeletionStatus", {}).get("RequestId")
-
-            # The assignment deletion is asynchronous, so we get a request status
-            assignment_status = response.get("AccountAssignmentDeletionStatus", {})
-            status = assignment_status.get("Status", "UNKNOWN")
-
-            # Handle the response and display appropriate output
-            if status == "IN_PROGRESS":
-                console.print("[green]✓ Assignment revocation initiated successfully.[/green]")
-                console.print()
-                console.print("[bold]Revoked Assignment Details:[/bold]")
-                console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
-                console.print(
-                    f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
-                )
-                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
-                console.print()
-                if request_id:
-                    console.print(f"Request ID: [dim]{request_id}[/dim]")
-                console.print(
-                    "[yellow]Note: Assignment revocation is asynchronous and may take a few moments to complete.[/yellow]"
-                )
-                console.print(
-                    "[yellow]You can verify the revocation using 'awsideman assignment list' command.[/yellow]"
-                )
-
-                # Log the successful revocation operation
-                log_individual_operation(
-                    "revoke",
-                    principal_id,
-                    principal_type,
-                    principal_display_name,
-                    permission_set_arn,
-                    permission_set_display_name,
-                    account_id,
-                    success=True,
-                    request_id=request_id,
-                    profile=profile_name,
-                )
-
-                # Invalidate cache to ensure assignment data is fresh
-                try:
-                    # Clear internal data storage to ensure fresh data
-                    if aws_client.is_caching_enabled():
-                        aws_client.clear_cache()
-
-                except Exception:
-                    # Don't fail the command if cache invalidation fails
-                    pass
-
-            elif status == "SUCCEEDED":
-                console.print("[green]✓ Assignment revoked successfully.[/green]")
-                console.print()
-                console.print("[bold]Revoked Assignment Details:[/bold]")
-                console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
-                console.print(
-                    f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
-                )
-                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
-                console.print()
-                console.print(
-                    "[green]The principal no longer has access to the specified account through this permission set.[/green]"
-                )
-
-                # Log the successful revocation operation
-                log_individual_operation(
-                    "revoke",
-                    principal_id,
-                    principal_type,
-                    principal_display_name,
-                    permission_set_arn,
-                    permission_set_display_name,
-                    account_id,
-                    success=True,
-                    request_id=request_id,
-                    profile=profile_name,
-                )
-            elif status == "FAILED":
-                failure_reason = assignment_status.get("FailureReason", "Unknown error")
-                console.print(f"[red]✗ Assignment revocation failed: {failure_reason}[/red]")
-                console.print()
-                console.print("[bold]Attempted Revocation:[/bold]")
-                console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
-                console.print(
-                    f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
-                )
-                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
-                raise typer.Exit(1)
-            else:
-                console.print(f"[yellow]Assignment revocation status: {status}[/yellow]")
-                console.print()
-                console.print("[bold]Assignment Details:[/bold]")
-                console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
-                console.print(
-                    f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
-                )
-                console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
-                console.print()
-                if request_id:
-                    console.print(f"Request ID: [dim]{request_id}[/dim]")
-                console.print(
-                    "[yellow]Please check the assignment status using 'awsideman assignment list' command.[/yellow]"
-                )
-
-        except ClientError as e:
-            # Handle AWS API errors
-            error_code = e.response.get("Error", {}).get("Code", "Unknown")
-            error_message = e.response.get("Error", {}).get("Message", str(e))
-
-            if error_code == "ResourceNotFoundException":
-                console.print("[red]✗ Assignment revocation failed: Assignment not found.[/red]")
-                console.print()
-                console.print("[bold]Attempted Revocation:[/bold]")
-                console.print(f"  Permission Set ARN: {permission_set_arn}")
-                console.print(f"  Principal ID: {principal_id}")
-                console.print(f"  Principal Type: {principal_type}")
-                console.print(f"  Account ID: {account_id}")
-                console.print()
-                console.print("[yellow]Troubleshooting:[/yellow]")
-                console.print("• The assignment may have already been revoked")
-                console.print("• The assignment may never have existed")
-                console.print("• Use 'awsideman assignment list' to see all available assignments")
-            else:
-                console.print(
-                    f"[red]✗ Assignment revocation failed ({error_code}): {error_message}[/red]"
-                )
-                console.print()
-                console.print("[bold]Attempted Revocation:[/bold]")
-                console.print(f"  Permission Set ARN: {permission_set_arn}")
-                console.print(f"  Principal ID: {principal_id}")
-                console.print(f"  Principal Type: {principal_type}")
-                console.print(f"  Account ID: {account_id}")
-                console.print()
-
-                if error_code == "AccessDeniedException":
-                    console.print("[yellow]Troubleshooting:[/yellow]")
-                    console.print("• You do not have sufficient permissions to revoke assignments")
-                    console.print(
-                        "• Ensure your AWS credentials have the necessary SSO Admin permissions"
-                    )
-                    console.print(
-                        "• Required permissions: sso:DeleteAccountAssignment, sso:ListAccountAssignments"
-                    )
-                elif error_code == "ValidationException":
-                    console.print("[yellow]Troubleshooting:[/yellow]")
-                    console.print("• Check that the permission set ARN is valid and exists")
-                    console.print("• Verify that the principal ID exists in the identity store")
-                    console.print("• Ensure the account ID is a valid 12-digit AWS account number")
-                    console.print(
-                        "• Confirm the principal type matches the actual principal (USER or GROUP)"
-                    )
-                elif error_code == "ConflictException":
-                    console.print("[yellow]Troubleshooting:[/yellow]")
-                    console.print("• There may be a conflicting assignment operation in progress")
-                    console.print("• Wait a few moments and try again")
-                    console.print(
-                        "• Check if the assignment is currently being created or modified"
-                    )
-                else:
-                    console.print("[yellow]Troubleshooting:[/yellow]")
-                    console.print(
-                        "• This could be due to an issue with the AWS Identity Center service"
-                    )
-                    console.print("• Check AWS service health status")
-                    console.print("• Verify your AWS region configuration")
-
-            raise typer.Exit(1)
-        except Exception as e:
-            # Handle other unexpected errors
-            console.print(f"[red]✗ Assignment revocation failed: {str(e)}[/red]")
+        # Show confirmation unless force flag is used
+        if not force:
+            console.print(
+                "[bold red]⚠️  WARNING: You are about to revoke a permission set assignment[/bold red]"
+            )
             console.print()
-            console.print("[bold]Attempted Revocation:[/bold]")
-            console.print(f"  Permission Set ARN: {permission_set_arn}")
-            console.print(f"  Principal ID: {principal_id}")
-            console.print(f"  Principal Type: {principal_type}")
-            console.print(f"  Account ID: {account_id}")
+            console.print("[bold]Assignment to be revoked:[/bold]")
+            console.print(f"  Permission Set: [green]{permission_set_name}[/green]")
+            console.print(f"  Principal: [cyan]{principal_name}[/cyan] ({principal_type})")
+            console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
             console.print()
             console.print(
-                "[yellow]This could be due to an unexpected error. Please try again or contact support.[/yellow]"
+                "[red]This will remove the principal's access to the specified account through this permission set.[/red]"
             )
-            raise typer.Exit(1)
+            console.print()
+
+            # Get user confirmation
+            confirm = typer.confirm("Are you sure you want to revoke this assignment?")
+            if not confirm:
+                console.print("[yellow]Assignment revocation cancelled.[/yellow]")
+                raise typer.Exit(0)
+
+        # Skip to the revocation step
+        existing_assignments = [{"PrincipalId": principal_id, "PrincipalType": principal_type}]
+        permission_set_display_name = permission_set_name
+        principal_display_name = principal_name
+    else:
+        # Display a message indicating that we're checking the assignment
+        with console.status("[blue]Verifying assignment exists before revocation...[/blue]"):
+            try:
+                # First, check if the assignment exists
+                list_params = {
+                    "InstanceArn": instance_arn,
+                    "AccountId": account_id,
+                    "PermissionSetArn": permission_set_arn,
+                }
+
+                # Check for existing assignment
+                existing_response = sso_admin_client.list_account_assignments(**list_params)
+                all_assignments = existing_response.get("AccountAssignments", [])
+
+                # Filter assignments by principal ID and type locally
+                existing_assignments = [
+                    assignment
+                    for assignment in all_assignments
+                    if assignment.get("PrincipalId") == principal_id
+                    and assignment.get("PrincipalType") == principal_type
+                ]
+
+                if not existing_assignments:
+                    console.print("[red]Error: Assignment not found.[/red]")
+                    console.print("[yellow]No assignment found for:[/yellow]")
+                    console.print(f"  Permission Set: {permission_set_name}")
+                    console.print(f"  Principal: {principal_name} ({principal_type})")
+                    console.print(f"  Account ID: {account_id}")
+                    console.print(
+                        "[yellow]Use 'awsideman assignment list' to see all available assignments.[/yellow]"
+                    )
+                    raise typer.Exit(1)
+
+                # Resolve names for display
+                try:
+                    permission_set_info = resolve_permission_set_info(
+                        instance_arn, permission_set_arn, sso_admin_client
+                    )
+                    permission_set_display_name = permission_set_info.get("Name", "Unknown")
+                except typer.Exit:
+                    permission_set_display_name = "Unknown"
+
+                try:
+                    # Add timeout protection around resolve_principal_info
+                    import queue
+                    import threading
+
+                    def call_resolve_principal_info():
+                        try:
+                            result = resolve_principal_info(
+                                identity_store_id,
+                                principal_id,
+                                principal_type,
+                                identity_store_client,
+                            )
+                            result_queue.put(("success", result))
+                        except Exception as e:
+                            result_queue.put(("error", e))
+
+                    result_queue = queue.Queue()
+                    resolve_thread = threading.Thread(target=call_resolve_principal_info)
+                    resolve_thread.daemon = True
+                    resolve_thread.start()
+
+                    try:
+                        result_type, result_data = result_queue.get(timeout=15)  # 15 second timeout
+                        if result_type == "error":
+                            raise result_data
+                        else:
+                            principal_info = result_data
+                            principal_display_name = principal_info.get("DisplayName", "Unknown")
+                    except queue.Empty:
+                        console.print(
+                            "[yellow]⚠️  Principal name resolution timed out, using principal ID as display name[/yellow]"
+                        )
+                        principal_display_name = principal_name  # Use the original principal name
+
+                except typer.Exit:
+                    principal_display_name = "Unknown"
+                except Exception:
+
+                    principal_display_name = "Unknown"
+
+                # Show that we're now proceeding with the actual revocation
+                console.print()
+                console.print("[blue]Initiating assignment revocation...[/blue]")
+
+                # Revoke the assignment
+                # Create the revocation parameters
+                delete_params = {
+                    "InstanceArn": instance_arn,
+                    "TargetId": account_id,
+                    "TargetType": "AWS_ACCOUNT",
+                    "PermissionSetArn": permission_set_arn,
+                    "PrincipalType": principal_type,
+                    "PrincipalId": principal_id,
+                }
+
+                # Make the API call to delete the assignment
+                response = sso_admin_client.delete_account_assignment(**delete_params)
+
+                # Extract the request ID for tracking
+                request_id = response.get("AccountAssignmentDeletionStatus", {}).get("RequestId")
+
+                # The assignment deletion is asynchronous, so we get a request status
+                assignment_status = response.get("AccountAssignmentDeletionStatus", {})
+                status = assignment_status.get("Status", "UNKNOWN")
+
+                # Handle the response and display appropriate output
+                if status == "IN_PROGRESS":
+                    console.print("[green]✓ Assignment revocation initiated successfully.[/green]")
+                    console.print()
+                    console.print("[bold]Revoked Assignment Details:[/bold]")
+                    console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+                    console.print(
+                        f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
+                    )
+                    console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                    console.print()
+                    if request_id:
+                        console.print(f"Request ID: [dim]{request_id}[/dim]")
+                    console.print(
+                        "[yellow]Note: Assignment revocation is asynchronous and may take a few moments to complete.[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]You can verify the revocation using 'awsideman assignment list' command.[/yellow]"
+                    )
+
+                    # Log the successful revocation operation
+                    log_individual_operation(
+                        "revoke",
+                        principal_id,
+                        principal_type,
+                        principal_display_name,
+                        permission_set_arn,
+                        permission_set_display_name,
+                        account_id,
+                        success=True,
+                        request_id=request_id,
+                        profile=profile_name,
+                    )
+
+                    # Invalidate cache to ensure assignment data is fresh
+                    try:
+                        # Clear internal data storage to ensure fresh data
+                        if aws_client.is_caching_enabled():
+                            aws_client.clear_cache()
+
+                    except Exception:
+                        # Don't fail the command if cache invalidation fails
+                        pass
+
+                elif status == "SUCCEEDED":
+                    console.print("[green]✓ Assignment revoked successfully.[/green]")
+                    console.print()
+                    console.print("[bold]Revoked Assignment Details:[/bold]")
+                    console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+                    console.print(
+                        f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
+                    )
+                    console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                    console.print()
+                    console.print(
+                        "[green]The principal no longer has access to the specified account through this permission set.[/green]"
+                    )
+
+                    # Log the successful revocation operation
+                    log_individual_operation(
+                        "revoke",
+                        principal_id,
+                        principal_type,
+                        principal_display_name,
+                        permission_set_arn,
+                        permission_set_display_name,
+                        account_id,
+                        success=True,
+                        request_id=request_id,
+                        profile=profile_name,
+                    )
+                elif status == "FAILED":
+                    failure_reason = assignment_status.get("FailureReason", "Unknown error")
+                    console.print(f"[red]✗ Assignment revocation failed: {failure_reason}[/red]")
+                    console.print()
+                    console.print("[bold]Attempted Revocation:[/bold]")
+                    console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+                    console.print(
+                        f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
+                    )
+                    console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                    raise typer.Exit(1)
+                else:
+                    console.print(f"[yellow]Assignment revocation status: {status}[/yellow]")
+                    console.print()
+                    console.print("[bold]Assignment Details:[/bold]")
+                    console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+                    console.print(
+                        f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})"
+                    )
+                    console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+                    console.print()
+                    if request_id:
+                        console.print(f"Request ID: [dim]{request_id}[/dim]")
+                    console.print(
+                        "[yellow]Please check the assignment status using 'awsideman assignment list' command.[/yellow]"
+                    )
+
+            except ClientError as e:
+                # Handle AWS API errors
+                error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                error_message = e.response.get("Error", {}).get("Message", str(e))
+
+                if error_code == "ResourceNotFoundException":
+                    console.print(
+                        "[red]✗ Assignment revocation failed: Assignment not found.[/red]"
+                    )
+                    console.print()
+                    console.print("[bold]Attempted Revocation:[/bold]")
+                    console.print(f"  Permission Set ARN: {permission_set_arn}")
+                    console.print(f"  Principal ID: {principal_id}")
+                    console.print(f"  Principal Type: {principal_type}")
+                    console.print(f"  Account ID: {account_id}")
+                    console.print()
+                    console.print("[yellow]Troubleshooting:[/yellow]")
+                    console.print("• The assignment may have already been revoked")
+                    console.print("• The assignment may never have existed")
+                    console.print(
+                        "• Use 'awsideman assignment list' to see all available assignments"
+                    )
+                else:
+                    console.print(
+                        f"[red]✗ Assignment revocation failed ({error_code}): {error_message}[/red]"
+                    )
+                    console.print()
+                    console.print("[bold]Attempted Revocation:[/bold]")
+                    console.print(f"  Permission Set ARN: {permission_set_arn}")
+                    console.print(f"  Principal ID: {principal_id}")
+                    console.print(f"  Principal Type: {principal_type}")
+                    console.print(f"  Account ID: {account_id}")
+                    console.print()
+
+                    if error_code == "AccessDeniedException":
+                        console.print("[yellow]Troubleshooting:[/yellow]")
+                        console.print(
+                            "• You do not have sufficient permissions to revoke assignments"
+                        )
+                        console.print(
+                            "• Ensure your AWS credentials have the necessary SSO Admin permissions"
+                        )
+                        console.print(
+                            "• Required permissions: sso:DeleteAccountAssignment, sso:ListAccountAssignments"
+                        )
+                    elif error_code == "ValidationException":
+                        console.print("[yellow]Troubleshooting:[/yellow]")
+                        console.print("• Check that the permission set ARN is valid and exists")
+                        console.print("• Verify that the principal ID exists in the identity store")
+                        console.print(
+                            "• Ensure the account ID is a valid 12-digit AWS account number"
+                        )
+                        console.print(
+                            "• Confirm the principal type matches the actual principal (USER or GROUP)"
+                        )
+                    elif error_code == "ConflictException":
+                        console.print("[yellow]Troubleshooting:[/yellow]")
+                        console.print(
+                            "• There may be a conflicting assignment operation in progress"
+                        )
+                        console.print("• Wait a few moments and try again")
+                        console.print(
+                            "• Check if the assignment is currently being created or modified"
+                        )
+                    else:
+                        console.print("[yellow]Troubleshooting:[/yellow]")
+                        console.print(
+                            "• This could be due to an issue with the AWS Identity Center service"
+                        )
+                        console.print("• Check AWS service health status")
+                        console.print("• Verify your AWS region configuration")
+
+                raise typer.Exit(1)
+            except Exception as e:
+                # Handle other unexpected errors
+                console.print(f"[red]✗ Assignment revocation failed: {str(e)}[/red]")
+                console.print()
+                console.print("[bold]Attempted Revocation:[/bold]")
+                console.print(f"  Permission Set ARN: {permission_set_arn}")
+                console.print(f"  Principal ID: {principal_id}")
+                console.print(f"  Principal Type: {principal_type}")
+                console.print(f"  Account ID: {account_id}")
+                console.print()
+                console.print(
+                    "[yellow]This could be due to an unexpected error. Please try again or contact support.[/yellow]"
+                )
+                raise typer.Exit(1)
+
+        # Show confirmation prompt unless force flag is used (moved outside status context)
+        if not force:
+            console.print()
+            console.print(
+                "[bold red]⚠️  WARNING: You are about to revoke a permission set assignment[/bold red]"
+            )
+            console.print()
+            console.print("[bold]Assignment to be revoked:[/bold]")
+            console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+            console.print(f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})")
+            console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+            console.print()
+            console.print(
+                "[red]This will remove the principal's access to the specified account through this permission set.[/red]"
+            )
+            console.print()
+
+            # Get user confirmation
+            confirm = typer.confirm("Are you sure you want to revoke this assignment?")
+            if not confirm:
+                console.print("[yellow]Assignment revocation cancelled.[/yellow]")
+                raise typer.Exit(0)
+
+    # Now proceed with the actual revocation (this code is shared between skip_verification and normal flow)
+    if not skip_verification:
+        # Show that we're now proceeding with the actual revocation
+        console.print()
+        console.print("[blue]Initiating assignment revocation...[/blue]")
+
+    # Revoke the assignment
+    # Create the revocation parameters
+    delete_params = {
+        "InstanceArn": instance_arn,
+        "TargetId": account_id,
+        "TargetType": "AWS_ACCOUNT",
+        "PermissionSetArn": permission_set_arn,
+        "PrincipalType": principal_type,
+        "PrincipalId": principal_id,
+    }
+
+    # Make the API call to delete the assignment
+    response = sso_admin_client.delete_account_assignment(**delete_params)
+
+    # Extract the request ID for tracking
+    request_id = response.get("AccountAssignmentDeletionStatus", {}).get("RequestId")
+
+    # The assignment deletion is asynchronous, so we get a request status
+    assignment_status = response.get("AccountAssignmentDeletionStatus", {})
+    status = assignment_status.get("Status", "UNKNOWN")
+
+    # Handle the response and display appropriate output
+    if status == "IN_PROGRESS":
+        console.print("[green]✓ Assignment revocation initiated successfully.[/green]")
+        console.print()
+        console.print("[bold]Revoked Assignment Details:[/bold]")
+        console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+        console.print(f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})")
+        console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+        console.print()
+        if request_id:
+            console.print(f"Request ID: [dim]{request_id}[/dim]")
+        console.print(
+            "[yellow]Note: Assignment revocation is asynchronous and may take a few moments to complete.[/yellow]"
+        )
+        console.print(
+            "[yellow]You can verify the revocation using 'awsideman assignment list' command.[/yellow]"
+        )
+        if request_id:
+            console.print(
+                f"[yellow]You can check the revocation status using: awsideman assignment status {request_id}[/yellow]"
+            )
+
+        # Log the successful revocation operation
+        log_individual_operation(
+            "revoke",
+            principal_id,
+            principal_type,
+            principal_display_name,
+            permission_set_arn,
+            permission_set_display_name,
+            account_id,
+            success=True,
+            request_id=request_id,
+            profile=profile_name,
+        )
+
+        # Invalidate cache to ensure assignment data is fresh
+        try:
+            # Clear internal data storage to ensure fresh data
+            if aws_client.is_caching_enabled():
+                aws_client.clear_cache()
+
+        except Exception:
+            # Don't fail the command if cache invalidation fails
+            pass
+
+    elif status == "SUCCEEDED":
+        console.print("[green]✓ Assignment revoked successfully.[/green]")
+        console.print()
+        console.print("[bold]Revoked Assignment Details:[/bold]")
+        console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+        console.print(f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})")
+        console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+        console.print()
+        console.print(
+            "[green]The principal no longer has access to the specified account through this permission set.[/green]"
+        )
+        if request_id:
+            console.print()
+            console.print(
+                f"[yellow]You can check the revocation status using: awsideman assignment status {request_id}[/yellow]"
+            )
+
+        # Log the successful revocation operation
+        log_individual_operation(
+            "revoke",
+            principal_id,
+            principal_type,
+            principal_display_name,
+            permission_set_arn,
+            permission_set_display_name,
+            account_id,
+            success=True,
+            request_id=request_id,
+            profile=profile_name,
+        )
+    elif status == "FAILED":
+        failure_reason = assignment_status.get("FailureReason", "Unknown error")
+        console.print(f"[red]✗ Assignment revocation failed: {failure_reason}[/red]")
+        console.print()
+        console.print("[bold]Attempted Revocation:[/bold]")
+        console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+        console.print(f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})")
+        console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+        raise typer.Exit(1)
+    else:
+        console.print(f"[yellow]Assignment revocation status: {status}[/yellow]")
+        console.print()
+        console.print("[bold]Assignment Details:[/bold]")
+        console.print(f"  Permission Set: [green]{permission_set_display_name}[/green]")
+        console.print(f"  Principal: [cyan]{principal_display_name}[/cyan] ({principal_type})")
+        console.print(f"  Account ID: [yellow]{account_id}[/yellow]")
+        console.print()
+        if request_id:
+            console.print(f"Request ID: [dim]{request_id}[/dim]")
+        console.print(
+            "[yellow]Please check the assignment status using 'awsideman assignment list' command.[/yellow]"
+        )

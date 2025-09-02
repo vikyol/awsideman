@@ -246,13 +246,18 @@ def list_assignments(
                         for page in ps_paginator.paginate(InstanceArn=instance_arn):
                             permission_sets.extend(page.get("PermissionSets", []))
 
-                    # Check each account for assignments
-                    for account in accounts:
+                    # Use parallel processing for better performance
+                    import time
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                    def fetch_account_assignments(account):
+                        """Fetch assignments for a single account."""
                         account_id = account["Id"]
+                        account_assignments = []
 
                         # If we have a specific account filter, only check that account
                         if resolved_account_id and account_id != resolved_account_id:
-                            continue
+                            return account_assignments
 
                         try:
                             if resolved_permission_set_arn:
@@ -262,55 +267,160 @@ def list_assignments(
                                     AccountId=account_id,
                                     PermissionSetArn=resolved_permission_set_arn,
                                 )
-                                all_assignments.extend(response.get("AccountAssignments", []))
+                                account_assignments.extend(response.get("AccountAssignments", []))
                             elif resolved_principal_id:
                                 # Search by principal across all permission sets
-                                for permission_set_arn in permission_sets:
+                                # Use parallel processing for permission sets within each account
+                                def fetch_permission_set_assignments(permission_set_arn):
                                     try:
                                         response = sso_admin_client.list_account_assignments(
                                             InstanceArn=instance_arn,
                                             AccountId=account_id,
                                             PermissionSetArn=permission_set_arn,
                                         )
+                                        matching_assignments = []
                                         for assignment in response.get("AccountAssignments", []):
                                             if (
                                                 assignment.get("PrincipalId")
                                                 == resolved_principal_id
                                             ):
-                                                all_assignments.append(assignment)
+                                                matching_assignments.append(assignment)
+                                        return matching_assignments
                                     except Exception:
-                                        continue
+                                        return []
+
+                                # Process permission sets in parallel for this account
+                                with ThreadPoolExecutor(
+                                    max_workers=min(10, len(permission_sets))
+                                ) as ps_executor:
+                                    ps_futures = {
+                                        ps_executor.submit(
+                                            fetch_permission_set_assignments, ps_arn
+                                        ): ps_arn
+                                        for ps_arn in permission_sets
+                                    }
+
+                                    for ps_future in as_completed(ps_futures):
+                                        try:
+                                            ps_assignments = ps_future.result(timeout=30)
+                                            account_assignments.extend(ps_assignments)
+                                        except Exception:
+                                            continue
                             elif resolved_account_id:
                                 # Search by account across all permission sets
-                                for permission_set_arn in permission_sets:
+                                def fetch_permission_set_assignments(permission_set_arn):
                                     try:
                                         response = sso_admin_client.list_account_assignments(
                                             InstanceArn=instance_arn,
                                             AccountId=account_id,
                                             PermissionSetArn=permission_set_arn,
                                         )
-                                        all_assignments.extend(
-                                            response.get("AccountAssignments", [])
-                                        )
+                                        return response.get("AccountAssignments", [])
                                     except Exception:
-                                        continue
+                                        return []
+
+                                # Process permission sets in parallel for this account
+                                with ThreadPoolExecutor(
+                                    max_workers=min(10, len(permission_sets))
+                                ) as ps_executor:
+                                    ps_futures = {
+                                        ps_executor.submit(
+                                            fetch_permission_set_assignments, ps_arn
+                                        ): ps_arn
+                                        for ps_arn in permission_sets
+                                    }
+
+                                    for ps_future in as_completed(ps_futures):
+                                        try:
+                                            ps_assignments = ps_future.result(timeout=30)
+                                            account_assignments.extend(ps_assignments)
+                                        except Exception:
+                                            continue
                             else:
                                 # Search for all assignments (no filters)
-                                for permission_set_arn in permission_sets:
+                                def fetch_permission_set_assignments(permission_set_arn):
                                     try:
                                         response = sso_admin_client.list_account_assignments(
                                             InstanceArn=instance_arn,
                                             AccountId=account_id,
                                             PermissionSetArn=permission_set_arn,
                                         )
-                                        all_assignments.extend(
-                                            response.get("AccountAssignments", [])
-                                        )
+                                        return response.get("AccountAssignments", [])
                                     except Exception:
-                                        continue
+                                        return []
+
+                                # Process permission sets in parallel for this account
+                                with ThreadPoolExecutor(
+                                    max_workers=min(10, len(permission_sets))
+                                ) as ps_executor:
+                                    ps_futures = {
+                                        ps_executor.submit(
+                                            fetch_permission_set_assignments, ps_arn
+                                        ): ps_arn
+                                        for ps_arn in permission_sets
+                                    }
+
+                                    for ps_future in as_completed(ps_futures):
+                                        try:
+                                            ps_assignments = ps_future.result(timeout=30)
+                                            account_assignments.extend(ps_assignments)
+                                        except Exception:
+                                            continue
                         except Exception:
                             # Skip accounts we can't access
-                            continue
+                            pass
+
+                        return account_assignments
+
+                    # Process accounts in parallel with progress reporting
+                    total_accounts = len(accounts)
+                    processed_count = 0
+                    start_time = time.time()
+
+                    # Use ThreadPoolExecutor for parallel processing
+                    max_workers = min(25, total_accounts)  # Limit concurrent requests
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        # Submit all accounts for processing
+                        future_to_account = {
+                            executor.submit(fetch_account_assignments, account): account
+                            for account in accounts
+                        }
+
+                        # Collect results as they complete
+                        for future in as_completed(future_to_account):
+                            try:
+                                account_assignments = future.result(
+                                    timeout=60
+                                )  # 60 second timeout per account
+                                all_assignments.extend(account_assignments)
+                                processed_count += 1
+
+                                # Update progress every 10 accounts or at the end
+                                if processed_count % 10 == 0 or processed_count == total_accounts:
+                                    elapsed_time = time.time() - start_time
+                                    rate = processed_count / elapsed_time if elapsed_time > 0 else 0
+                                    remaining_accounts = total_accounts - processed_count
+                                    eta = remaining_accounts / rate if rate > 0 else 0
+
+                                    console.print(
+                                        f"[blue]Processed {processed_count}/{total_accounts} accounts "
+                                        f"({rate:.1f} accounts/sec, ETA: {eta:.0f}s)[/blue]"
+                                    )
+
+                            except Exception as e:
+                                account = future_to_account[future]
+                                console.print(
+                                    f"[yellow]Warning: Failed to process account {account['Id']}: {str(e)}[/yellow]"
+                                )
+                                processed_count += 1
+
+                    # Show performance summary
+                    total_time = time.time() - start_time
+                    if total_time > 0:
+                        console.print(
+                            f"[green]Completed processing {total_accounts} accounts in {total_time:.1f}s "
+                            f"({total_accounts/total_time:.1f} accounts/sec)[/green]"
+                        )
                 except Exception as e:
                     console.print(
                         f"[yellow]Warning: Unable to access AWS Organizations. Cannot search across all accounts. Error: {str(e)}[/yellow]"

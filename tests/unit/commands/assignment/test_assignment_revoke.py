@@ -29,7 +29,6 @@ def test_revoke_permission_set_function_signature():
         "permission_set_name",
         "principal_name",
         "account_id",
-        "principal_type",
         "force",
         "profile",
     }
@@ -66,7 +65,6 @@ def test_revoke_permission_set_typer_integration():
     assert "permission_set_name" in annotations
     assert "principal_name" in annotations
     assert "account_id" in annotations
-    assert "principal_type" in annotations
     assert "force" in annotations
     assert "profile" in annotations
 
@@ -89,11 +87,7 @@ def test_revoke_permission_set_parameter_types():
     account_id_param = sig.parameters["account_id"]
     assert account_id_param.annotation == str or "Optional" in str(account_id_param.annotation)
 
-    # Check that principal_type is optional string
-    principal_type_param = sig.parameters["principal_type"]
-    assert principal_type_param.annotation == str or "Optional" in str(
-        principal_type_param.annotation
-    )
+    # principal_type parameter has been removed - auto-detection is now used
 
     # Check that force is a boolean
     assert sig.parameters["force"].annotation == bool

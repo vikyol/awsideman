@@ -8,6 +8,7 @@ Commands:
     get: Get detailed information about a specific assignment
     assign: Assign a permission set to a principal for a specific account
     revoke: Revoke a permission set assignment from a principal
+    status: Check the status of an assignment operation using request ID
 
 Examples:
     # List all assignments
@@ -24,6 +25,9 @@ Examples:
 
     # Revoke a permission set assignment
     $ awsideman assignment revoke arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef user-1234567890abcdef 123456789012
+
+    # Check status of an assignment operation
+    $ awsideman assignment status 7a2a5b5e-cd48-4d2a-9c0c-419506922b05
 """
 
 import typer
@@ -46,6 +50,7 @@ from .get import get_assignment
 from .helpers import console, resolve_permission_set_info, resolve_principal_info
 from .list import list_assignments
 from .revoke import revoke_permission_set
+from .status import check_assignment_status
 
 # Import all submodules first
 
@@ -60,6 +65,7 @@ app.command("assign")(assign_permission_set)
 app.command("revoke")(revoke_permission_set)
 app.command("list")(list_assignments)
 app.command("get")(get_assignment)
+app.command("status")(check_assignment_status)
 
 # Export functions and app for backward compatibility
 __all__ = [
@@ -71,6 +77,7 @@ __all__ = [
     "revoke_permission_set",
     "list_assignments",
     "get_assignment",
+    "check_assignment_status",
     "resolve_permission_set_info",
     "resolve_principal_info",
     "AWSClientManager",

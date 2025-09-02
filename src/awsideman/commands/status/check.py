@@ -6,8 +6,10 @@ from typing import Optional
 import typer
 from botocore.exceptions import ClientError
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.text import Text
 
 from ...aws_clients.manager import AWSClientManager
 from ...utils.output_formatters import (
@@ -80,6 +82,20 @@ def check_status(
         # Validate AWS credentials before proceeding with status checks
         validate_aws_credentials(aws_client)
 
+        # Clear cache before orphaned assignment detection to ensure fresh data
+        # This prevents false negatives when groups/users have been deleted but cache still shows them as existing
+        if (check_type == "orphaned" or check_type is None) and aws_client.is_caching_enabled():
+            console.print(
+                "[dim]Clearing cache to ensure fresh data for orphaned assignment detection...[/dim]"
+            )
+            cache_cleared = aws_client.clear_cache()
+            if cache_cleared:
+                console.print("[dim]✓ Cache cleared successfully[/dim]")
+            else:
+                console.print(
+                    "[yellow]⚠ Warning: Could not clear cache, results may be stale[/yellow]"
+                )
+
         # Create status check configuration
         status_config = StatusCheckConfig(
             timeout_seconds=timeout,
@@ -93,28 +109,46 @@ def check_status(
         orchestrator = StatusOrchestrator(aws_client, status_config)
 
         # Show progress indicator for long-running operations
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            if check_type:
-                task = progress.add_task(f"Checking {check_type} status...", total=None)
-                # Run specific status check
+        if check_type == "orphaned":
+            # Use live progress display for orphaned assignment detection
+            progress_text = Text("Detecting orphaned assignments...", style="blue")
+
+            def update_progress(message: str):
+                """Update the progress display with new message."""
+                progress_text.plain = message
+
+            # Set the progress callback for orphaned assignment detection
+            orchestrator.set_orphaned_progress_callback(update_progress)
+
+            with Live(progress_text, console=console, refresh_per_second=2):
                 result = asyncio.run(orchestrator.get_specific_status(check_type))
-                progress.remove_task(task)
 
-                # Format and display specific result
-                _display_specific_status_result(result, output_fmt, check_type)
-            else:
-                task = progress.add_task("Performing comprehensive status check...", total=None)
-                # Run comprehensive status check
-                status_report = asyncio.run(orchestrator.get_comprehensive_status())
-                progress.remove_task(task)
+            # Format and display specific result
+            _display_specific_status_result(result, output_fmt, check_type)
+        else:
+            # Use regular progress display for other status checks
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                if check_type:
+                    task = progress.add_task(f"Checking {check_type} status...", total=None)
+                    # Run specific status check
+                    result = asyncio.run(orchestrator.get_specific_status(check_type))
+                    progress.remove_task(task)
 
-                # Format and display comprehensive result
-                _display_comprehensive_status_report(status_report, output_fmt)
+                    # Format and display specific result
+                    _display_specific_status_result(result, output_fmt, check_type)
+                else:
+                    task = progress.add_task("Performing comprehensive status check...", total=None)
+                    # Run comprehensive status check
+                    status_report = asyncio.run(orchestrator.get_comprehensive_status())
+                    progress.remove_task(task)
+
+                    # Format and display comprehensive result
+                    _display_comprehensive_status_report(status_report, output_fmt)
 
     except ClientError as e:
         # Handle AWS API errors

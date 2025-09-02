@@ -69,6 +69,10 @@ class StatusOrchestrator:
         # Track component failures for graceful degradation
         self._component_failures: Dict[str, List[str]] = {}
 
+    def set_orphaned_progress_callback(self, callback):
+        """Set progress callback for orphaned assignment detector."""
+        self.orphaned_detector._progress_callback = callback
+
     async def get_comprehensive_status(self) -> StatusReport:
         """
         Get comprehensive status from all status checking components.

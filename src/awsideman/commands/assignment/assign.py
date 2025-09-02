@@ -644,11 +644,28 @@ def assign_single_account(
 
             principal_result = resolver.resolve_principal_name(principal_name, principal_type)
             if not principal_result.success:
-                console.print(f"[red]Error: {principal_result.error_message}[/red]")
+                # If the specified principal type failed, try the other type as a fallback
+                other_type = "GROUP" if principal_type.upper() == "USER" else "USER"
                 console.print(
-                    "[yellow]Use 'awsideman user list' or 'awsideman group list' to see available principals.[/yellow]"
+                    f"[yellow]Principal '{principal_name}' not found as {principal_type}. Trying as {other_type}...[/yellow]"
                 )
-                raise typer.Exit(1)
+
+                fallback_result = resolver.resolve_principal_name(principal_name, other_type)
+                if fallback_result.success:
+                    console.print(
+                        f"[green]Found '{principal_name}' as {other_type}. Using {other_type} for assignment.[/green]"
+                    )
+                    principal_result = fallback_result
+                    principal_type = other_type  # Update the principal type for the assignment
+                else:
+                    console.print(f"[red]Error: {principal_result.error_message}[/red]")
+                    console.print(
+                        f"[red]Also tried as {other_type}: {fallback_result.error_message}[/red]"
+                    )
+                    console.print(
+                        "[yellow]Use 'awsideman user list' or 'awsideman group list' to see available principals.[/yellow]"
+                    )
+                    raise typer.Exit(1)
 
             principal_id = principal_result.resolved_value
             if principal_id is None:
@@ -725,7 +742,9 @@ def assign_single_account(
                     "[yellow]Note: Assignment creation is asynchronous and may take a few moments to complete.[/yellow]"
                 )
                 console.print(
-                    "[yellow]You can verify the assignment using 'awsideman assignment get' command.[/yellow]"
+                    "[yellow]You can check the assignment status using 'awsideman assignment status {request_id}' command.[/yellow]".format(
+                        request_id=request_id
+                    )
                 )
 
                 # Log the successful assignment operation
@@ -796,7 +815,9 @@ def assign_single_account(
                 if request_id:
                     console.print(f"Request ID: [dim]{request_id}[/dim]")
                 console.print(
-                    "[yellow]Please check the assignment status using 'awsideman assignment get' command.[/yellow]"
+                    "[yellow]Please check the assignment status using 'awsideman assignment status {request_id}' command.[/yellow]".format(
+                        request_id=request_id
+                    )
                 )
 
         except ClientError as e:

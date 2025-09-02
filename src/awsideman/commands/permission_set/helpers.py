@@ -249,23 +249,40 @@ def resolve_permission_set_identifier(
     if identifier.startswith("arn:aws:sso:::permissionSet/"):
         return identifier
 
-    # Search for permission sets by name
+    # Search for permission sets by name with pagination support
     try:
-        response = sso_admin_client.list_permission_sets(InstanceArn=instance_arn)
+        # Get all permission sets with pagination (like the find command does)
+        all_permission_sets = []
+        next_token = None
+
+        while True:
+            list_params = {"InstanceArn": instance_arn}
+            if next_token:
+                list_params["NextToken"] = next_token
+
+            response = sso_admin_client.list_permission_sets(**list_params)
+            batch_permission_sets = response.get("PermissionSets", [])
+            all_permission_sets.extend(batch_permission_sets)
+
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+
+        # Search through all permission sets
+        for permission_set_arn in all_permission_sets:
+            try:
+                ps_response = sso_admin_client.describe_permission_set(
+                    InstanceArn=instance_arn, PermissionSetArn=permission_set_arn
+                )
+
+                if ps_response["PermissionSet"]["Name"] == identifier:
+                    return permission_set_arn
+            except Exception:
+                continue
+
     except Exception as e:
         console.print(f"[red]Error resolving permission set identifier: {str(e)}[/red]")
         raise typer.Exit(1)
-
-    for permission_set_arn in response.get("PermissionSets", []):
-        try:
-            ps_response = sso_admin_client.describe_permission_set(
-                InstanceArn=instance_arn, PermissionSetArn=permission_set_arn
-            )
-
-            if ps_response["PermissionSet"]["Name"] == identifier:
-                return permission_set_arn
-        except Exception:
-            continue
 
     # If not found, show error and exit
     console.print(f"[red]Error: Permission set '{identifier}' not found.[/red]")

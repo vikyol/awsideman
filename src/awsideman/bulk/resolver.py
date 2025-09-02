@@ -111,7 +111,8 @@ class ResourceResolver:
 
             if not users:
                 return ResolutionResult(
-                    success=False, error_message=f"User '{user_name}' not found in Identity Store"
+                    success=False,
+                    error_message=f"User '{user_name}' not found in Identity Store. If this is a group name, try using --principal-type GROUP",
                 )
 
             if len(users) > 1:
@@ -139,7 +140,8 @@ class ResourceResolver:
 
             if not groups:
                 return ResolutionResult(
-                    success=False, error_message=f"Group '{group_name}' not found in Identity Store"
+                    success=False,
+                    error_message=f"Group '{group_name}' not found in Identity Store. If this is a user name, try using --principal-type USER",
                 )
 
             if len(groups) > 1:
@@ -168,13 +170,25 @@ class ResourceResolver:
             return self._permission_set_cache[permission_set_name]
 
         try:
-            # List all permission sets and find by name
-            response = self.sso_admin_client.list_permission_sets(InstanceArn=self.instance_arn)
+            # List all permission sets with pagination and find by name
+            all_permission_set_arns = []
+            next_token = None
 
-            permission_set_arns = response.get("PermissionSets", [])
+            while True:
+                list_params = {"InstanceArn": self.instance_arn}
+                if next_token:
+                    list_params["NextToken"] = next_token
+
+                response = self.sso_admin_client.list_permission_sets(**list_params)
+                batch_permission_sets = response.get("PermissionSets", [])
+                all_permission_set_arns.extend(batch_permission_sets)
+
+                next_token = response.get("NextToken")
+                if not next_token:
+                    break
 
             # Check each permission set to find matching name
-            for permission_set_arn in permission_set_arns:
+            for permission_set_arn in all_permission_set_arns:
                 try:
                     ps_response = self.sso_admin_client.describe_permission_set(
                         InstanceArn=self.instance_arn, PermissionSetArn=permission_set_arn
