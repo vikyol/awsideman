@@ -86,18 +86,18 @@ awsideman restore validate <backup-id>
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   CLI Commands  │    │  Backup Manager  │    │ Storage Engine  │
 │                 │◄──►│                  │◄──►│                 │
-│  • backup      │    │  • Orchestration │    │  • Local FS     │
-│  • restore     │    │  • Validation    │    │  • S3           │
-│  • schedule    │    │  • Optimization  │    │  • Encryption   │
+│  • backup       │    │  • Orchestration │    │  • Local FS     │
+│  • restore      │    │  • Validation    │    │  • S3           │
+│  • schedule     │    │  • Optimization  │    │  • Encryption   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │ Data Collectors │    │ Performance      │    │ Export/Import   │
 │                 │    │ Optimizers       │    │                 │
-│  • Users       │    │  • Compression   │    │  • JSON         │
-│  • Groups      │    │  • Deduplication │    │  • YAML         │
-│  • Permissions │    │  • Parallel      │    │  • CSV          │
+│  • Users        │    │  • Compression   │    │  • JSON         │
+│  • Groups       │    │  • Deduplication │    │  • YAML         │
+│  • Permissions  │    │  • Parallel      │    │  • CSV          │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 

@@ -24,12 +24,12 @@ cache:
   # Hybrid backend configuration
   hybrid_local_ttl: 300  # 5 minutes local cache for frequently accessed data
 
-  # DynamoDB settings for shared remote cache
+  # DynamoDB settings for shared remote cache (profile-based isolation)
   dynamodb_table_name: "awsideman-cache-team"
   dynamodb_region: "us-east-1"
   dynamodb_profile: "team"
 
-  # File backend settings for local cache
+  # File backend settings for local cache (profile-based isolation)
   file_cache_dir: "~/.awsideman/cache"
 
   # Encryption enabled for team security

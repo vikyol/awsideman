@@ -16,7 +16,7 @@ cache:
   default_ttl: 7200  # 2 hours - longer TTL for CI/CD efficiency
   max_size_mb: 1000  # Large cache for CI/CD workloads
 
-  # DynamoDB configuration optimized for CI/CD
+  # DynamoDB configuration optimized for CI/CD (profile-based isolation)
   dynamodb_table_name: "awsideman-cache-cicd"
   dynamodb_region: "us-east-1"
   dynamodb_profile: "cicd"

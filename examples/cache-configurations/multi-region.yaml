@@ -29,7 +29,7 @@ cache:
   # Local cache for frequently accessed data
   hybrid_local_ttl: 600  # 10 minutes for multi-region scenarios
 
-  # Primary DynamoDB table in us-east-1 for global access
+  # Primary DynamoDB table in us-east-1 for global access (profile-based isolation)
   dynamodb_table_name: "awsideman-cache-global"
   dynamodb_region: "us-east-1"  # Central region for cache
   dynamodb_profile: "us-east-1"

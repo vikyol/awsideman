@@ -16,7 +16,7 @@ cache:
   default_ttl: 900   # 15 minutes - short TTL for security
   max_size_mb: 50    # Small cache to minimize data exposure
 
-  # Custom secure cache directory
+  # Custom secure cache directory (profile-based isolation)
   file_cache_dir: "/secure/cache/awsideman"
 
   # Maximum encryption settings

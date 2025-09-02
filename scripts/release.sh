@@ -128,6 +128,101 @@ build_package() {
 }
 
 # Function to create and push tag
+# Function to generate release notes
+generate_release_notes() {
+    local version=$1
+    local release_notes_file="docs/releases/$version.md"
+
+    print_status "Generating release notes for $version..."
+
+    # Check if release notes already exist
+    if [[ -f "$release_notes_file" ]]; then
+        print_warning "Release notes already exist for $version"
+        return 0
+    fi
+
+    # Get the previous version
+    local previous_version=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+
+    # Get commit messages since last release
+    local commits=""
+    if [[ -n "$previous_version" ]]; then
+        commits=$(git log --oneline "$previous_version"..HEAD --pretty=format:"- %s")
+    else
+        commits=$(git log --oneline --pretty=format:"- %s")
+    fi
+
+    # Create release notes template
+    cat > "$release_notes_file" << EOF
+# 🚀 awsideman $version - Release
+
+> **Release Date**: $(date +"%B %d, %Y")
+> **Version**: $version
+> **Status**: Alpha (Pre-release)
+> **Python**: 3.10+
+
+## ⚠️ **Alpha Release Notice**
+
+**This is an alpha release and is NOT recommended for production use.**
+
+- Breaking changes may occur in future releases
+- Some features may be incomplete or unstable
+- Please report any issues you encounter
+- Feedback and contributions are welcome!
+
+## 🎉 **What's New in This Release**
+
+### **🔧 Changes**
+$commits
+
+## 🚀 **Installation**
+
+\`\`\`bash
+# Install via pip
+pip install awsideman==$version
+
+# Or upgrade from previous version
+pip install --upgrade awsideman==$version
+\`\`\`
+
+## 📚 **Documentation**
+
+- [Getting Started Guide](../README.md)
+- [Configuration Reference](../CONFIGURATION.md)
+- [Environment Variables](../ENVIRONMENT_VARIABLES.md)
+
+## 🤝 **Contributing**
+
+We welcome contributions! Please see our [Contributing Guide](../CONTRIBUTING.md) for details.
+
+## 📝 **Full Changelog**
+
+See [CHANGELOG.md](../../CHANGELOG.md) for the complete list of changes.
+
+---
+
+**Previous Release**: $([ -n "$previous_version" ] && echo "[$previous_version]($previous_version.md)" || echo "Initial release")
+**Next Release**: Coming soon...
+EOF
+
+    print_success "Generated release notes: $release_notes_file"
+
+    # Update the releases index
+    update_releases_index "$version"
+}
+
+# Function to update releases index
+update_releases_index() {
+    local version=$1
+    local index_file="docs/releases/README.md"
+
+    print_status "Updating releases index..."
+
+    # This is a simplified update - in a real scenario, you might want to use a more sophisticated approach
+    # For now, we'll just add a note that the index should be updated manually
+    print_warning "Please manually update docs/releases/README.md to include the new release"
+}
+
 create_tag() {
     local version=$1
 
@@ -137,6 +232,9 @@ create_tag() {
         print_error "Tag v$version already exists"
         exit 1
     fi
+
+    # Generate release notes before creating tag
+    generate_release_notes "$version"
 
     git tag -a "v$version" -m "Release v$version"
     git push origin "v$version"

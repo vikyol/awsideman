@@ -1,24 +1,20 @@
 # awsideman Documentation
 
-This directory contains comprehensive documentation for awsideman's features and capabilities.
+This directory contains user-focused documentation for awsideman's features and capabilities.
 
 ## Documentation Index
 
 ### Core Features
-- **[Multi-Account Operations](MULTI_ACCOUNT_OPERATIONS.md)** - Complete guide to managing permissions across multiple AWS accounts
-- **[Bulk Operations](BULK_OPERATIONS.md)** - CSV/JSON-based bulk assignment and revocation operations
-- **[Rollback Operations](ROLLBACK_OPERATIONS.md)** - Operation tracking and rollback capabilities for safe permission management
 - **[Backup & Restore System](backup-restore/README.md)** - Comprehensive backup and restore for AWS Identity Center
-- **[Cache System](CACHE_DOCUMENTATION_INDEX.md)** - Unified cache manager architecture, usage, and troubleshooting
-- **[Rollback Developer Guide](ROLLBACK_DEVELOPER_GUIDE.md)** - Technical documentation for rollback system architecture and APIs
-- **[Rollback API Reference](ROLLBACK_API_REFERENCE.md)** - Complete API documentation for rollback system classes and methods
+- **[Enhanced Progress Reporting](enhanced-progress-reporting/README.md)** - Advanced progress reporting and monitoring features
 - **[Security Implementation](SECURITY.md)** - Security features, encryption, and best practices
 - **[Security Best Practices](SECURITY_BEST_PRACTICES.md)** - Enterprise security guidelines and recommendations
 
-### Troubleshooting and Support
-- **[Multi-Account Troubleshooting](MULTI_ACCOUNT_TROUBLESHOOTING.md)** - Comprehensive troubleshooting guide for multi-account operations
-- **[Cache Troubleshooting](CACHE_TROUBLESHOOTING.md)** - Diagnostic procedures and solutions for cache-related issues
+### Configuration and Reference
 - **[Environment Variables](ENVIRONMENT_VARIABLES.md)** - Configuration through environment variables
+- **[Template Format](template-format.md)** - YAML template format specification and examples
+- **[Template Troubleshooting](template-troubleshooting.md)** - Common template issues and solutions
+- **[Release Notes](releases/README.md)** - Detailed release notes for all versions
 
 ## Quick Navigation
 
@@ -28,99 +24,68 @@ This directory contains comprehensive documentation for awsideman's features and
 3. [Profile Management](../README.md#profile-management)
 
 ### Common Use Cases
-1. **New Employee Onboarding**
-   - [Multi-Account Operations Guide](MULTI_ACCOUNT_OPERATIONS.md#example-1-basic-multi-account-assignment)
-   - [Automation Scripts](../examples/multi-account-operations/automation-scripts/)
+1. **Backup and Restore**
+   - [Backup & Restore System](backup-restore/README.md)
+   - [Getting Started Guide](backup-restore/getting-started.md)
+   - [CLI Reference](backup-restore/cli-reference.md)
 
-2. **Employee Offboarding**
-   - [Multi-Account Revocation](MULTI_ACCOUNT_OPERATIONS.md#example-3-multi-account-revocation)
-   - [Offboarding Script](../examples/multi-account-operations/automation-scripts/offboard-employee.sh)
+2. **Template Management**
+   - [Template Format Guide](template-format.md)
+   - [Template Examples](backup-restore/examples/configuration-templates.md)
+   - [Template Troubleshooting](template-troubleshooting.md)
 
-3. **Bulk Permission Management**
-   - [Bulk Operations Guide](BULK_OPERATIONS.md)
-   - [CSV/JSON Examples](../examples/bulk-operations/)
-
-4. **Safe Permission Management**
-   - [Rollback Operations Guide](ROLLBACK_OPERATIONS.md)
-   - [Operation Tracking and Audit](ROLLBACK_OPERATIONS.md#auditing-permission-changes)
-
-4. **Enterprise Workflows**
-   - [Enterprise Examples](../examples/multi-account-operations/sample-data/enterprise-accounts.json)
-   - [Complex Filtering](../examples/multi-account-operations/README.md#filtering-scenarios)
+3. **Security and Compliance**
+   - [Security Features](SECURITY.md)
+   - [Security Best Practices](SECURITY_BEST_PRACTICES.md)
+   - [Environment Variables](ENVIRONMENT_VARIABLES.md)
 
 ### Advanced Topics
-1. **Performance Optimization**
-   - [Multi-Account Performance](MULTI_ACCOUNT_OPERATIONS.md#performance-considerations)
-   - [Cache Architecture and Performance](CACHE_ARCHITECTURE.md#performance-characteristics)
-   - [Cache Configuration](../examples/cache-configurations/)
+1. **Progress Reporting**
+   - [Enhanced Progress Reporting](enhanced-progress-reporting/README.md)
+   - [Monitoring and Analytics](enhanced-progress-reporting/README.md)
 
-2. **Security and Compliance**
-   - [Security Features](SECURITY.md)
-   - [Best Practices](SECURITY_BEST_PRACTICES.md)
-   - [Compliance Examples](../examples/multi-account-operations/sample-data/enterprise-accounts.json#security_and_compliance)
+2. **Configuration Management**
+   - [Environment Variables](ENVIRONMENT_VARIABLES.md)
+   - [Template System](template-format.md)
+   - [Configuration Examples](../examples/cache-configurations/)
 
-3. **Automation and Integration**
-   - [CI/CD Integration](../examples/multi-account-operations/README.md#cicd-integration)
-   - [Automation Scripts](../examples/multi-account-operations/automation-scripts/)
+3. **Backup and Restore**
+   - [Advanced Backup Features](backup-restore/README.md)
+   - [Automation Scripts](backup-restore/examples/automation-scripts.md)
+   - [Configuration Templates](backup-restore/examples/configuration-templates.md)
 
-## Feature Matrix
+## Quick Reference
 
-| Feature | Single Account | Multi-Account | Bulk Operations | Rollback | Notes |
-|---------|---------------|---------------|-----------------|----------|-------|
-| User Assignment | ✅ | ✅ | ✅ | ✅ | Full support across all modes |
-| Group Assignment | ✅ | ✅ | ✅ | ✅ | Full support across all modes |
-| Permission Set Assignment | ✅ | ✅ | ✅ | ✅ | Full support across all modes |
-| Account Filtering | ❌ | ✅ | ✅ | ✅ | Wildcard and tag-based filtering |
-| Dry-Run Mode | ✅ | ✅ | ✅ | ✅ | Preview changes before execution |
-| Progress Tracking | ✅ | ✅ | ✅ | ✅ | Real-time progress indicators |
-| Error Handling | ✅ | ✅ | ✅ | ✅ | Comprehensive error reporting |
-| Name Resolution | ✅ | ✅ | ✅ | ✅ | Human-readable names to AWS IDs |
-| Batch Processing | ❌ | ✅ | ✅ | ✅ | Configurable batch sizes |
-| Rate Limiting | ✅ | ✅ | ✅ | ✅ | Automatic throttling and retry |
-| Operation Tracking | ❌ | ❌ | ❌ | ✅ | Automatic logging of all operations |
-| Operation Rollback | ❌ | ❌ | ❌ | ✅ | Undo operations safely |
-
-## Command Reference
-
-### Multi-Account Commands
+### Backup and Restore Commands
 ```bash
-# Assignment commands
-awsideman assignment assign <permission-set> <principal> --filter <filter>
-awsideman assignment revoke <permission-set> <principal> --filter <filter>
+# Create backup
+awsideman backup create --type full
 
-# Common options
---dry-run              # Preview without making changes
---batch-size N         # Process N accounts concurrently
---filter "expression"  # Account filter (wildcard or tag-based)
---profile <profile>    # AWS profile to use
+# List backups
+awsideman backup list
+
+# Restore from backup
+awsideman restore <backup-id>
+
+# Schedule backups
+awsideman backup schedule --cron "0 2 * * *"
 ```
 
-### Bulk Operation Commands
+### Template Commands
 ```bash
-# Bulk assignment/revocation
-awsideman bulk assign <file>
-awsideman bulk revoke <file>
+# Validate template
+awsideman templates validate template.yaml
 
-# Common options
---dry-run              # Preview without making changes
---batch-size N         # Process N operations concurrently
---stop-on-error        # Stop processing on first error
---force                # Skip confirmation prompts
+# Execute template
+awsideman templates execute template.yaml
 ```
 
-### Cache Management Commands
-```bash
-# Cache operations
-awsideman cache status
-awsideman cache clear
-awsideman cache health check
-awsideman cache warm --resource-type <type>
+## Getting Help
 
-# Rollback operations
-awsideman rollback list
-awsideman rollback apply <operation-id>
-awsideman rollback status
-```
+For detailed command reference and examples, see:
+- [Backup & Restore CLI Reference](backup-restore/cli-reference.md)
+- [Template Format Guide](template-format.md)
+- [Environment Variables Reference](ENVIRONMENT_VARIABLES.md)
 
 ## Examples by Organization Size
 
@@ -171,9 +136,9 @@ awsideman rollback status
 ## Support and Community
 
 ### Getting Help
-1. Check the [troubleshooting guide](MULTI_ACCOUNT_TROUBLESHOOTING.md)
-2. Review [common error scenarios](MULTI_ACCOUNT_TROUBLESHOOTING.md#common-error-scenarios)
-3. Consult the [examples directory](../examples/)
+1. Check the [template troubleshooting guide](template-troubleshooting.md)
+2. Review [environment variables](ENVIRONMENT_VARIABLES.md)
+3. Consult [security best practices](SECURITY_BEST_PRACTICES.md)
 4. Open an issue on GitHub
 
 ### Contributing

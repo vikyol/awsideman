@@ -2,6 +2,17 @@
 
 This directory contains example configuration files for different awsideman deployment scenarios. Each configuration is optimized for specific use cases and environments.
 
+## Profile-Based Data Isolation
+
+**Important:** All cache configurations now support profile-based data isolation. This means:
+
+- **File Backend**: Cache data is stored in `~/.awsideman/cache/profiles/{profile_name}/`
+- **DynamoDB Backend**: S3 keys include `profiles/{profile_name}/` prefix for data isolation
+- **S3 Backend**: Profile parameter is **mandatory** - each AWS account must have its own S3 storage
+- **Local Metadata**: Backup metadata is stored in `~/.awsideman/metadata/profiles/{profile_name}/`
+
+This ensures complete data isolation between different AWS profiles and accounts.
+
 ## Available Examples
 
 ### 1. Development Environment (`development.yaml`)
@@ -81,6 +92,43 @@ This directory contains example configuration files for different awsideman depl
 - Highly regulated industries
 - Air-gapped networks
 - Maximum security requirements
+
+## Profile Isolation Best Practices
+
+### File Backend Isolation
+```yaml
+cache:
+  backend_type: "file"
+  file_cache_dir: "~/.awsideman/cache"  # Will create profiles/{profile_name}/ subdirectories
+```
+
+### DynamoDB Backend Isolation
+```yaml
+cache:
+  backend_type: "dynamodb"
+  dynamodb_table_name: "awsideman-cache"
+  dynamodb_profile: "production"  # Profile for DynamoDB access
+  # Data is automatically isolated by profile in S3 keys
+```
+
+### S3 Backend Isolation (Mandatory Profile)
+```yaml
+cache:
+  backend_type: "s3"
+  s3_bucket: "my-cache-bucket"
+  s3_profile: "production"  # REQUIRED - each account needs its own S3 storage
+  # Data is stored with profiles/{profile_name}/ prefix
+```
+
+### Hybrid Backend Isolation
+```yaml
+cache:
+  backend_type: "hybrid"
+  dynamodb_table_name: "awsideman-cache"
+  dynamodb_profile: "production"
+  file_cache_dir: "~/.awsideman/cache"
+  # Both local and remote data are profile-isolated
+```
 
 ## How to Use These Examples
 
@@ -242,6 +290,48 @@ awsideman cache health check
 4. **Monitor cache hit rates and adjust accordingly**
 5. **Consider regional placement for DynamoDB tables**
 6. **Regular cache maintenance and cleanup**
+
+## Profile Isolation Troubleshooting
+
+### Common Profile Isolation Issues
+
+1. **S3 Backend Profile Required Error:**
+   ```
+   ValueError: Profile is required for S3 storage backend. Each AWS account should have its own S3 storage.
+   ```
+   **Solution:** Always specify a profile for S3 backends:
+   ```yaml
+   cache:
+     backend_type: "s3"
+     s3_bucket: "my-bucket"
+     s3_profile: "production"  # REQUIRED
+   ```
+
+2. **Cache Directory Not Found:**
+   ```
+   FileNotFoundError: [Errno 2] No such file or directory: '/path/to/cache/profiles/default/'
+   ```
+   **Solution:** The profile-based directories are created automatically. Ensure the base directory exists and has write permissions.
+
+3. **Profile Mismatch in DynamoDB:**
+   ```
+   AccessDenied: User is not authorized to perform dynamodb:GetItem
+   ```
+   **Solution:** Ensure the `dynamodb_profile` has the correct permissions for the DynamoDB table.
+
+### Profile Isolation Verification
+
+```bash
+# Check cache directory structure
+ls -la ~/.awsideman/cache/profiles/
+
+# Verify profile-specific cache data
+awsideman cache status --profile production
+awsideman cache status --profile development
+
+# Check backup metadata isolation
+ls -la ~/.awsideman/metadata/profiles/
+```
 
 ## Troubleshooting
 

@@ -21,7 +21,7 @@ cache:
   default_ttl: 3600  # 1 hour - balanced between performance and data freshness
   max_size_mb: 500   # Larger cache for production workloads
 
-  # DynamoDB backend configuration
+  # DynamoDB backend configuration (profile-based isolation)
   dynamodb_table_name: "awsideman-cache-prod"
   dynamodb_region: "us-east-1"
   dynamodb_profile: "production"
