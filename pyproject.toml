@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "awsideman"
-version = "0.1.1-alpha"
+version = "0.1.2-alpha"
 description = "AWS Identity Center Manager - A CLI tool for managing AWS Identity Center operations"
 authors = ["Erhan Vikyol"]
 readme = "README.md"
