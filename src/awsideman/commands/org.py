@@ -131,7 +131,9 @@ def tree(
 
 @app.command("account")
 def account(
-    account_id: str = typer.Argument(..., help="AWS account ID to display details for"),
+    account_identifier: str = typer.Argument(
+        ..., help="AWS account ID (12-digit number) or account name to display details for"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
@@ -142,19 +144,16 @@ def account(
 
     Shows comprehensive metadata including account name, ID, email, status,
     joined timestamp, tags, and the full OU path from root to account.
+
+    You can specify either:
+    - Account ID: 12-digit number (e.g., 123456789012)
+    - Account Name: Full or partial account name (e.g., "production" or "prod-account")
     """
     try:
         # Extract and process standard command parameters
         profile_param, region_param, enable_caching = extract_standard_params(
             profile, region, no_cache
         )
-
-        # Validate account ID format (12-digit number)
-        if not _is_valid_account_id(account_id):
-            console.print(
-                f"[red]Error: Invalid account ID format '{account_id}'. Account ID must be a 12-digit number.[/red]"
-            )
-            raise typer.Exit(1)
 
         # Get AWS client manager with cache integration
         client_manager = get_aws_client_manager(
@@ -178,6 +177,11 @@ def account(
                 else:
                     console.print("[blue]Cache: Disabled[/blue]")
         organizations_client = client_manager.get_organizations_client()
+
+        # Determine if input is account ID or account name and resolve to account ID
+        account_id = _resolve_account_identifier(
+            organizations_client, account_identifier, json_output
+        )
 
         # Get account details
         if not json_output:
@@ -444,6 +448,166 @@ def _is_valid_account_id(account_id: str) -> bool:
         bool: True if valid, False otherwise
     """
     return account_id.isdigit() and len(account_id) == 12
+
+
+def _search_accounts_by_name_optimized(
+    organizations_client, account_name: str
+) -> List[Dict[str, Any]]:
+    """
+    Optimized search for accounts by name using direct list_accounts API with pagination.
+
+    This function is much more efficient than the full organization hierarchy search
+    because it uses the direct list_accounts API with proper pagination handling.
+
+    Args:
+        organizations_client: OrganizationsClient instance for API calls
+        account_name: Account name to search for (case-insensitive)
+
+    Returns:
+        List[Dict[str, Any]]: List of matching account dictionaries
+
+    Raises:
+        ClientError: If AWS API calls fail
+    """
+    query_lower = account_name.strip().lower()
+    exact_matches = []
+    partial_matches = []
+
+    try:
+        # Get all accounts with proper pagination handling
+        all_accounts = _get_all_accounts_with_pagination(organizations_client)
+
+        for account in all_accounts:
+            account_name_lower = account.get("Name", "").lower()
+
+            # Check for exact match first (highest priority)
+            if account_name_lower == query_lower:
+                exact_matches.append(account)
+            # Check for partial match (starts with)
+            elif account_name_lower.startswith(query_lower):
+                partial_matches.append(account)
+            # Check for contains match (lowest priority)
+            elif query_lower in account_name_lower:
+                partial_matches.append(account)
+
+        # Return exact matches first, then partial matches
+        return exact_matches + partial_matches
+
+    except Exception as e:
+        console.print(f"[red]Error: Failed to search accounts: {str(e)}[/red]")
+        raise
+
+
+def _get_all_accounts_with_pagination(organizations_client) -> List[Dict[str, Any]]:
+    """
+    Get all accounts using list_accounts API with proper pagination handling.
+
+    Args:
+        organizations_client: OrganizationsClient instance for API calls
+
+    Returns:
+        List[Dict[str, Any]]: List of all account dictionaries
+
+    Raises:
+        ClientError: If AWS API calls fail
+    """
+    all_accounts = []
+    next_token = None
+
+    try:
+        while True:
+            # Prepare parameters for the API call
+            params = {}
+            if next_token:
+                params["NextToken"] = next_token
+
+            # Make the API call
+            if params:
+                # If we have pagination parameters, we need to call the underlying client directly
+                # since our wrapper might not support NextToken
+                response = organizations_client.client.list_accounts(**params)
+            else:
+                response = organizations_client.list_accounts()
+
+            # Extract accounts from response
+            accounts = response.get("Accounts", [])
+            all_accounts.extend(accounts)
+
+            # Check if there are more pages
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+
+        return all_accounts
+
+    except Exception as e:
+        console.print(f"[red]Error: Failed to get all accounts with pagination: {str(e)}[/red]")
+        raise
+
+
+def _resolve_account_identifier(
+    organizations_client, account_identifier: str, json_output: bool = False
+) -> str:
+    """
+    Resolve account identifier to account ID.
+
+    If the identifier is a valid account ID (12-digit number), return it as-is.
+    If the identifier is an account name, search for matching accounts and return the ID.
+
+    Args:
+        organizations_client: OrganizationsClient instance for API calls
+        account_identifier: Account ID or account name to resolve
+        json_output: Whether to suppress console output for JSON mode
+
+    Returns:
+        str: The resolved account ID
+
+    Raises:
+        typer.Exit: If account cannot be resolved or multiple matches found
+    """
+    # Check if it's a valid account ID first
+    if _is_valid_account_id(account_identifier):
+        return account_identifier
+
+    # If not a valid account ID, treat it as an account name and search
+    if not json_output:
+        console.print(f"[blue]Searching for account with name '{account_identifier}'...[/blue]")
+
+    try:
+        # Use optimized search that doesn't require building full organization hierarchy
+        matching_accounts = _search_accounts_by_name_optimized(
+            organizations_client, account_identifier
+        )
+
+        if not matching_accounts:
+            console.print(f"[red]Error: No account found with name '{account_identifier}'[/red]")
+            raise typer.Exit(1)
+
+        if len(matching_accounts) == 1:
+            # Single match - return the account ID
+            account_id = matching_accounts[0]["Id"]
+            account_name = matching_accounts[0]["Name"]
+            if not json_output:
+                console.print(f"[green]Found account: {account_name} ({account_id})[/green]")
+            return account_id
+
+        # Multiple matches - show options and let user choose
+        console.print(f"[yellow]Multiple accounts found matching '{account_identifier}':[/yellow]")
+        for i, account in enumerate(matching_accounts, 1):
+            console.print(
+                f"  {i}. {account['Name']} ({account['Id']}) - {account.get('Email', 'N/A')}"
+            )
+
+        console.print(
+            "[red]Error: Multiple accounts found. Please be more specific or use the account ID.[/red]"
+        )
+        raise typer.Exit(1)
+
+    except Exception as e:
+        console.print(
+            f"[red]Error: Failed to resolve account identifier '{account_identifier}': {str(e)}[/red]"
+        )
+        raise typer.Exit(1)
 
 
 def _output_account_json(account_details) -> None:

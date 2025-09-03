@@ -17,42 +17,49 @@ logger = logging.getLogger(__name__)
 
 class CacheManager(ICacheManager, GracefulDegradationMixin):
     """
-    Unified cache manager with singleton pattern and thread-safe operations.
+    Unified cache manager with profile-aware singleton pattern and thread-safe operations.
 
     This implementation provides a single, consistent cache manager instance
-    across the entire system, eliminating the confusion of multiple cache managers.
+    per profile, eliminating the confusion of multiple cache managers while
+    supporting profile-specific cache directories.
 
     Features:
-    - Thread-safe singleton pattern
+    - Profile-aware singleton pattern (one instance per profile)
+    - Thread-safe operations
     - In-memory storage with TTL support
     - Pattern-based invalidation
     - Statistics tracking
     - Automatic cleanup of expired entries
     """
 
-    _instance = None
+    _instances = {}  # Profile-specific instances
     _lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
-        """Singleton pattern implementation."""
-        if cls._instance is None:
+        """Profile-aware singleton pattern implementation."""
+        profile = kwargs.get("profile", "default")
+
+        if profile not in cls._instances:
             with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
+                if profile not in cls._instances:
+                    cls._instances[profile] = super().__new__(cls)
                     # Store the kwargs for the first initialization
-                    cls._init_kwargs = kwargs
-            return cls._instance
+                    cls._instances[profile]._init_kwargs = kwargs
+            return cls._instances[profile]
         else:
-            return cls._instance
+            return cls._instances[profile]
 
     @classmethod
-    def reset_instance(cls):
-        """Reset the singleton instance for testing purposes."""
+    def reset_instance(cls, profile: Optional[str] = None):
+        """Reset the singleton instance(s) for testing purposes."""
         with cls._lock:
-            cls._instance = None
-            # Clear _init_kwargs to ensure clean test state
-            if hasattr(cls, "_init_kwargs"):
-                delattr(cls, "_init_kwargs")
+            if profile is None:
+                # Reset all instances
+                cls._instances.clear()
+            else:
+                # Reset specific profile instance
+                if profile in cls._instances:
+                    del cls._instances[profile]
 
     def __init__(self, default_ttl: Optional[timedelta] = None, profile: Optional[str] = None):
         """
@@ -988,6 +995,29 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                 logger.debug(f"Cleaned up {removed_count} expired cache entries")
 
             return removed_count
+
+    def cleanup_expired_files(self) -> int:
+        """
+        Clean up expired cache files from the backend storage.
+
+        This method delegates to the backend's cleanup method if available.
+
+        Returns:
+            Number of expired files removed
+        """
+        if not self._backend:
+            return 0
+
+        try:
+            # Check if backend has cleanup method
+            if hasattr(self._backend, "cleanup_expired_files"):
+                return self._backend.cleanup_expired_files()
+            else:
+                logger.debug("Backend does not support file cleanup")
+                return 0
+        except Exception as e:
+            logger.error(f"Failed to cleanup expired files: {e}")
+            return 0
 
     def get_cache_size(self) -> int:
         """

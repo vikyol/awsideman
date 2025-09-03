@@ -245,8 +245,6 @@ def _display_recent_cache_entries(cache_manager) -> None:
             # Create a table for better organization
             from rich.table import Table
 
-            from ...cache.key_builder import CacheKeyBuilder
-
             table = Table(show_header=True, header_style="bold magenta")
             table.add_column("Operation", style="cyan", ratio=1)
             table.add_column("Resource", style="magenta", ratio=1)
@@ -261,81 +259,9 @@ def _display_recent_cache_entries(cache_manager) -> None:
                 age = entry.get("age", "Unknown")
                 size = entry.get("size", "Unknown")
 
-                # Parse the cache key to extract operation and resource type
-                try:
-                    # First try the standard CacheKeyBuilder format
-                    if ":" in key:
-                        parsed_key = CacheKeyBuilder.parse_key(key)
-                        operation = parsed_key.get("operation") or "Unknown"
-                        resource_type = parsed_key.get("resource_type") or "Unknown"
-                    else:
-                        # Parse the actual cache key format (e.g., "list_organizational_units_for_parent_6765104b06d831b4")
-                        operation = "Unknown"
-                        resource_type = "Unknown"
-
-                        # Try to extract meaningful information from the key
-                        if key.startswith("list_"):
-                            operation = "list"
-                            # Extract resource type from the key
-                            if "organizational_units" in key:
-                                resource_type = "organizational_units"
-                            elif "accounts" in key:
-                                resource_type = "accounts"
-                            elif "roots" in key:
-                                resource_type = "roots"
-                            elif "users" in key:
-                                resource_type = "users"
-                            elif "groups" in key:
-                                resource_type = "groups"
-                            elif "permission_sets" in key:
-                                resource_type = "permission_sets"
-                            elif "assignments" in key:
-                                resource_type = "assignments"
-                            else:
-                                resource_type = "other"
-                        elif key.startswith("describe_"):
-                            operation = "describe"
-                            # Extract resource type from the key
-                            if "user" in key:
-                                resource_type = "user"
-                            elif "group" in key:
-                                resource_type = "group"
-                            elif "permission_set" in key:
-                                resource_type = "permission_set"
-                            elif "account" in key:
-                                resource_type = "account"
-                            else:
-                                resource_type = "other"
-                        elif key.startswith("get_"):
-                            operation = "get"
-                            resource_type = "other"
-                        else:
-                            # Try to guess from the key content
-                            if "user" in key:
-                                resource_type = "user"
-                            elif "group" in key:
-                                resource_type = "group"
-                            elif "permission" in key:
-                                resource_type = "permission_set"
-                            elif "account" in key:
-                                resource_type = "account"
-                            elif "organizational" in key:
-                                resource_type = "organizational_units"
-                            else:
-                                resource_type = "other"
-
-                            # Try to guess operation
-                            if "list" in key:
-                                operation = "list"
-                            elif "describe" in key:
-                                operation = "describe"
-                            elif "get" in key:
-                                operation = "get"
-                            else:
-                                operation = "other"
-                except Exception:
-                    operation = "Unknown"
-                    resource_type = "Unknown"
+                # Use the operation and resource fields that were already parsed by get_recent_entries
+                operation = entry.get("operation", "other")
+                resource_type = entry.get("resource", "other")
 
                 # Truncate long keys for display
                 display_key = key[:50] + "..." if len(key) > 50 else key

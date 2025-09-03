@@ -11,6 +11,7 @@ from . import accounts, clear, encryption, helpers, inspect, status, warm
 
 # Import command functions
 from .accounts import account_cache_status
+from .cleanup import app as cleanup_app
 from .clear import clear_cache
 from .encryption import encryption_management
 from .inspect import inspect_cache
@@ -27,6 +28,7 @@ app.command("warm")(warm_cache)
 app.command("encryption")(encryption_management)
 app.command("accounts")(account_cache_status)
 app.command("inspect")(inspect_cache)
+app.add_typer(cleanup_app, name="cleanup")
 
 # Export the app for backward compatibility
 __all__ = ["app", "clear", "status", "warm", "encryption", "accounts", "inspect", "helpers"]

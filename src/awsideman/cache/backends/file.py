@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ...encryption.aes import AESEncryption
+from ...encryption.key_manager import KeyManager
 from ...utils.models import CacheEntry
 from ...utils.security import get_secure_logger, input_validator
 from ..utils import CachePathManager
@@ -22,7 +24,12 @@ class FileBackend(CacheBackend):
     Maintains backward compatibility with existing cache files.
     """
 
-    def __init__(self, cache_dir: Optional[str] = None, profile: Optional[str] = None):
+    def __init__(
+        self,
+        cache_dir: Optional[str] = None,
+        profile: Optional[str] = None,
+        encryption_enabled: bool = True,
+    ):
         """
         Initialize file backend.
 
@@ -30,11 +37,26 @@ class FileBackend(CacheBackend):
             cache_dir: Optional custom cache directory path.
                       Defaults to ~/.awsideman/cache/
             profile: AWS profile name for isolation
+            encryption_enabled: Whether to enable encryption for stored data
         """
         self.cache_dir = cache_dir
         self.profile = profile
         self.path_manager = CachePathManager(cache_dir, profile)
         self.backend_type = "file"
+        self.encryption_enabled = encryption_enabled
+
+        # Initialize encryption system if enabled
+        self.encryption_provider = None
+        if self.encryption_enabled:
+            try:
+                key_manager = KeyManager()
+                self.encryption_provider = AESEncryption(key_manager)
+                logger.debug("File backend encryption initialized successfully")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to initialize encryption, falling back to unencrypted storage: {e}"
+                )
+                self.encryption_enabled = False
 
         # Ensure cache directory exists
         try:
@@ -100,10 +122,37 @@ class FileBackend(CacheBackend):
                                 self._remove_cache_file(cache_file)
                                 return None
 
-                            # Return encrypted data
+                            # Decrypt the data if encryption is enabled
                             encrypted_data = file_content[4 + metadata_length :]
-                            logger.debug(f"File backend cache hit for key: {key} (encrypted)")
-                            return encrypted_data
+
+                            if self.encryption_enabled and self.encryption_provider:
+                                try:
+                                    # Decrypt the data
+                                    decrypted_data = self.encryption_provider.decrypt(
+                                        encrypted_data
+                                    )
+
+                                    # Re-serialize as pickle to match the expected format
+                                    import pickle
+
+                                    pickled_data = pickle.dumps(decrypted_data)
+
+                                    logger.debug(
+                                        f"File backend cache hit for key: {key} (encrypted and decrypted)"
+                                    )
+                                    return pickled_data
+
+                                except Exception as e:
+                                    logger.error(f"Failed to decrypt data for key {key}: {e}")
+                                    # Remove corrupted encrypted file
+                                    self._remove_cache_file(cache_file)
+                                    return None
+                            else:
+                                # Encryption is disabled, return raw data (shouldn't happen with new format)
+                                logger.warning(
+                                    f"Found encrypted data but encryption is disabled for key: {key}"
+                                )
+                                return encrypted_data
                 except (ValueError, json.JSONDecodeError, KeyError):
                     # Not the new format, fall through to old format
                     pass
@@ -225,65 +274,52 @@ class FileBackend(CacheBackend):
                     original_error=dir_error,
                 )
 
-            # Try to determine if data is encrypted or plain JSON
-            is_encrypted = False
-            try:
-                # Try to decode as JSON first
-                decoded_data = data.decode("utf-8")
-                json.loads(decoded_data)  # Test if it's valid JSON
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                # Data is likely encrypted or binary
-                is_encrypted = True
-
             # Write to cache file
             cache_file = self.path_manager.get_cache_file_path(key)
             temp_file = cache_file.with_suffix(".tmp")
 
-            if is_encrypted:
-                # Store encrypted data with metadata
-                cache_metadata = {
-                    "encrypted": True,
-                    "created_at": time.time(),
-                    "ttl": effective_ttl,
-                    "key": key,
-                    "operation": operation,
-                    "data_size": len(data),
-                }
-
-                # Write metadata as JSON header followed by encrypted data
-                with open(temp_file, "wb") as f:
-                    # Write metadata header
-                    metadata_json = json.dumps(cache_metadata).encode("utf-8")
-                    metadata_length = len(metadata_json)
-
-                    # Write: [4 bytes length][metadata JSON][encrypted data]
-                    f.write(metadata_length.to_bytes(4, byteorder="big"))
-                    f.write(metadata_json)
-                    f.write(data)
-            else:
-                # Handle as plain JSON (backward compatibility)
+            if self.encryption_enabled and self.encryption_provider:
+                # Encrypt the data before storing
                 try:
-                    deserialized_data = json.loads(data.decode("utf-8"))
+                    # First, deserialize the pickled data to get the original data structure
+                    import pickle
 
-                    # Create cache entry in old format
-                    cache_data = {
-                        "data": deserialized_data,
+                    entry_data = pickle.loads(data)
+
+                    # Encrypt the data using the encryption provider
+                    encrypted_data = self.encryption_provider.encrypt(entry_data)
+
+                    # Store encrypted data with metadata
+                    cache_metadata = {
+                        "encrypted": True,
                         "created_at": time.time(),
                         "ttl": effective_ttl,
                         "key": key,
                         "operation": operation,
+                        "data_size": len(encrypted_data),
+                        "encryption_type": self.encryption_provider.get_encryption_type(),
                     }
 
-                    with open(temp_file, "w", encoding="utf-8") as f:
-                        json.dump(cache_data, f, indent=2, default=str)
+                    # Write metadata as JSON header followed by encrypted data
+                    with open(temp_file, "wb") as f:
+                        # Write metadata header
+                        metadata_json = json.dumps(cache_metadata).encode("utf-8")
+                        metadata_length = len(metadata_json)
 
-                except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                    logger.error(f"Cannot process data for cache key {key}: {e}")
-                    raise CacheBackendError(
-                        f"Cannot process data for storage: {e}",
-                        backend_type=self.backend_type,
-                        original_error=e,
-                    )
+                        # Write: [4 bytes length][metadata JSON][encrypted data]
+                        f.write(metadata_length.to_bytes(4, byteorder="big"))
+                        f.write(metadata_json)
+                        f.write(encrypted_data)
+
+                    logger.debug(f"Stored encrypted cache entry for key: {key}")
+
+                except Exception as e:
+                    logger.error(f"Failed to encrypt data for key {key}: {e}")
+                    # Fall back to unencrypted storage
+                    self._store_unencrypted_data(temp_file, data, key, operation, effective_ttl)
+            else:
+                # Store unencrypted data (backward compatibility)
+                self._store_unencrypted_data(temp_file, data, key, operation, effective_ttl)
 
             # Atomic rename
             temp_file.rename(cache_file)
@@ -334,6 +370,58 @@ class FileBackend(CacheBackend):
                 backend_type=self.backend_type,
                 original_error=e,
             )
+
+    def _store_unencrypted_data(
+        self, temp_file: Path, data: bytes, key: str, operation: str, ttl: int
+    ) -> None:
+        """
+        Store unencrypted data in the old JSON format for backward compatibility.
+
+        Args:
+            temp_file: Temporary file path to write to
+            data: Raw bytes data to store
+            key: Cache key
+            operation: Operation name
+            ttl: TTL in seconds
+        """
+        try:
+            # Try to decode as JSON first (for backward compatibility)
+            decoded_data = data.decode("utf-8")
+            deserialized_data = json.loads(decoded_data)
+
+            # Create cache entry in old format
+            cache_data = {
+                "data": deserialized_data,
+                "created_at": time.time(),
+                "ttl": ttl,
+                "key": key,
+                "operation": operation,
+            }
+
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(cache_data, f, indent=2, default=str)
+
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # Data is not JSON, store as binary with metadata (pickled data)
+            cache_metadata = {
+                "encrypted": False,
+                "created_at": time.time(),
+                "ttl": ttl,
+                "key": key,
+                "operation": operation,
+                "data_size": len(data),
+            }
+
+            # Write metadata as JSON header followed by raw data
+            with open(temp_file, "wb") as f:
+                # Write metadata header
+                metadata_json = json.dumps(cache_metadata).encode("utf-8")
+                metadata_length = len(metadata_json)
+
+                # Write: [4 bytes length][metadata JSON][raw data]
+                f.write(metadata_length.to_bytes(4, byteorder="big"))
+                f.write(metadata_json)
+                f.write(data)
 
     def invalidate(self, key: Optional[str] = None) -> None:
         """
@@ -393,67 +481,94 @@ class FileBackend(CacheBackend):
             cache_files = self.path_manager.list_cache_files()
             total_size = self.path_manager.get_cache_size()
 
-            # Count valid vs expired/corrupted entries
-            valid_entries = 0
-            expired_entries = 0
-            corrupted_entries = 0
+            # For performance with large numbers of files, use sampling approach
+            total_files = len(cache_files)
 
-            for cache_file in cache_files:
-                try:
-                    # Try to read as binary first to detect format
-                    with open(cache_file, "rb") as f:
-                        file_content = f.read()
+            if total_files == 0:
+                valid_entries = 0
+                expired_entries = 0
+                corrupted_entries = 0
+            else:
+                # Sample up to 50 files for detailed analysis to avoid performance issues
+                sample_size = min(50, total_files)
+                if total_files <= 50:
+                    sample_files = cache_files
+                else:
+                    # Take every nth file to get a representative sample
+                    step = total_files // sample_size
+                    sample_files = cache_files[::step][:sample_size]
 
-                    # Check if it's the new encrypted format
-                    is_encrypted_format = False
-                    if len(file_content) >= 4:
-                        try:
-                            metadata_length = int.from_bytes(file_content[:4], byteorder="big")
-                            if metadata_length > 0 and metadata_length < len(file_content):
-                                metadata_json = file_content[4 : 4 + metadata_length]
-                                metadata = json.loads(metadata_json.decode("utf-8"))
+                # Count valid vs expired/corrupted entries in sample
+                valid_entries = 0
+                expired_entries = 0
+                corrupted_entries = 0
 
-                                if metadata.get("encrypted", False):
-                                    is_encrypted_format = True
-                                    # Check if expired
-                                    if time.time() > metadata["created_at"] + metadata["ttl"]:
-                                        expired_entries += 1
-                                    else:
-                                        valid_entries += 1
-                        except (ValueError, json.JSONDecodeError, KeyError):
-                            pass
+                for cache_file in sample_files:
+                    try:
+                        # Try to read as binary first to detect format
+                        with open(cache_file, "rb") as f:
+                            file_content = f.read()
 
-                    if not is_encrypted_format:
-                        # Try old JSON format
-                        try:
-                            with open(cache_file, "r", encoding="utf-8") as f:
-                                cache_data = json.load(f)
+                        # Check if it's the new encrypted format
+                        is_encrypted_format = False
+                        if len(file_content) >= 4:
+                            try:
+                                metadata_length = int.from_bytes(file_content[:4], byteorder="big")
+                                if metadata_length > 0 and metadata_length < len(file_content):
+                                    metadata_json = file_content[4 : 4 + metadata_length]
+                                    metadata = json.loads(metadata_json.decode("utf-8"))
 
-                            # Validate cache data structure
-                            required_fields = ["data", "created_at", "ttl", "key", "operation"]
-                            if not all(field in cache_data for field in required_fields):
+                                    if metadata.get("encrypted", False):
+                                        is_encrypted_format = True
+                                        # Check if expired
+                                        if time.time() > metadata["created_at"] + metadata["ttl"]:
+                                            expired_entries += 1
+                                        else:
+                                            valid_entries += 1
+                            except (ValueError, json.JSONDecodeError, KeyError):
+                                pass
+
+                        if not is_encrypted_format:
+                            # Try old JSON format
+                            try:
+                                with open(cache_file, "r", encoding="utf-8") as f:
+                                    cache_data = json.load(f)
+
+                                # Validate cache data structure
+                                required_fields = ["data", "created_at", "ttl", "key", "operation"]
+                                if not all(field in cache_data for field in required_fields):
+                                    corrupted_entries += 1
+                                    continue
+
+                                cache_entry = CacheEntry(
+                                    data=cache_data["data"],
+                                    created_at=cache_data["created_at"],
+                                    ttl=cache_data["ttl"],
+                                    key=cache_data["key"],
+                                    operation=cache_data["operation"],
+                                )
+
+                                if cache_entry.is_expired():
+                                    expired_entries += 1
+                                else:
+                                    valid_entries += 1
+
+                            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                                 corrupted_entries += 1
-                                continue
 
-                            cache_entry = CacheEntry(
-                                data=cache_data["data"],
-                                created_at=cache_data["created_at"],
-                                ttl=cache_data["ttl"],
-                                key=cache_data["key"],
-                                operation=cache_data["operation"],
-                            )
+                    except Exception as e:
+                        logger.warning(f"Error reading cache file {cache_file} for stats: {e}")
+                        corrupted_entries += 1
 
-                            if cache_entry.is_expired():
-                                expired_entries += 1
-                            else:
-                                valid_entries += 1
+                # Extrapolate sample results to total files
+                if sample_size > 0:
+                    valid_ratio = valid_entries / sample_size
+                    expired_ratio = expired_entries / sample_size
+                    corrupted_ratio = corrupted_entries / sample_size
 
-                        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-                            corrupted_entries += 1
-
-                except Exception as e:
-                    logger.warning(f"Error reading cache file {cache_file} for stats: {e}")
-                    corrupted_entries += 1
+                    valid_entries = int(total_files * valid_ratio)
+                    expired_entries = int(total_files * expired_ratio)
+                    corrupted_entries = int(total_files * corrupted_ratio)
 
             stats = {
                 "backend_type": self.backend_type,
@@ -556,9 +671,68 @@ class FileBackend(CacheBackend):
                                         else:
                                             age_display = f"{age_seconds/3600:.1f}h ago"
 
+                                        # Get the actual cache key from metadata
+                                        actual_key = metadata.get("key", key)
+
+                                        # Try to parse as hierarchical key first
+                                        from ..key_builder import CacheKeyBuilder
+
+                                        key_components = CacheKeyBuilder.parse_key(actual_key)
+
+                                        # Check if this is a hierarchical key (has colons)
+                                        if (
+                                            ":" in actual_key
+                                            and key_components.get("resource_type") != actual_key
+                                        ):
+                                            # This is a hierarchical key
+                                            resource_type = key_components.get(
+                                                "resource_type", "other"
+                                            )
+                                            operation_from_key = key_components.get(
+                                                "operation", operation
+                                            )
+
+                                        else:
+                                            # This is a hash-based key, extract info from operation name
+                                            operation_name = actual_key
+                                            if operation_name.startswith("list_"):
+                                                operation_from_key = "list"
+                                                if "user" in operation_name:
+                                                    resource_type = "user"
+                                                elif "group" in operation_name:
+                                                    resource_type = "group"
+                                                elif "permission_set" in operation_name:
+                                                    resource_type = "permission_set"
+                                                elif "assignment" in operation_name:
+                                                    resource_type = "assignment"
+                                                elif "account" in operation_name:
+                                                    resource_type = "account"
+                                                elif "organizational_unit" in operation_name:
+                                                    resource_type = "organizational_unit"
+                                                else:
+                                                    resource_type = "other"
+                                            elif operation_name.startswith("describe_"):
+                                                operation_from_key = "describe"
+                                                if "user" in operation_name:
+                                                    resource_type = "user"
+                                                elif "group" in operation_name:
+                                                    resource_type = "group"
+                                                elif "permission_set" in operation_name:
+                                                    resource_type = "permission_set"
+                                                elif "assignment" in operation_name:
+                                                    resource_type = "assignment"
+                                                elif "account" in operation_name:
+                                                    resource_type = "account"
+                                                else:
+                                                    resource_type = "other"
+                                            else:
+                                                operation_from_key = operation_name
+                                                resource_type = "other"
+
                                         entry = {
                                             "key": key,
-                                            "operation": operation,
+                                            "operation": operation_from_key,
+                                            "resource": resource_type,
                                             "ttl": ttl_display,
                                             "age": age_display,
                                             "size": f"{stat.st_size} bytes",
@@ -566,6 +740,7 @@ class FileBackend(CacheBackend):
                                             "file_size": stat.st_size,
                                             "is_expired": remaining_ttl <= 0,
                                         }
+
                                         entries.append(entry)
                                         continue  # Skip to next file
                             except (ValueError, json.JSONDecodeError, KeyError, UnicodeDecodeError):
@@ -600,9 +775,60 @@ class FileBackend(CacheBackend):
                         else:
                             age_display = f"{age_seconds/3600:.1f}h ago"
 
+                        # Get the actual cache key from the cache data
+                        actual_key = cache_data.get("key", key)
+
+                        # Try to parse as hierarchical key first
+                        from ..key_builder import CacheKeyBuilder
+
+                        key_components = CacheKeyBuilder.parse_key(actual_key)
+
+                        # Check if this is a hierarchical key (has colons)
+                        if ":" in actual_key and key_components.get("resource_type") != actual_key:
+                            # This is a hierarchical key
+                            resource_type = key_components.get("resource_type", "other")
+                            operation_from_key = key_components.get("operation", operation)
+                        else:
+                            # This is a hash-based key, extract info from operation name
+                            operation_name = actual_key
+                            if operation_name.startswith("list_"):
+                                operation_from_key = "list"
+                                if "user" in operation_name:
+                                    resource_type = "user"
+                                elif "group" in operation_name:
+                                    resource_type = "group"
+                                elif "permission_set" in operation_name:
+                                    resource_type = "permission_set"
+                                elif "assignment" in operation_name:
+                                    resource_type = "assignment"
+                                elif "account" in operation_name:
+                                    resource_type = "account"
+                                elif "organizational_unit" in operation_name:
+                                    resource_type = "organizational_unit"
+                                else:
+                                    resource_type = "other"
+                            elif operation_name.startswith("describe_"):
+                                operation_from_key = "describe"
+                                if "user" in operation_name:
+                                    resource_type = "user"
+                                elif "group" in operation_name:
+                                    resource_type = "group"
+                                elif "permission_set" in operation_name:
+                                    resource_type = "permission_set"
+                                elif "assignment" in operation_name:
+                                    resource_type = "assignment"
+                                elif "account" in operation_name:
+                                    resource_type = "account"
+                                else:
+                                    resource_type = "other"
+                            else:
+                                operation_from_key = operation_name
+                                resource_type = "other"
+
                         entry = {
                             "key": key,
-                            "operation": operation,
+                            "operation": operation_from_key,
+                            "resource": resource_type,
                             "ttl": ttl_display,
                             "age": age_display,
                             "size": f"{stat.st_size} bytes",
@@ -615,9 +841,17 @@ class FileBackend(CacheBackend):
                     except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError) as e:
                         # If we can't read the JSON, return basic file info
                         logger.debug(f"Could not read cache entry metadata from {cache_file}: {e}")
+                        # Parse the cache key to extract resource type and operation
+                        from ..key_builder import CacheKeyBuilder
+
+                        key_components = CacheKeyBuilder.parse_key(key)
+                        resource_type = key_components.get("resource_type", "other")
+                        operation_from_key = key_components.get("operation", "unknown")
+
                         entry = {
                             "key": key,
-                            "operation": "unknown",
+                            "operation": operation_from_key,
+                            "resource": resource_type,
                             "ttl": "Unknown",
                             "age": "Unknown",
                             "size": f"{stat.st_size} bytes",
@@ -803,3 +1037,121 @@ class FileBackend(CacheBackend):
                 logger.debug(f"Cleaned up temporary file: {temp_file}")
         except Exception as e:
             logger.warning(f"Failed to clean up temporary file {temp_file}: {e}")
+
+    def cleanup_expired_files(self) -> int:
+        """
+        Clean up expired cache files from the filesystem.
+
+        This method scans all cache files and removes those that have expired.
+        It's more efficient than checking files individually during access.
+
+        Returns:
+            Number of expired files removed
+
+        Raises:
+            CacheBackendError: If cleanup operation fails
+        """
+        try:
+            # Get all cache files
+            if self.path_manager:
+                cache_files = self.path_manager.list_cache_files()
+            else:
+                # Fallback: list cache files directly from cache directory
+                cache_dir = Path(self.cache_dir)
+                if not cache_dir.exists():
+                    return 0
+                cache_files = list(cache_dir.glob("*.json"))
+
+            if not cache_files:
+                return 0
+
+            removed_count = 0
+            current_time = time.time()
+
+            for cache_file in cache_files:
+                try:
+                    # Check if file is expired without loading full content
+                    if self._is_file_expired(cache_file, current_time):
+                        self._remove_cache_file(cache_file)
+                        removed_count += 1
+                        logger.debug(f"Removed expired cache file: {cache_file}")
+
+                except Exception as e:
+                    logger.warning(f"Error checking/removing cache file {cache_file}: {e}")
+                    continue
+
+            if removed_count > 0:
+                logger.info(f"Cleaned up {removed_count} expired cache files")
+
+            return removed_count
+
+        except Exception as e:
+            logger.error(f"Failed to cleanup expired cache files: {e}")
+            raise CacheBackendError(
+                f"Failed to cleanup expired cache files: {e}",
+                backend_type=self.backend_type,
+                original_error=e,
+            )
+
+    def _is_file_expired(self, cache_file: Path, current_time: float) -> bool:
+        """
+        Check if a cache file is expired without loading full content.
+
+        Args:
+            cache_file: Path to cache file
+            current_time: Current timestamp
+
+        Returns:
+            True if file is expired, False otherwise
+        """
+        try:
+            # Try to read as binary first to detect format
+            with open(cache_file, "rb") as f:
+                file_content = f.read()
+
+            # Check if it's the new encrypted format
+            if len(file_content) >= 4:
+                try:
+                    # Try to read metadata length
+                    metadata_length = int.from_bytes(file_content[:4], byteorder="big")
+                    if metadata_length > 0 and metadata_length < len(file_content):
+                        # Try to parse metadata
+                        metadata_json = file_content[4 : 4 + metadata_length]
+                        metadata = json.loads(metadata_json.decode("utf-8"))
+
+                        if metadata.get("encrypted", False):
+                            # Check if expired
+                            return current_time > metadata["created_at"] + metadata["ttl"]
+                except (ValueError, json.JSONDecodeError, KeyError):
+                    # Not the new format, fall through to old format
+                    pass
+
+            # Try old JSON format - only read the first part to get TTL info
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    # Read only the first few lines to get TTL info
+                    content = f.read(1024)  # Read first 1KB
+
+                    # Try to extract created_at and ttl from the JSON
+                    if '"created_at"' in content and '"ttl"' in content:
+                        # Parse just the relevant fields
+                        import re
+
+                        created_at_match = re.search(r'"created_at":\s*(\d+(?:\.\d+)?)', content)
+                        ttl_match = re.search(r'"ttl":\s*(\d+)', content)
+
+                        if created_at_match and ttl_match:
+                            created_at = float(created_at_match.group(1))
+                            ttl = int(ttl_match.group(1))
+                            return current_time > created_at + ttl
+
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+                # If we can't parse it, consider it expired
+                return True
+
+            # If we can't determine expiration, consider it not expired
+            return False
+
+        except Exception:
+            # If there's any error reading the file, consider it expired
+            return True

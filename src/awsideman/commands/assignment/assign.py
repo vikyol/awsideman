@@ -25,6 +25,76 @@ from .helpers import console, log_individual_operation
 config = Config()
 
 
+def _resolve_account_identifier_for_assignment(
+    account_identifier: str, profile_name: str, profile_data: dict
+) -> str:
+    """
+    Resolve account identifier to account ID for assignment operations.
+
+    If the identifier is a valid account ID (12-digit number), return it as-is.
+    If the identifier is an account name, search for matching accounts and return the ID.
+
+    Args:
+        account_identifier: Account ID or account name to resolve
+        profile_name: AWS profile name
+        profile_data: AWS profile data
+
+    Returns:
+        str: The resolved account ID
+
+    Raises:
+        typer.Exit: If account cannot be resolved or multiple matches found
+    """
+    # Check if it's a valid account ID first
+    if account_identifier.isdigit() and len(account_identifier) == 12:
+        return account_identifier
+
+    # If not a valid account ID, treat it as an account name and search
+    console.print(f"[blue]Searching for account with name '{account_identifier}'...[/blue]")
+
+    try:
+        # Create AWS client manager to access Organizations API
+        aws_client = AWSClientManager(profile=profile_name)
+        organizations_client = aws_client.get_organizations_client()
+
+        # Import the optimized search function from org.py
+        from ..org import _search_accounts_by_name_optimized
+
+        # Search for accounts matching the name
+        matching_accounts = _search_accounts_by_name_optimized(
+            organizations_client, account_identifier
+        )
+
+        if not matching_accounts:
+            console.print(f"[red]Error: No account found with name '{account_identifier}'[/red]")
+            raise typer.Exit(1)
+
+        if len(matching_accounts) == 1:
+            # Single match - return the account ID
+            account_id = matching_accounts[0]["Id"]
+            account_name = matching_accounts[0]["Name"]
+            console.print(f"[green]Found account: {account_name} ({account_id})[/green]")
+            return account_id
+
+        # Multiple matches - show options and let user choose
+        console.print(f"[yellow]Multiple accounts found matching '{account_identifier}':[/yellow]")
+        for i, account in enumerate(matching_accounts, 1):
+            console.print(
+                f"  {i}. {account['Name']} ({account['Id']}) - {account.get('Email', 'N/A')}"
+            )
+
+        console.print(
+            "[red]Error: Multiple accounts found. Please be more specific or use the account ID.[/red]"
+        )
+        raise typer.Exit(1)
+
+    except Exception as e:
+        console.print(
+            f"[red]Error: Failed to resolve account identifier '{account_identifier}': {str(e)}[/red]"
+        )
+        raise typer.Exit(1)
+
+
 def _get_all_accounts(aws_client: AWSClientManager) -> list:
     """Get all accounts from AWS Organizations."""
     try:
@@ -101,8 +171,9 @@ def _get_accounts_by_tag(aws_client: AWSClientManager, tag_key: str, tag_value: 
 def assign_permission_set(
     permission_set_name: str = typer.Argument(..., help="Permission set name"),
     principal_name: str = typer.Argument(..., help="Principal name (user or group)"),
-    account_id: Optional[str] = typer.Argument(
-        None, help="AWS account ID (for single account assignment)"
+    account_identifier: Optional[str] = typer.Argument(
+        None,
+        help="AWS account ID (12-digit number) or account name (for single account assignment)",
     ),
     account_filter: Optional[str] = typer.Option(
         None,
@@ -141,14 +212,20 @@ def assign_permission_set(
     This unified command supports both single-account and multi-account assignments:
 
     Single Account Assignment:
-        Provide an account_id as the third argument to assign to a specific account.
+        Provide an account_identifier as the third argument to assign to a specific account.
+        You can specify either:
+        - Account ID: 12-digit number (e.g., 123456789012)
+        - Account Name: Full or partial account name (e.g., "production" or "prod-account")
 
     Multi-Account Assignment:
         Use --filter or --accounts to assign across multiple accounts.
 
     Examples:
-        # Single account assignment
+        # Single account assignment with account ID
         $ awsideman assignment assign ReadOnlyAccess john.doe@company.com 123456789012
+
+        # Single account assignment with account name
+        $ awsideman assignment assign ReadOnlyAccess john.doe@company.com production
 
         # Multi-account assignment to all accounts
         $ awsideman assignment assign ReadOnlyAccess john.doe@company.com --filter "*"
@@ -165,7 +242,7 @@ def assign_permission_set(
     # Validate mutually exclusive target options
     provided_options = sum(
         [
-            bool(account_id),
+            bool(account_identifier),
             bool(account_filter),
             bool(accounts),
             bool(ou_filter),
@@ -196,12 +273,12 @@ def assign_permission_set(
         raise typer.Exit(1)
 
     # Route to appropriate implementation
-    if account_id:
+    if account_identifier:
         # Single account assignment
         return assign_single_account(
             permission_set_name=permission_set_name,
             principal_name=principal_name,
-            account_id=account_id,
+            account_identifier=account_identifier,
             principal_type=principal_type,
             profile=profile,
         )
@@ -566,7 +643,7 @@ def assign_multi_account_with_filter(
 def assign_single_account(
     permission_set_name: str,
     principal_name: str,
-    account_id: str,
+    account_identifier: str,
     principal_type: str = "USER",
     profile: Optional[str] = None,
 ) -> None:
@@ -575,12 +652,22 @@ def assign_single_account(
     Creates an assignment linking a permission set to a principal (user or group) for a specific AWS account.
     This allows the principal to assume the permission set's role in the specified account.
 
+    You can specify either:
+    - Account ID: 12-digit number (e.g., 123456789012)
+    - Account Name: Full or partial account name (e.g., "production" or "prod-account")
+
     Examples:
-        # Assign a permission set to a user
+        # Assign a permission set to a user with account ID
         $ awsideman assignment assign ReadOnlyAccess john.doe@company.com 123456789012
 
-        # Assign a permission set to a group
+        # Assign a permission set to a user with account name
+        $ awsideman assignment assign ReadOnlyAccess john.doe@company.com production
+
+        # Assign a permission set to a group with account ID
         $ awsideman assignment assign PowerUserAccess developers 123456789012 --principal-type GROUP
+
+        # Assign a permission set to a group with account name
+        $ awsideman assignment assign PowerUserAccess developers production --principal-type GROUP
     """
     # Validate profile and get profile data
     profile_name, profile_data = validate_profile(profile)
@@ -602,11 +689,10 @@ def assign_single_account(
         console.print("[red]Error: Permission set name cannot be empty.[/red]")
         raise typer.Exit(1)
 
-    # Validate account ID format (basic validation - should be 12 digits)
-    if not account_id.isdigit() or len(account_id) != 12:
-        console.print("[red]Error: Invalid account ID format.[/red]")
-        console.print("[yellow]Account ID should be a 12-digit number.[/yellow]")
-        raise typer.Exit(1)
+    # Resolve account identifier to account ID
+    account_id = _resolve_account_identifier_for_assignment(
+        account_identifier, profile_name, profile_data
+    )
 
     # Validate principal name format (basic validation - should not be empty)
     if not principal_name.strip():

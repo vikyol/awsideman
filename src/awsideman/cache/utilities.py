@@ -94,12 +94,16 @@ def get_profile_cache_config(profile_name: str) -> AdvancedCacheConfig:
                     config_dict = profile_config.to_dict()
                     # Remove profile_name since AdvancedCacheConfig doesn't accept it
                     config_dict.pop("profile_name", None)
+                    # Add profile information
+                    config_dict["profile"] = profile_name
                     return AdvancedCacheConfig(**config_dict)
                 else:
                     # Handle case where it's already a dict
                     # Remove profile_name since AdvancedCacheConfig doesn't accept it
                     config_dict = dict(profile_config)
                     config_dict.pop("profile_name", None)
+                    # Add profile information
+                    config_dict["profile"] = profile_name
                     return AdvancedCacheConfig(**config_dict)
             else:
                 # Profile not found in profile_configs, return the default config for testing
@@ -146,12 +150,16 @@ def get_profile_cache_config(profile_name: str) -> AdvancedCacheConfig:
                 if value is not None:  # Only override if value is explicitly set
                     base_config[key] = value
 
+            # Add profile information
+            base_config["profile"] = profile_name
             return AdvancedCacheConfig(**base_config)
 
         # Otherwise, use the base configuration
         logger.debug(
             f"No profile-specific cache config found for {profile_name}, using base config"
         )
+        # Add profile information
+        base_config["profile"] = profile_name
         return AdvancedCacheConfig(**base_config)
 
     except Exception as e:

@@ -144,6 +144,9 @@ class AdvancedCacheConfig(CacheConfig):
     # File backend specific configuration
     file_cache_dir: Optional[str] = None
 
+    # Profile information
+    profile: Optional[str] = None
+
     # Profile-specific cache configurations
     profile_configs: Optional[Dict[str, ProfileCacheConfig]] = None
 

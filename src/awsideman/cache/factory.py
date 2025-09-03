@@ -112,8 +112,14 @@ class BackendFactory:
             CacheBackendError: If file backend creation fails
         """
         try:
-            logger.debug(f"Creating file backend with cache_dir: {config.file_cache_dir}")
-            return FileBackend(cache_dir=config.file_cache_dir)
+            logger.debug(
+                f"Creating file backend with cache_dir: {config.file_cache_dir}, profile: {config.profile}"
+            )
+            return FileBackend(
+                cache_dir=config.file_cache_dir,
+                profile=config.profile,
+                encryption_enabled=config.encryption_enabled,
+            )
         except Exception as e:
             logger.error(f"Failed to create file backend: {e}")
             raise CacheBackendError(
