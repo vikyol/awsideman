@@ -41,7 +41,7 @@ def create_permission_set(
         help="AWS-managed policy ARN to attach (can be specified multiple times)",
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> dict[str, str | list[str] | list[dict[str, str]] | None]:
     """Create a new permission set in AWS Identity Center.
 
     Creates a new permission set with the specified attributes and optionally attaches AWS-managed policies.

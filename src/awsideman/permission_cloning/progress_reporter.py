@@ -149,7 +149,7 @@ class ProgressReporter:
         self._progress_callbacks: Dict[str, List[Callable[[ProgressUpdate], None]]] = {}
 
     def start_operation(
-        self, operation_type: str, operation_id: Optional[str] = None, **context
+        self, operation_type: str, operation_id: Optional[str] = None, **context: Any
     ) -> str:
         """
         Start tracking a new operation.
@@ -203,7 +203,7 @@ class ProgressReporter:
         return operation_id
 
     def update_progress(
-        self, operation_id: str, current: int, total: int, message: str = "", **context
+        self, operation_id: str, current: int, total: int, message: str = "", **context: Any
     ) -> None:
         """
         Update progress for an operation.
@@ -260,7 +260,7 @@ class ProgressReporter:
         operation_id: str,
         success: bool = True,
         error_message: Optional[str] = None,
-        **context,
+        **context: Any,
     ) -> None:
         """
         Finish tracking an operation.
@@ -535,7 +535,7 @@ class ProgressReporter:
         metric_name: str,
         metric_value: Union[int, float],
         metric_unit: str = "",
-        **context,
+        **context: Any,
     ) -> None:
         """
         Log a performance metric.

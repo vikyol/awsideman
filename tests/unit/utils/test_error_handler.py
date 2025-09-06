@@ -397,7 +397,6 @@ class TestRemediationStep:
         assert step.priority == 1
 
 
-@pytest.mark.asyncio
 class TestErrorHandlerIntegration:
     """Integration tests for error handler with real scenarios."""
 
@@ -405,6 +404,7 @@ class TestErrorHandlerIntegration:
         """Set up test fixtures."""
         self.handler = StatusErrorHandler()
 
+    @pytest.mark.asyncio
     async def test_error_handling_in_async_context(self):
         """Test error handling in async operations."""
 

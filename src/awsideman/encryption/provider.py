@@ -210,7 +210,7 @@ class EncryptionProviderFactory:
     """
 
     @staticmethod
-    def create_provider(encryption_type: str = "none", **kwargs) -> EncryptionProvider:
+    def create_provider(encryption_type: str = "none", **kwargs: Any) -> EncryptionProvider:
         """
         Create an encryption provider instance.
 

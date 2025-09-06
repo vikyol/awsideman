@@ -300,7 +300,7 @@ class MonitoringConfigManager:
 
         return config
 
-    def save_monitoring_config(self, monitoring_config: MonitoringConfig):
+    def save_monitoring_config(self, monitoring_config: MonitoringConfig) -> None:
         """Save monitoring configuration to config file."""
         # Convert to dictionary
         config_dict = asdict(monitoring_config)

@@ -48,6 +48,8 @@ def mock_storage_engine():
     storage.verify_integrity.return_value = ValidationResult(
         is_valid=True, errors=[], warnings=[], details={}
     )
+    # Configure list_backups to return an empty list by default
+    storage.list_backups.return_value = []
     return storage
 
 

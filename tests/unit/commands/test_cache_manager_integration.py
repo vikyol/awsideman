@@ -106,7 +106,7 @@ class TestCacheManagerConsistency:
         cache_manager_2 = create_cache_manager()
 
         # Create components that use cache manager
-        optimizer = AccountCacheOptimizer(organizations_client=None)
+        optimizer = AccountCacheOptimizer(organizations_client=None, cache_manager=cache_manager_1)
         cache_manager_3 = optimizer.cache_manager
 
         # All should be the same instance (singleton)

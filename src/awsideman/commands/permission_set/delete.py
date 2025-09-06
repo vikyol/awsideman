@@ -22,7 +22,7 @@ def delete_permission_set(
     identifier: str = typer.Argument(..., help="Permission set name or ARN"),
     force: bool = typer.Option(False, "--force", "-f", help="Force deletion without confirmation"),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Delete a permission set from AWS Identity Center.
 
     Permanently removes a permission set from the Identity Center.

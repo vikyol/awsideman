@@ -475,7 +475,7 @@ class FileFormatDetector:
             )
 
     @classmethod
-    def get_processor(cls, file_path: Path):
+    def get_processor(cls, file_path: Path) -> Any:
         """Get appropriate processor for the file format.
 
         Args:

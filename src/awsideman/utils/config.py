@@ -352,7 +352,7 @@ class Config:
         # Simple key access
         return self.config_data.get(key, default)
 
-    def set(self, key: str, value: Any):
+    def set(self, key: str, value: Any) -> None:
         """
         Set a configuration value.
 
@@ -369,7 +369,7 @@ class Config:
         # Save the updated configuration
         self.save_config()
 
-    def set_section(self, section: str, value: Any):
+    def set_section(self, section: str, value: Any) -> None:
         """
         Set a configuration section, merging with existing values.
 
@@ -414,7 +414,7 @@ class Config:
                 result[key] = value
         return result
 
-    def delete(self, key: str):
+    def delete(self, key: str) -> None:
         """
         Delete a configuration value.
 
@@ -563,7 +563,7 @@ class Config:
 
         return template_config
 
-    def set_cache_config(self, cache_config: Dict[str, Any]):
+    def set_cache_config(self, cache_config: Dict[str, Any]) -> None:
         """
         Set cache configuration.
 
@@ -573,7 +573,7 @@ class Config:
         self.config_data["cache"] = cache_config
         self.save_config()
 
-    def set_rollback_config(self, rollback_config: Dict[str, Any]):
+    def set_rollback_config(self, rollback_config: Dict[str, Any]) -> None:
         """
         Set rollback configuration.
 
@@ -583,7 +583,7 @@ class Config:
         self.config_data["rollback"] = rollback_config
         self.save_config()
 
-    def set_template_config(self, template_config: Dict[str, Any]):
+    def set_template_config(self, template_config: Dict[str, Any]) -> None:
         """
         Set template configuration.
 

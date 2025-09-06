@@ -46,7 +46,7 @@ def update_permission_set(
         help="AWS-managed policy ARN to detach (can be specified multiple times)",
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> dict[str, str | list[str] | list[dict[str, str]] | None]:
     """Update an existing permission set in AWS Identity Center.
 
     Updates the specified permission set with new attribute values and/or modifies attached policies.

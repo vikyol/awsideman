@@ -485,9 +485,13 @@ class TestScheduleManager:
         with patch("aiohttp.ClientSession") as mock_session:
             mock_response = AsyncMock()
             mock_response.status = 200
-            mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = (
-                mock_response
-            )
+            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_response.__aexit__ = AsyncMock(return_value=None)
+
+            mock_post = AsyncMock()
+            mock_post.return_value.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_post.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_session.return_value.__aenter__.return_value.post = mock_post
 
             await schedule_manager._send_webhook_notifications(
                 ["http://example.com/webhook"], "Test message", result

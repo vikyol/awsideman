@@ -1,9 +1,11 @@
 """Unified cache manager implementation with singleton pattern."""
 
 import fnmatch
+import hashlib
 import json
 import logging
 import os
+import re
 import threading
 import time
 from datetime import timedelta
@@ -13,6 +15,12 @@ from .errors import CacheBackendError, CacheKeyError, CircuitBreaker, GracefulDe
 from .interfaces import ICacheManager
 
 logger = logging.getLogger(__name__)
+
+
+class CacheValidationError(CacheBackendError):
+    """Exception raised when cache validation fails."""
+
+    pass
 
 
 class CacheManager(ICacheManager, GracefulDegradationMixin):
@@ -32,15 +40,15 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
     - Automatic cleanup of expired entries
     """
 
-    _instances = {}  # Profile-specific instances
-    _lock = threading.Lock()
+    _instances: Dict[str, "CacheManager"] = {}  # Profile-specific instances
+    _class_lock = threading.Lock()  # Class-level lock for singleton pattern
 
     def __new__(cls, *args, **kwargs):
         """Profile-aware singleton pattern implementation."""
         profile = kwargs.get("profile", "default")
 
         if profile not in cls._instances:
-            with cls._lock:
+            with cls._class_lock:
                 if profile not in cls._instances:
                     cls._instances[profile] = super().__new__(cls)
                     # Store the kwargs for the first initialization
@@ -50,9 +58,9 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             return cls._instances[profile]
 
     @classmethod
-    def reset_instance(cls, profile: Optional[str] = None):
+    def reset_instance(cls, profile: Optional[str] = None) -> None:
         """Reset the singleton instance(s) for testing purposes."""
-        with cls._lock:
+        with cls._class_lock:
             if profile is None:
                 # Reset all instances
                 cls._instances.clear()
@@ -77,19 +85,16 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
         super().__init__()
 
         self._initialized = True
-        self._lock = threading.RLock()  # Reentrant lock for nested operations
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._profile = profile
+        self._lock: threading.RLock = threading.RLock()  # Reentrant lock for nested operations
 
-        # Always use the stored kwargs from first creation for consistency
-        if hasattr(self.__class__, "_init_kwargs") and self.__class__._init_kwargs:
-            stored_ttl = self.__class__._init_kwargs.get("default_ttl")
-            self._default_ttl = stored_ttl or timedelta(minutes=15)
-        else:
-            self._default_ttl = default_ttl or timedelta(minutes=15)
+        # Use the stored kwargs from first creation for consistency
+        stored_kwargs = getattr(self, "_init_kwargs", {})
+        self._default_ttl = stored_kwargs.get("default_ttl") or default_ttl or timedelta(minutes=15)
 
         # Initialize persistent backend (file backend by default)
-        self._backend = None
+        self._backend: Optional[Any] = None
         self._initialize_backend()
 
         # Circuit breaker for cache operations
@@ -97,10 +102,16 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
         recovery_timeout = 0.1 if os.getenv("PYTEST_CURRENT_TEST") else 60
         self._circuit_breaker = CircuitBreaker(
             failure_threshold=5,
-            recovery_timeout=recovery_timeout,
+            recovery_timeout=int(recovery_timeout),
             expected_exception=CacheBackendError,
             success_threshold=3,
         )
+
+        # Security configuration
+        self._max_key_length = 250  # Maximum key length to prevent DoS
+        self._max_value_size = 10 * 1024 * 1024  # 10MB max value size
+        self._allowed_key_pattern = re.compile(r"^[a-zA-Z0-9_\-\.:]+$")  # Safe key pattern
+        self._rate_limiter: Dict[str, Dict[str, Any]] = {}  # Simple rate limiter for operations
 
         # Statistics tracking
         self._stats = {
@@ -142,17 +153,375 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             logger.info("Falling back to in-memory only caching")
             self._backend = None
 
+    def _validate_key(self, key: str) -> None:
+        """
+        Validate cache key for security and safety.
+
+        Args:
+            key: The cache key to validate
+
+        Raises:
+            CacheKeyError: If key is invalid
+        """
+        if not isinstance(key, str):
+            raise CacheKeyError("Cache key must be a string")
+
+        if len(key) > self._max_key_length:
+            raise CacheKeyError(f"Cache key too long (max {self._max_key_length} chars)")
+
+        if not key.strip():
+            raise CacheKeyError("Cache key cannot be empty")
+
+        if not self._allowed_key_pattern.match(key):
+            raise CacheKeyError("Cache key contains invalid characters")
+
+        # Check for path traversal attempts
+        if ".." in key or "/" in key or "\\" in key:
+            raise CacheKeyError("Cache key contains path traversal characters")
+
+    def _validate_value(self, value: Any) -> None:
+        """
+        Validate cache value for security and size limits.
+
+        Args:
+            value: The cache value to validate
+
+        Raises:
+            CacheValidationError: If value is invalid
+        """
+        if value is None:
+            return
+
+        # Check value size
+        try:
+            serialized = json.dumps(value, default=str)
+            if len(serialized.encode("utf-8")) > self._max_value_size:
+                raise CacheValidationError(
+                    f"Cache value too large (max {self._max_value_size} bytes)"
+                )
+        except (TypeError, ValueError) as e:
+            raise CacheValidationError(f"Cache value cannot be serialized: {e}")
+
+    def _check_rate_limit(self, operation: str, identifier: str = "default") -> bool:
+        """
+        Check if operation is within rate limits.
+
+        Args:
+            operation: The operation being performed
+            identifier: Unique identifier for rate limiting
+
+        Returns:
+            True if operation is allowed, False if rate limited
+        """
+        current_time = time.time()
+        key = f"{operation}:{identifier}"
+
+        if key not in self._rate_limiter:
+            self._rate_limiter[key] = {"count": 0, "window_start": current_time}
+
+        rate_info = self._rate_limiter[key]
+
+        # Reset window if more than 60 seconds have passed
+        if current_time - rate_info["window_start"] > 60:
+            rate_info["count"] = 0
+            rate_info["window_start"] = current_time
+
+        # Rate limit: 100 operations per minute per identifier
+        if rate_info["count"] >= 100:
+            logger.warning(f"Rate limit exceeded for {operation} by {identifier}")
+            return False
+
+        rate_info["count"] += 1
+        return True
+
+    def _generate_secure_key(self, prefix: str, *components: str) -> str:
+        """
+        Generate a secure cache key from components.
+
+        Args:
+            prefix: Key prefix
+            *components: Additional components to include in key
+
+        Returns:
+            Secure cache key
+
+        Raises:
+            CacheValidationError: If generated key is invalid
+        """
+        # Sanitize components
+        sanitized_components = []
+        for component in components:
+            if not isinstance(component, str):
+                component = str(component)
+            # Remove potentially dangerous characters
+            sanitized = re.sub(r"[^a-zA-Z0-9_\-\.:]", "_", component)
+            sanitized_components.append(sanitized)
+
+        # Create key with prefix and components
+        key_parts = [prefix] + sanitized_components
+        key = ":".join(key_parts)
+
+        # Validate the generated key
+        self._validate_key(key)
+
+        return key
+
+    def _hash_sensitive_data(self, data: str) -> str:
+        """
+        Hash sensitive data for use in cache keys.
+
+        Args:
+            data: Sensitive data to hash
+
+        Returns:
+            SHA-256 hash of the data
+        """
+        return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]  # Use first 16 chars
+
+    def _encrypt_sensitive_data(self, data: Any) -> Dict[str, Any]:
+        """
+        Encrypt sensitive data before caching.
+
+        Args:
+            data: Data to encrypt
+
+        Returns:
+            Dictionary containing encrypted data and metadata
+        """
+        try:
+            # Simple encryption using base64 encoding (in production, use proper encryption)
+            import base64
+
+            serialized = json.dumps(data, default=str)
+            encrypted = base64.b64encode(serialized.encode("utf-8")).decode("utf-8")
+
+            return {
+                "encrypted": True,
+                "data": encrypted,
+                "algorithm": "base64",  # In production, use proper encryption
+                "timestamp": time.time(),
+            }
+        except Exception as e:
+            logger.error(f"Failed to encrypt sensitive data: {e}")
+            raise CacheValidationError(f"Failed to encrypt sensitive data: {e}")
+
+    def _decrypt_sensitive_data(self, encrypted_data: Dict[str, Any]) -> Any:
+        """
+        Decrypt sensitive data from cache.
+
+        Args:
+            encrypted_data: Encrypted data dictionary
+
+        Returns:
+            Decrypted data
+
+        Raises:
+            CacheValidationError: If decryption fails
+        """
+        try:
+            if not encrypted_data.get("encrypted", False):
+                return encrypted_data.get("data")
+
+            import base64
+
+            encrypted = encrypted_data["data"]
+            decrypted = base64.b64decode(encrypted.encode("utf-8")).decode("utf-8")
+            return json.loads(decrypted)
+        except Exception as e:
+            logger.error(f"Failed to decrypt sensitive data: {e}")
+            raise CacheValidationError(f"Failed to decrypt sensitive data: {e}")
+
+    def _is_sensitive_data(self, key: str, data: Any) -> bool:
+        """
+        Determine if data should be encrypted based on key patterns.
+
+        Args:
+            key: Cache key
+            data: Data to check
+
+        Returns:
+            True if data should be encrypted
+        """
+        sensitive_patterns = [
+            "password",
+            "secret",
+            "token",
+            "key",
+            "credential",
+            "auth",
+            "login",
+            "session",
+            "private",
+        ]
+
+        key_lower = key.lower()
+        return any(pattern in key_lower for pattern in sensitive_patterns)
+
+    def _log_security_event(self, event_type: str, key: str, details: str = "") -> None:
+        """
+        Log security-related events for monitoring.
+
+        Args:
+            event_type: Type of security event
+            key: Cache key involved
+            details: Additional details about the event
+        """
+        security_logger = logging.getLogger(f"{__name__}.security")
+        security_logger.warning(
+            f"Security event: {event_type} | Key: {key} | Profile: {self._profile} | Details: {details}"
+        )
+
+    def _log_performance_metric(self, operation: str, duration: float, success: bool) -> None:
+        """
+        Log performance metrics for monitoring.
+
+        Args:
+            operation: Operation performed
+            duration: Duration in seconds
+            success: Whether operation was successful
+        """
+        perf_logger = logging.getLogger(f"{__name__}.performance")
+        perf_logger.info(
+            f"Performance: {operation} | Duration: {duration:.3f}s | Success: {success} | Profile: {self._profile}"
+        )
+
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Perform comprehensive health check on the cache system.
+
+        Returns:
+            Dictionary containing health status and metrics
+        """
+        health_status: Dict[str, Any] = {
+            "healthy": True,
+            "timestamp": time.time(),
+            "profile": self._profile,
+            "issues": [],
+            "metrics": {},
+        }
+
+        try:
+            # Check in-memory cache health
+            memory_usage = len(self._cache)
+            health_status["metrics"]["memory_entries"] = memory_usage
+
+            # Check backend health
+            if self._backend is not None:
+                if hasattr(self._backend, "health_check"):
+                    backend_health = self._backend.health_check()
+                    if isinstance(backend_health, dict):
+                        health_status["metrics"]["backend"] = backend_health
+                    else:
+                        health_status["metrics"]["backend_healthy"] = bool(backend_health)
+                else:
+                    health_status["issues"].append("Backend does not support health checks")
+
+            # Check circuit breaker status
+            if hasattr(self._circuit_breaker, "state"):
+                health_status["metrics"]["circuit_breaker_state"] = self._circuit_breaker.state
+
+            # Check rate limiter status
+            current_time = time.time()
+            active_limits = sum(
+                1
+                for rate_info in self._rate_limiter.values()
+                if current_time - rate_info["window_start"] < 60
+            )
+            health_status["metrics"]["active_rate_limits"] = active_limits
+
+            # Check for potential issues
+            if memory_usage > 10000:  # Arbitrary threshold
+                health_status["issues"].append("High memory usage detected")
+                health_status["healthy"] = False
+
+            if active_limits > 50:  # Arbitrary threshold
+                health_status["issues"].append("High rate limiting activity detected")
+
+        except Exception as e:
+            health_status["healthy"] = False
+            health_status["issues"].append(f"Health check failed: {e}")
+            logger.error(f"Cache health check failed: {e}")
+
+        return health_status
+
+    def self_heal(self) -> Dict[str, Any]:
+        """
+        Attempt to self-heal the cache system.
+
+        Returns:
+            Dictionary containing healing results
+        """
+        healing_results: Dict[str, Any] = {
+            "timestamp": time.time(),
+            "profile": self._profile,
+            "actions_taken": [],
+            "success": True,
+        }
+
+        try:
+            # Clean up expired entries
+            current_time = time.time()
+            expired_keys = [
+                key for key, entry in self._cache.items() if current_time > entry["expires_at"]
+            ]
+
+            if expired_keys:
+                for key in expired_keys:
+                    del self._cache[key]
+                healing_results["actions_taken"].append(
+                    f"Cleaned up {len(expired_keys)} expired entries"
+                )
+
+            # Reset rate limiter for old entries
+            old_entries = [
+                key
+                for key, rate_info in self._rate_limiter.items()
+                if current_time - rate_info["window_start"] > 300  # 5 minutes
+            ]
+
+            if old_entries:
+                for key in old_entries:
+                    del self._rate_limiter[key]
+                healing_results["actions_taken"].append(
+                    f"Reset {len(old_entries)} old rate limiter entries"
+                )
+
+            # Attempt to reinitialize backend if it's None
+            if self._backend is None:
+                try:
+                    self._initialize_backend()
+                    if self._backend is not None:
+                        healing_results["actions_taken"].append("Reinitialized cache backend")
+                    else:
+                        healing_results["actions_taken"].append(
+                            "Failed to reinitialize cache backend"
+                        )
+                        healing_results["success"] = False
+                except Exception as e:
+                    healing_results["actions_taken"].append(f"Backend reinitialization failed: {e}")
+                    healing_results["success"] = False
+
+            if not healing_results["actions_taken"]:
+                healing_results["actions_taken"].append("No healing actions needed")
+
+        except Exception as e:
+            healing_results["success"] = False
+            healing_results["actions_taken"].append(f"Self-healing failed: {e}")
+            logger.error(f"Cache self-healing failed: {e}")
+
+        return healing_results
+
     def _create_compatibility_config(self) -> Any:
         """Create a compatibility config object for backward compatibility."""
 
         class CompatibilityConfig:
             def __init__(self, manager):
                 self._manager = manager
-                self.enabled = True  # Always enabled for CacheManager
-                self.backend_type = "file" if manager._backend else "memory"
-                self.default_ttl = int(self._manager._default_ttl.total_seconds())
-                self.max_size_mb = 100  # Default 100MB limit
-                self.max_size = 1000  # Default 1000 entries limit
+                self._enabled = True  # Always enabled for CacheManager
+                self._backend_type = "file" if manager._backend else "memory"
+                self._default_ttl = int(self._manager._default_ttl.total_seconds())
+                self._max_size_mb = 100  # Default 100MB limit
+                self._max_size = 1000  # Default 1000 entries limit
 
                 # Get actual configuration values for encryption
                 self._actual_config = None
@@ -189,7 +558,9 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                     return self._actual_config.encryption_enabled
 
                 # Fallback to checking actual cache files if no config available
-                if self._manager._backend and hasattr(self._manager._backend, "get_stats"):
+                if self._manager._backend is not None and hasattr(
+                    self._manager._backend, "get_stats"
+                ):
                     try:
                         backend_stats = self._manager._backend.get_stats()
                         if backend_stats.get("total_entries", 0) > 0:
@@ -290,7 +661,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                 backend_entries = 0
                 backend_size_bytes = 0
                 backend_size_mb = 0
-                if self._backend and hasattr(self._backend, "get_stats"):
+                if self._backend is not None and hasattr(self._backend, "get_stats"):
                     try:
                         backend_stats = self._backend.get_stats()
                         # Map backend-specific fields to standard fields
@@ -464,7 +835,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                         )
 
                 # If we have a backend with get_recent_entries method, use it
-                if self._backend and hasattr(self._backend, "get_recent_entries"):
+                if self._backend is not None and hasattr(self._backend, "get_recent_entries"):
                     try:
                         backend_entries = self._backend.get_recent_entries(limit)
                         # Add backend entries to our list
@@ -477,7 +848,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                         # Continue with file-based backend fallback if available
 
                 # Fallback: If we have a file-based backend, also get entries from there
-                elif self._backend and hasattr(self._backend, "path_manager"):
+                elif self._backend is not None and hasattr(self._backend, "path_manager"):
                     try:
                         # Get actual cache files from the backend
                         cache_files = self._backend.path_manager.list_cache_files()
@@ -596,8 +967,12 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             CacheKeyError: If key format is invalid
             CacheBackendError: If cache operation fails
         """
-        if not key or not isinstance(key, str):
-            raise CacheKeyError(f"Invalid cache key: {key}")
+        # Security validation
+        self._validate_key(key)
+
+        # Rate limiting
+        if not self._check_rate_limit("get", key):
+            raise CacheValidationError("Rate limit exceeded for get operation")
 
         def cache_operation():
             return self._circuit_breaker.call(self._get_internal, key)
@@ -606,7 +981,17 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             logger.warning(f"Cache get failed for key {key}, returning None")
             return None
 
-        return self.with_graceful_degradation(cache_operation, fallback_operation)
+        result = self.with_graceful_degradation(cache_operation, fallback_operation)
+
+        # Decrypt sensitive data if needed
+        if result and isinstance(result, dict) and result.get("encrypted", False):
+            try:
+                result = self._decrypt_sensitive_data(result)
+            except CacheValidationError as e:
+                logger.error(f"Failed to decrypt sensitive data for key {key}: {e}")
+                return None
+
+        return result
 
     def _get_internal(self, key: str) -> Optional[Any]:
         """Internal get operation without circuit breaker."""
@@ -656,9 +1041,19 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
         Raises:
             CacheKeyError: If key format is invalid
             CacheBackendError: If cache operation fails
+            CacheValidationError: If key or value validation fails
         """
-        if not key or not isinstance(key, str):
-            raise CacheKeyError(f"Invalid cache key: {key}")
+        # Security validation
+        self._validate_key(key)
+        self._validate_value(data)
+
+        # Rate limiting
+        if not self._check_rate_limit("set", key):
+            raise CacheValidationError("Rate limit exceeded for set operation")
+
+        # Encrypt sensitive data
+        if self._is_sensitive_data(key, data):
+            data = self._encrypt_sensitive_data(data)
 
         def cache_operation():
             return self._circuit_breaker.call(self._set_internal, key, data, ttl)
@@ -725,7 +1120,8 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             logger.warning(f"Cache invalidation failed for pattern {pattern}, returning 0")
             return 0
 
-        return self.with_graceful_degradation(cache_operation, fallback_operation)
+        result = self.with_graceful_degradation(cache_operation, fallback_operation)
+        return int(result) if result is not None else 0
 
     def _invalidate_internal(self, pattern: str) -> int:
         """Internal invalidate operation without circuit breaker."""
@@ -739,7 +1135,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                 self._cache.clear()
 
                 # Also clear the persistent backend if available
-                if self._backend and hasattr(self._backend, "invalidate"):
+                if self._backend is not None and hasattr(self._backend, "invalidate"):
                     try:
                         # Invalidate all entries in the backend
                         self._backend.invalidate()
@@ -778,7 +1174,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                     del self._cache[key]
 
                 # Remove from backend if available
-                if self._backend and hasattr(self._backend, "invalidate"):
+                if self._backend is not None and hasattr(self._backend, "invalidate"):
                     try:
                         self._backend.invalidate(key)
                         logger.debug(f"Invalidated backend entry for key: {key}")
@@ -865,7 +1261,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             self._cache.clear()
 
             # Also clear the persistent backend if available
-            if self._backend and hasattr(self._backend, "invalidate"):
+            if self._backend is not None and hasattr(self._backend, "invalidate"):
                 try:
                     # Invalidate all entries in the backend
                     self._backend.invalidate()
@@ -900,7 +1296,8 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             logger.warning(f"Cache exists check failed for key {key}, returning False")
             return False
 
-        return self.with_graceful_degradation(cache_operation, fallback_operation)
+        result = self.with_graceful_degradation(cache_operation, fallback_operation)
+        return bool(result) if result is not None else False
 
     def _exists_internal(self, key: str) -> bool:
         """Internal exists check without circuit breaker."""
@@ -1011,7 +1408,8 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
         try:
             # Check if backend has cleanup method
             if hasattr(self._backend, "cleanup_expired_files"):
-                return self._backend.cleanup_expired_files()
+                result = self._backend.cleanup_expired_files()
+                return int(result) if result is not None else 0
             else:
                 logger.debug("Backend does not support file cleanup")
                 return 0

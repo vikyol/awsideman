@@ -676,7 +676,7 @@ class BackupMonitor:
         """Set up automatic alert generation based on metrics."""
 
         # Add progress callback to detect failed operations
-        def on_progress_update(progress_info: ProgressInfo):
+        def on_progress_update(progress_info: ProgressInfo) -> None:
             if progress_info.status == OperationStatus.FAILED:
                 self.alert_manager.create_alert(
                     alert_id=f"operation_failed_{progress_info.operation_id}",

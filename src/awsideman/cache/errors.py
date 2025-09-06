@@ -108,7 +108,7 @@ class CircuitBreaker:
 
         return wrapper
 
-    def call(self, func: Callable, *args, **kwargs) -> Any:
+    def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """
         Call function with circuit breaker protection.
 

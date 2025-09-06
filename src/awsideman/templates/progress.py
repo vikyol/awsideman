@@ -4,7 +4,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 from rich.console import Console
 from rich.layout import Layout
@@ -39,7 +39,7 @@ class ProgressContext:
         if self.start_time is None:
             self.start_time = time.time()
 
-    def update(self, current_item: int, description: str = ""):
+    def update(self, current_item: int, description: str = "") -> None:
         """Update progress context."""
         self.current_item = current_item
         if description:
@@ -99,7 +99,7 @@ class TemplateProgressReporter:
 
         return operation_id
 
-    def update_progress(self, operation_id: str, current_item: int, description: str = ""):
+    def update_progress(self, operation_id: str, current_item: int, description: str = "") -> None:
         """Update progress for an operation."""
         if operation_id not in self.progress_contexts:
             return
@@ -117,7 +117,9 @@ class TemplateProgressReporter:
 
             self.console.print(status_line)
 
-    def complete_operation(self, operation_id: str, success: bool = True, message: str = ""):
+    def complete_operation(
+        self, operation_id: str, success: bool = True, message: str = ""
+    ) -> None:
         """Mark an operation as complete."""
         if operation_id not in self.progress_contexts:
             return
@@ -140,7 +142,7 @@ class TemplateProgressReporter:
         # Remove completed context
         del self.progress_contexts[operation_id]
 
-    def show_summary(self, operation_results: Dict[str, Any]):
+    def show_summary(self, operation_results: Dict[str, Any]) -> None:
         """Show operation summary."""
         summary_table = Table(
             title="Operation Summary", show_header=True, header_style="bold magenta"
@@ -167,7 +169,7 @@ class TemplateProgressBar:
         self.console = console or Console()
 
     @contextmanager
-    def create_progress(self, description: str, total: int):
+    def create_progress(self, description: str, total: int) -> Generator[Progress, None, None]:
         """Create a progress bar context."""
         with Progress(
             SpinnerColumn(),
@@ -182,7 +184,7 @@ class TemplateProgressBar:
             yield task
 
     @contextmanager
-    def create_spinner(self, description: str):
+    def create_spinner(self, description: str) -> Generator[Progress, None, None]:
         """Create a spinner context for indeterminate operations."""
         with Progress(
             SpinnerColumn(),
@@ -199,29 +201,29 @@ class TemplateUserFeedback:
     def __init__(self, console: Optional[Console] = None):
         self.console = console or Console()
 
-    def show_info(self, message: str, title: str = "Information"):
+    def show_info(self, message: str, title: str = "Information") -> None:
         """Show informational message."""
         panel = Panel(Text(message, style="blue"), title=title, border_style="blue")
         self.console.print(panel)
 
-    def show_warning(self, message: str, title: str = "Warning"):
+    def show_warning(self, message: str, title: str = "Warning") -> None:
         """Show warning message."""
         panel = Panel(Text(message, style="yellow"), title=title, border_style="yellow")
         self.console.print(panel)
 
-    def show_error(self, message: str, title: str = "Error"):
+    def show_error(self, message: str, title: str = "Error") -> None:
         """Show error message."""
         panel = Panel(Text(message, style="red"), title=title, border_style="red")
         self.console.print(panel)
 
-    def show_success(self, message: str, title: str = "Success"):
+    def show_success(self, message: str, title: str = "Success") -> None:
         """Show success message."""
         panel = Panel(Text(message, style="green"), title=title, border_style="green")
         self.console.print(panel)
 
     def show_operation_preview(
         self, operation_type: str, items: List[Dict[str, Any]], title: str = "Operation Preview"
-    ):
+    ) -> None:
         """Show preview of what will be done."""
         if not items:
             self.show_info("No operations to perform.", title)
@@ -278,7 +280,7 @@ class TemplateUserFeedback:
 
         return typer.confirm(prompt, default=default)
 
-    def show_destructive_operation_warning(self, operation: str, items_count):
+    def show_destructive_operation_warning(self, operation: str, items_count: Any) -> None:
         """Show warning for destructive operations."""
         # Handle both integer counts and descriptive text
         if isinstance(items_count, int):
@@ -299,7 +301,7 @@ Please review the operation details above and confirm that you want to proceed.
 
         self.show_warning(warning_message, title="Destructive Operation Warning")
 
-    def show_operation_status(self, operation: str, status: str, details: str = ""):
+    def show_operation_status(self, operation: str, status: str, details: str = "") -> None:
         """Show operation status."""
         status_colors = {
             "pending": "yellow",
@@ -326,12 +328,12 @@ class TemplateLiveDisplay:
         self.console = console or Console()
 
     @contextmanager
-    def create_live_display(self, refresh_per_second: float = 4):
+    def create_live_display(self, refresh_per_second: float = 4) -> Generator[Live, None, None]:
         """Create a live updating display context."""
         with Live(console=self.console, refresh_per_second=refresh_per_second) as live:
             yield live
 
-    def update_display(self, live: Live, content: Any):
+    def update_display(self, live: Live, content: Any) -> None:
         """Update the live display content."""
         live.update(content)
 

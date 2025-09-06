@@ -62,7 +62,7 @@ def test_account_command_help_text():
     result = runner.invoke(app, ["account", "--help"])
     assert result.exit_code == 0
     assert "Display detailed information about a specific AWS account" in result.output
-    assert "AWS account ID to display details for" in result.output
+    assert "account name to display details for" in result.output
     assert "AWS profile to use" in result.output
 
 

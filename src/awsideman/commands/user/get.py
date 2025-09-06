@@ -12,7 +12,9 @@ from ...aws_clients.manager import AWSClientManager
 from .helpers import console, validate_profile, validate_sso_instance
 
 
-def _get_user_group_memberships(identity_store, identity_store_id: str, user_id: str):
+def _get_user_group_memberships(
+    identity_store, identity_store_id: str, user_id: str
+) -> list[dict[str, str]]:
     """
     Get all groups that a user is a member of.
 
@@ -66,7 +68,7 @@ def get_user(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-):
+) -> None:
     """Get detailed information about a specific user.
 
     Retrieves and displays comprehensive information about a user by their username, email, or user ID.

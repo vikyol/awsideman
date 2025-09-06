@@ -303,7 +303,7 @@ class AuditLogger:
 
         event = AuditEvent(
             event_id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type=event_type,
             severity=severity,
             user_id=user_id,
@@ -344,7 +344,7 @@ class AuditLogger:
 
         event = AuditEvent(
             event_id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type=event_type,
             severity=severity,
             user_id=user_id,
@@ -392,7 +392,7 @@ class AuditLogger:
 
         event = AuditEvent(
             event_id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type=event_type,
             severity=severity,
             user_id=None,
@@ -430,7 +430,7 @@ class AuditLogger:
 
         event = AuditEvent(
             event_id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type=AuditEventType.SECURE_DELETION,
             severity=severity,
             user_id=None,

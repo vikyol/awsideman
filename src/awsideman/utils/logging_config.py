@@ -452,7 +452,7 @@ class StatusLoggingManager:
 
         return self._loggers[name]
 
-    def log_operation_start(self, logger: logging.Logger, operation: str, **context) -> str:
+    def log_operation_start(self, logger: logging.Logger, operation: str, **context: Any) -> str:
         """
         Log the start of an operation with context.
 
@@ -487,7 +487,7 @@ class StatusLoggingManager:
         operation_id: str,
         success: bool = True,
         duration_ms: Optional[float] = None,
-        **context,
+        **context: Any,
     ) -> None:
         """
         Log the end of an operation.
@@ -522,7 +522,7 @@ class StatusLoggingManager:
         metric_name: str,
         value: Union[int, float],
         unit: str = "",
-        **context,
+        **context: Any,
     ) -> None:
         """
         Log a performance metric.
@@ -545,7 +545,7 @@ class StatusLoggingManager:
             },
         )
 
-    def create_context_logger(self, base_logger: logging.Logger, **context) -> "ContextLogger":
+    def create_context_logger(self, base_logger: logging.Logger, **context: Any) -> "ContextLogger":
         """
         Create a context logger that automatically includes context in all log messages.
 
@@ -573,30 +573,30 @@ class ContextLogger:
         self.logger = logger
         self.context = context
 
-    def _log_with_context(self, level: int, msg: str, *args, **kwargs) -> None:
+    def _log_with_context(self, level: int, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log message with automatic context inclusion."""
         extra = kwargs.get("extra", {})
         extra.update(self.context)
         kwargs["extra"] = extra
         self.logger.log(level, msg, *args, **kwargs)
 
-    def debug(self, msg: str, *args, **kwargs) -> None:
+    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log debug message with context."""
         self._log_with_context(logging.DEBUG, msg, *args, **kwargs)
 
-    def info(self, msg: str, *args, **kwargs) -> None:
+    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log info message with context."""
         self._log_with_context(logging.INFO, msg, *args, **kwargs)
 
-    def warning(self, msg: str, *args, **kwargs) -> None:
+    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log warning message with context."""
         self._log_with_context(logging.WARNING, msg, *args, **kwargs)
 
-    def error(self, msg: str, *args, **kwargs) -> None:
+    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log error message with context."""
         self._log_with_context(logging.ERROR, msg, *args, **kwargs)
 
-    def critical(self, msg: str, *args, **kwargs) -> None:
+    def critical(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log critical message with context."""
         self._log_with_context(logging.CRITICAL, msg, *args, **kwargs)
 

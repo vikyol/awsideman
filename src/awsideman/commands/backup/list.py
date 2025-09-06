@@ -31,7 +31,7 @@ def list_backups(
     sync: bool = typer.Option(
         False, "--sync", help="Sync local index with storage backends before listing"
     ),
-):
+) -> None:
     """List all backups from local metadata index regardless of storage backend.
 
     This command provides a unified view of all backups stored across different
@@ -81,7 +81,7 @@ def list_backups(
                     )
 
         # Create filters
-        filters = {}
+        filters: dict[str, str | datetime] = {}
 
         if days:
             filters["since_date"] = datetime.now() - timedelta(days=days)

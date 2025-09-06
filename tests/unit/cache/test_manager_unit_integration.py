@@ -108,29 +108,33 @@ class TestCacheManagerIntegration:
     def test_performance_requirements(self):
         """Test that cache operations meet performance requirements."""
         import time
+        from unittest.mock import patch
 
         manager = CacheManager()
 
         # Test cache hit performance (should be very fast)
         manager.set("perf_test", "test_data")
 
-        start_time = time.time()
-        for _ in range(1000):
-            result = manager.get("perf_test")
-            assert result == "test_data"
-        hit_time = time.time() - start_time
+        # Disable rate limiting for performance test
+        with patch.object(manager, "_check_rate_limit", return_value=True):
+            start_time = time.time()
+            for _ in range(1000):
+                result = manager.get("perf_test")
+                assert result == "test_data"
+            hit_time = time.time() - start_time
 
         # Cache hits should be very fast (less than 100ms for 1000 operations)
         assert hit_time < 0.1, f"Cache hits took {hit_time:.3f}s, should be < 0.1s"
 
         # Test invalidation performance
         # Set up multiple entries
-        for i in range(100):
-            manager.set(f"perf_test_{i}", f"data_{i}")
+        with patch.object(manager, "_check_rate_limit", return_value=True):
+            for i in range(100):
+                manager.set(f"perf_test_{i}", f"data_{i}")
 
-        start_time = time.time()
-        invalidated = manager.invalidate("perf_test_*")
-        invalidation_time = time.time() - start_time
+            start_time = time.time()
+            invalidated = manager.invalidate("perf_test_*")
+            invalidation_time = time.time() - start_time
 
         # Invalidation should complete quickly (less than 100ms as per requirements)
         assert (

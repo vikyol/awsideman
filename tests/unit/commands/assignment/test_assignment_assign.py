@@ -61,7 +61,7 @@ def test_assign_permission_set_function_signature():
     expected_params = {
         "permission_set_name",
         "principal_name",
-        "account_id",
+        "account_identifier",
         "principal_type",
         "profile",
     }
@@ -86,7 +86,7 @@ def test_assign_single_account_function_signature():
     expected_params = {
         "permission_set_name",
         "principal_name",
-        "account_id",
+        "account_identifier",
         "principal_type",
         "profile",
     }

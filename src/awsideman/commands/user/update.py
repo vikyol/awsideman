@@ -37,7 +37,7 @@ def update_user(
         None, "--last-name", "-l", help="New last name of the user"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> dict[str, str | None]:
     """Update an existing user in AWS Identity Center.
 
     Updates the specified user with new attribute values.
@@ -261,11 +261,11 @@ def update_user(
                         if key == "Emails" and value:
                             email_values = [email_obj.get("Value", "N/A") for email_obj in value]
                             details_table.add_row(key, ", ".join(email_values))
-                        elif key == "Name" and value:
-                            name_values = [f"{k}: {v}" for k, v in value.items()]
-                            details_table.add_row(key, ", ".join(name_values))
                         else:
                             details_table.add_row(key, str(value))
+                    elif isinstance(value, dict) and key == "Name":
+                        name_values = [f"{k}: {v}" for k, v in value.items()]
+                        details_table.add_row(key, ", ".join(name_values))
                     else:
                         details_table.add_row(key, str(value))
 

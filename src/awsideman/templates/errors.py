@@ -157,7 +157,9 @@ class TemplateErrorHandler:
     }
 
     @classmethod
-    def create_error(cls, error_type: TemplateErrorType, error_key: str, **kwargs) -> TemplateError:
+    def create_error(
+        cls, error_type: TemplateErrorType, error_key: str, **kwargs: Any
+    ) -> TemplateError:
         """Create a structured error with message and recovery suggestion."""
         message_template = cls.ERROR_MESSAGES[error_type].get(error_key, "Unknown error: {details}")
         recovery_template = cls.RECOVERY_SUGGESTIONS[error_type].get(
@@ -181,37 +183,37 @@ class TemplateErrorHandler:
         )
 
     @classmethod
-    def create_validation_error(cls, error_key: str, **kwargs) -> TemplateError:
+    def create_validation_error(cls, error_key: str, **kwargs: Any) -> TemplateError:
         """Create a validation error."""
         return cls.create_error(TemplateErrorType.VALIDATION_ERROR, error_key, **kwargs)
 
     @classmethod
-    def create_parsing_error(cls, error_key: str, **kwargs) -> TemplateError:
+    def create_parsing_error(cls, error_key: str, **kwargs: Any) -> TemplateError:
         """Create a parsing error."""
         return cls.create_error(TemplateErrorType.PARSING_ERROR, error_key, **kwargs)
 
     @classmethod
-    def create_execution_error(cls, error_key: str, **kwargs) -> TemplateError:
+    def create_execution_error(cls, error_key: str, **kwargs: Any) -> TemplateError:
         """Create an execution error."""
         return cls.create_error(TemplateErrorType.EXECUTION_ERROR, error_key, **kwargs)
 
     @classmethod
-    def create_permission_error(cls, error_key: str, **kwargs) -> TemplateError:
+    def create_permission_error(cls, error_key: str, **kwargs: Any) -> TemplateError:
         """Create a permission error."""
         return cls.create_error(TemplateErrorType.PERMISSION_ERROR, error_key, **kwargs)
 
     @classmethod
-    def create_network_error(cls, error_key: str, **kwargs) -> TemplateError:
+    def create_network_error(cls, error_key: str, **kwargs: Any) -> TemplateError:
         """Create a network error."""
         return cls.create_error(TemplateErrorType.NETWORK_ERROR, error_key, **kwargs)
 
     @classmethod
-    def create_configuration_error(cls, error_key: str, **kwargs) -> TemplateError:
+    def create_configuration_error(cls, error_key: str, **kwargs: Any) -> TemplateError:
         """Create a configuration error."""
         return cls.create_error(TemplateErrorType.CONFIGURATION_ERROR, error_key, **kwargs)
 
     @classmethod
-    def create_storage_error(cls, error_key: str, **kwargs) -> TemplateError:
+    def create_storage_error(cls, error_key: str, **kwargs: Any) -> TemplateError:
         """Create a storage error."""
         return cls.create_error(TemplateErrorType.STORAGE_ERROR, error_key, **kwargs)
 
@@ -223,25 +225,25 @@ class TemplateErrorCollector:
         self.errors: List[TemplateError] = []
         self.warnings: List[TemplateError] = []
 
-    def add_error(self, error: TemplateError):
+    def add_error(self, error: TemplateError) -> None:
         """Add an error to the collection."""
         self.errors.append(error)
 
-    def add_warning(self, warning: TemplateError):
+    def add_warning(self, warning: TemplateError) -> None:
         """Add a warning to the collection."""
         self.warnings.append(warning)
 
-    def add_validation_error(self, error_key: str, **kwargs):
+    def add_validation_error(self, error_key: str, **kwargs: Any) -> None:
         """Add a validation error."""
         error = TemplateErrorHandler.create_validation_error(error_key, **kwargs)
         self.add_error(error)
 
-    def add_parsing_error(self, error_key: str, **kwargs):
+    def add_parsing_error(self, error_key: str, **kwargs: Any) -> None:
         """Add a parsing error."""
         error = TemplateErrorHandler.create_parsing_error(error_key, **kwargs)
         self.add_error(error)
 
-    def add_execution_error(self, error_key: str, **kwargs):
+    def add_execution_error(self, error_key: str, **kwargs: Any) -> None:
         """Add an execution error."""
         error = TemplateErrorHandler.create_execution_error(error_key, **kwargs)
         self.add_error(error)
@@ -271,7 +273,7 @@ class TemplateErrorCollector:
             grouped[error_type] = grouped.get(error_type, 0) + 1
         return grouped
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all errors and warnings."""
         self.errors.clear()
         self.warnings.clear()
@@ -318,7 +320,7 @@ class RetryHandler:
 
         return min(delay, self.max_delay)
 
-    def execute_with_retry(self, operation, *args, **kwargs):
+    def execute_with_retry(self, operation: Any, *args: Any, **kwargs: Any) -> Any:
         """Execute operation with retry logic."""
         last_error = None
 

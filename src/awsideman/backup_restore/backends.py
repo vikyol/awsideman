@@ -540,7 +540,7 @@ class StorageBackendFactory:
     """Factory for creating storage backend instances."""
 
     @staticmethod
-    def create_filesystem_backend(base_path: str, **kwargs) -> FileSystemStorageBackend:
+    def create_filesystem_backend(base_path: str, **kwargs: Any) -> FileSystemStorageBackend:
         """
         Create a filesystem storage backend.
 
@@ -554,7 +554,7 @@ class StorageBackendFactory:
         return FileSystemStorageBackend(base_path, **kwargs)
 
     @staticmethod
-    def create_s3_backend(bucket_name: str, **kwargs) -> S3StorageBackend:
+    def create_s3_backend(bucket_name: str, **kwargs: Any) -> S3StorageBackend:
         """
         Create an S3 storage backend.
 
@@ -568,7 +568,7 @@ class StorageBackendFactory:
         return S3StorageBackend(bucket_name, **kwargs)
 
     @staticmethod
-    def create_backend(backend_type: str, **config) -> StorageBackendInterface:
+    def create_backend(backend_type: str, **config: Any) -> StorageBackendInterface:
         """
         Create a storage backend based on type and configuration.
 

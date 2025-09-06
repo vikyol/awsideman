@@ -149,7 +149,7 @@ class StorageMonitor:
             f"[{color}]Storage Alert ({alert.severity.upper()}): {alert.message}[/{color}]"
         )
 
-    def set_thresholds(self, **thresholds) -> None:
+    def set_thresholds(self, **thresholds: Any) -> None:
         """Update monitoring thresholds."""
         self.thresholds.update(thresholds)
 

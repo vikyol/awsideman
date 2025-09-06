@@ -510,7 +510,7 @@ class SecureLogger:
         self.logger = logging.getLogger(logger_name)
         self.validator = InputValidator()
 
-    def debug(self, message: str, *args, **kwargs) -> None:
+    def debug(self, message: str, *args: Any, **kwargs: Any) -> None:
         """
         Log debug message with sanitization.
 
@@ -532,7 +532,7 @@ class SecureLogger:
 
         self.logger.debug(sanitized_message, *sanitized_args, **safe_kwargs)
 
-    def info(self, message: str, *args, **kwargs) -> None:
+    def info(self, message: str, *args: Any, **kwargs: Any) -> None:
         """
         Log info message with sanitization.
 
@@ -553,7 +553,7 @@ class SecureLogger:
 
         self.logger.info(sanitized_message, *sanitized_args, **safe_kwargs)
 
-    def warning(self, message: str, *args, **kwargs) -> None:
+    def warning(self, message: str, *args: Any, **kwargs: Any) -> None:
         """
         Log warning message with sanitization.
 
@@ -574,7 +574,7 @@ class SecureLogger:
 
         self.logger.warning(sanitized_message, *sanitized_args, **safe_kwargs)
 
-    def error(self, message: str, *args, **kwargs) -> None:
+    def error(self, message: str, *args: Any, **kwargs: Any) -> None:
         """
         Log error message with sanitization.
 

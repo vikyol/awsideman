@@ -13,7 +13,7 @@
 A powerful, open-source CLI tool that transforms AWS Identity Center (SSO) management from complex, error-prone tasks into intuitive, human-friendly operations. Built for teams who value **simplicity**, **safety**, and **scalability**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Poetry](https://img.shields.io/badge/dependency%20management-poetry-blue.svg)](https://python-poetry.org/)
 
 ## 🎯 **Why awsideman?**

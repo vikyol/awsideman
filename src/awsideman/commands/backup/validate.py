@@ -1,7 +1,7 @@
 """Validate backup command for awsideman."""
 
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
@@ -39,7 +39,7 @@ def validate_backup(
         "table", "--format", "-f", help="Output format: table or json"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Validate backup integrity and completeness.
 
     Performs comprehensive validation of a backup including integrity checks,
@@ -67,9 +67,10 @@ def validate_backup(
         profile_name, profile_data = validate_profile(profile)
 
         # Initialize storage backend
+        backend: FileSystemStorageBackend | S3StorageBackend
         if storage_backend.lower() == "filesystem":
             storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
-            storage_backend = FileSystemStorageBackend(base_path=storage_path)
+            backend = FileSystemStorageBackend(base_path=storage_path)
         elif storage_backend.lower() == "s3":
             if not storage_path:
                 console.print("[red]Error: S3 storage requires --storage-path parameter.[/red]")
@@ -90,14 +91,14 @@ def validate_backup(
             if profile_data and "region" in profile_data:
                 s3_config["region_name"] = profile_data["region"]
 
-            storage_backend = S3StorageBackend(**s3_config)
+            backend = S3StorageBackend(**s3_config)
         else:
             console.print(f"[red]Error: Unsupported storage backend '{storage_backend}'.[/red]")
             console.print("[yellow]Supported backends: filesystem, s3[/yellow]")
             raise typer.Exit(1)
 
         # Initialize components
-        storage_engine = StorageEngine(backend=storage_backend)
+        storage_engine = StorageEngine(backend=backend)
         validator = BackupValidator()
 
         # Check if backup exists
@@ -149,7 +150,7 @@ def validate_backup(
         raise typer.Exit(1)
 
 
-def display_validation_results(validation_result, backup_metadata):
+def display_validation_results(validation_result: Any, backup_metadata: Any) -> None:
     """Display validation results in a formatted table."""
     # Main validation summary
     summary_table = Table(title="Backup Validation Summary")

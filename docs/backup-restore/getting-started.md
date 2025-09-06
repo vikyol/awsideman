@@ -32,7 +32,7 @@ Your AWS credentials must have the following permissions:
 ```
 
 ### System Requirements
-- Python 3.8 or higher
+- Python 3.11 or higher
 - 2GB RAM minimum (4GB recommended)
 - 10GB free disk space for local storage
 - Network access to AWS APIs

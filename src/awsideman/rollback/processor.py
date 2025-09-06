@@ -14,6 +14,7 @@ from .exceptions import IdempotencyViolationError, StateVerificationError
 from .models import (
     AssignmentState,
     OperationRecord,
+    OperationResult,
     OperationType,
     RollbackAction,
     RollbackActionType,
@@ -293,7 +294,7 @@ class RollbackProcessor:
             elif hasattr(operation, "accounts_affected"):
                 # For PermissionCloningOperationRecord, create mock results from accounts
                 results_to_check = [
-                    {"account_id": account_id, "success": True}
+                    OperationResult(account_id=account_id, success=True)
                     for account_id in operation.accounts_affected
                 ]
             else:
@@ -327,15 +328,19 @@ class RollbackProcessor:
                     if hasattr(operation, "principal_id"):
                         check_principal_id = operation.principal_id
                         check_principal_type = operation.principal_type.value
-                    elif hasattr(operation, "source_entity_id"):
+                    elif hasattr(operation, "source_entity_id") and hasattr(
+                        operation, "target_entity_id"
+                    ):
+                        # Type narrowing for PermissionCloningOperationRecord
+                        operation_record = operation  # type: Any
                         if operation.operation_type == OperationType.COPY_ASSIGNMENTS:
                             # For copy operations, check the target user's assignments
-                            check_principal_id = operation.target_entity_id
-                            check_principal_type = operation.target_entity_type.value
+                            check_principal_id = operation_record.target_entity_id
+                            check_principal_type = operation_record.target_entity_type.value
                         else:
                             # For other operations, use source entity info
-                            check_principal_id = operation.source_entity_id
-                            check_principal_type = operation.source_entity_type.value
+                            check_principal_id = operation_record.source_entity_id
+                            check_principal_type = operation_record.source_entity_type.value
                     else:
                         continue
 
@@ -415,7 +420,7 @@ class RollbackProcessor:
         elif hasattr(operation, "accounts_affected"):
             # For PermissionCloningOperationRecord, create mock results from accounts
             results_to_process = [
-                {"account_id": account_id, "success": True}
+                OperationResult(account_id=account_id, success=True)
                 for account_id in operation.accounts_affected
             ]
         else:
@@ -443,20 +448,24 @@ class RollbackProcessor:
                     principal_id = operation.principal_id
                     permission_set_arn = operation.permission_set_arn
                     principal_type = operation.principal_type
-                elif hasattr(operation, "source_entity_id"):
+                elif hasattr(operation, "source_entity_id") and hasattr(
+                    operation, "target_entity_id"
+                ):
+                    # Type narrowing for PermissionCloningOperationRecord
+                    operation_record = operation  # type: Any
                     # For PermissionCloningOperationRecord, determine the correct principal based on operation type
                     if operation.operation_type == OperationType.COPY_ASSIGNMENTS:
                         # For copy operations, rollback should affect the TARGET user (who received the permissions)
-                        principal_id = operation.target_entity_id
-                        principal_type = operation.target_entity_type
+                        principal_id = operation_record.target_entity_id
+                        principal_type = operation_record.target_entity_type
                     else:
                         # For other operations, use source entity info
-                        principal_id = operation.source_entity_id
-                        principal_type = operation.source_entity_type
+                        principal_id = operation_record.source_entity_id
+                        principal_type = operation_record.source_entity_type
 
                     permission_set_arn = (
-                        operation.permission_sets_involved[0]
-                        if operation.permission_sets_involved
+                        operation_record.permission_sets_involved[0]
+                        if operation_record.permission_sets_involved
                         else ""
                     )
                 else:
@@ -540,15 +549,17 @@ class RollbackProcessor:
                 hasattr(operation, "permission_sets_involved")
                 and operation.permission_sets_involved
             ):
-                permission_set_arn = operation.permission_sets_involved[0]
+                # Type narrowing for PermissionCloningOperationRecord
+                operation_record = operation  # type: Any
+                permission_set_arn = operation_record.permission_sets_involved[0]
                 if operation.operation_type == OperationType.COPY_ASSIGNMENTS:
                     # For copy operations, check the target user's assignments
-                    principal_id = operation.target_entity_id
-                    principal_type = operation.target_entity_type.value
+                    principal_id = operation_record.target_entity_id
+                    principal_type = operation_record.target_entity_type.value
                 else:
                     # For other operations, use source entity info
-                    principal_id = operation.source_entity_id
-                    principal_type = operation.source_entity_type.value
+                    principal_id = operation_record.source_entity_id
+                    principal_type = operation_record.source_entity_type.value
             else:
                 return AssignmentState.UNKNOWN
 
@@ -643,7 +654,8 @@ class RollbackProcessor:
         completed_actions = 0
         failed_actions = 0
         errors = []
-        recovery_results = []
+        recovery_results: List[Any] = []
+        result: RollbackResult
 
         # Get SSO instance ARN
         sso_instance_arn = None
@@ -805,7 +817,7 @@ class RollbackProcessor:
                                 raise TimeoutError("AWS API call timed out after 60 seconds")
 
                     # Execute action with error recovery
-                    result = self.error_recovery.execute_with_recovery(
+                    recovery_result = self.error_recovery.execute_with_recovery(
                         execute_action,
                         f"rollback_action_{action.action_type.value}",
                         {
@@ -816,7 +828,7 @@ class RollbackProcessor:
                         },
                     )
 
-                    recovery_results.append(result)
+                    recovery_results.append(recovery_result)
 
                     # Record action performance metrics
                     action_duration = (
@@ -829,20 +841,23 @@ class RollbackProcessor:
                         "ms",
                         {
                             "account_id": action.account_id,
-                            "success": result.success,
-                            "attempts": getattr(result, "attempts", 1),
+                            "success": recovery_result.success,
+                            "attempts": getattr(recovery_result, "attempts", 1),
                         },
                     )
 
-                    if result.success:
+                    if recovery_result.success:
                         completed_actions += 1
-                        if result.recovery_notes:
+                        if (
+                            hasattr(recovery_result, "recovery_notes")
+                            and recovery_result.recovery_notes
+                        ):
                             console.print(
-                                f"[yellow]Account {action.account_id}: {'; '.join(result.recovery_notes)}[/yellow]"
+                                f"[yellow]Account {action.account_id}: {'; '.join(recovery_result.recovery_notes)}[/yellow]"
                             )
                     else:
                         failed_actions += 1
-                        error_msg = f"Account {action.account_id}: {str(result.final_error)}"
+                        error_msg = f"Account {action.account_id}: {str(getattr(recovery_result, 'final_error', 'Unknown error'))}"
                         errors.append(error_msg)
                         console.print(f"[red]Error: {error_msg}[/red]")
 
@@ -1019,11 +1034,11 @@ class RollbackProcessor:
                                     time.sleep(retry_delay)
                                     retry_delay *= 2  # Exponential backoff
 
-                        if verification_result.overall_verified:
+                        if verification_result and verification_result.overall_verified:
                             console.print(
                                 f"[green]✓ Post-rollback verification passed: {verification_result.verified_assignments}/{verification_result.total_assignments} assignments verified[/green]"
                             )
-                        else:
+                        elif verification_result:
                             console.print(
                                 f"[yellow]⚠ Post-rollback verification issues: {verification_result.failed_verifications}/{verification_result.total_assignments} verifications failed[/yellow]"
                             )
@@ -1036,25 +1051,26 @@ class RollbackProcessor:
                                 console.print(f"[red]  Verification Error: {error}[/red]")
 
                         # Record verification metrics
-                        self.performance_tracker.add_operation_metric(
-                            rollback_operation_id,
-                            "verification_success_rate",
-                            (
+                        if verification_result:
+                            self.performance_tracker.add_operation_metric(
+                                rollback_operation_id,
+                                "verification_success_rate",
                                 (
-                                    verification_result.verified_assignments
-                                    / verification_result.total_assignments
-                                    * 100
-                                )
-                                if verification_result.total_assignments > 0
-                                else 0
-                            ),
-                            "percent",
-                            {
-                                "verified_assignments": verification_result.verified_assignments,
-                                "total_assignments": verification_result.total_assignments,
-                                "failed_verifications": verification_result.failed_verifications,
-                            },
-                        )
+                                    (
+                                        verification_result.verified_assignments
+                                        / verification_result.total_assignments
+                                        * 100
+                                    )
+                                    if verification_result.total_assignments > 0
+                                    else 0
+                                ),
+                                "percent",
+                                {
+                                    "verified_assignments": verification_result.verified_assignments,
+                                    "total_assignments": verification_result.total_assignments,
+                                    "failed_verifications": verification_result.failed_verifications,
+                                },
+                            )
 
             except Exception as e:
                 console.print(
@@ -1108,21 +1124,25 @@ class RollbackProcessor:
                 principal_name = original_operation.principal_name
                 permission_set_arn = original_operation.permission_set_arn
                 permission_set_name = original_operation.permission_set_name
-            elif hasattr(original_operation, "source_entity_id"):
+            elif hasattr(original_operation, "source_entity_id") and hasattr(
+                original_operation, "target_entity_id"
+            ):
+                # Type narrowing for PermissionCloningOperationRecord
+                operation_record = original_operation  # type: Any
                 # For PermissionCloningOperationRecord, determine the correct principal based on operation type
                 if original_operation.operation_type == OperationType.COPY_ASSIGNMENTS:
                     # For copy operations, rollback affects the TARGET user (who received the permissions)
-                    principal_id = original_operation.target_entity_id
-                    principal_type = original_operation.target_entity_type.value
-                    principal_name = original_operation.target_entity_name
+                    principal_id = operation_record.target_entity_id
+                    principal_type = operation_record.target_entity_type.value
+                    principal_name = operation_record.target_entity_name
                 else:
                     # For other operations, use source entity info
-                    principal_id = original_operation.source_entity_id
-                    principal_type = original_operation.source_entity_type.value
-                    principal_name = original_operation.source_entity_name
+                    principal_id = operation_record.source_entity_id
+                    principal_type = operation_record.source_entity_type.value
+                    principal_name = operation_record.source_entity_name
                 permission_set_arn = (
-                    original_operation.permission_sets_involved[0]
-                    if original_operation.permission_sets_involved
+                    operation_record.permission_sets_involved[0]
+                    if operation_record.permission_sets_involved
                     else ""
                 )
                 permission_set_name = (
@@ -1274,7 +1294,7 @@ class RollbackProcessor:
             rollbacks_data = self.store._read_rollbacks_file()
             for rollback in rollbacks_data.get("rollbacks", []):
                 if rollback.get("rollback_operation_id") == rollback_operation_id:
-                    return rollback
+                    return rollback  # type: ignore
         except Exception as e:
             console.print(f"[yellow]Warning: Could not read rollback records: {str(e)}[/yellow]")
 
@@ -1350,7 +1370,7 @@ class RollbackProcessor:
         """
         try:
             # Run storage optimization
-            optimization_results = self.store.optimize_storage()
+            optimization_results = self.optimize_storage()
 
             # Run health check
             alerts = self.storage_monitor.check_storage_health()
