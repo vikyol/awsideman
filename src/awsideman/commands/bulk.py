@@ -57,7 +57,6 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from ..aws_clients.manager import AWSClientManager
 from ..utils.config import Config
 from ..utils.validators import validate_profile, validate_sso_instance
 
@@ -103,6 +102,11 @@ def bulk_assign(
     batch_size: int = typer.Option(
         10, "--batch-size", help="Number of assignments to process in parallel (1-50, default: 10)"
     ),
+    account_override: Optional[str] = typer.Option(
+        None,
+        "--account",
+        help="Override account name for all assignments (useful for applying same assignments to different accounts)",
+    ),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="AWS profile to use (uses default if not specified)"
     ),
@@ -118,7 +122,7 @@ def bulk_assign(
     CSV Format (required columns):
       principal_name      - User or group name (e.g., "john.doe", "Developers")
       permission_set_name - Permission set name (e.g., "ReadOnlyAccess")
-      account_name        - AWS account name (e.g., "Production")
+      account_name        - AWS account name (e.g., "Production") [OPTIONAL if --account is used]
       principal_type      - "USER" or "GROUP" (optional, defaults to "USER")
 
     JSON Format:
@@ -127,7 +131,7 @@ def bulk_assign(
           {
             "principal_name": "john.doe",
             "permission_set_name": "ReadOnlyAccess",
-            "account_name": "Production",
+            "account_name": "Production",  // OPTIONAL if --account is used
             "principal_type": "USER"
           }
         ]
@@ -137,6 +141,14 @@ def bulk_assign(
 
       # Basic bulk assign from CSV with human-readable names
       $ awsideman bulk assign user-assignments.csv
+
+      # Apply same assignments to different account using account override
+      $ awsideman bulk assign assignments.csv --account Production
+      $ awsideman bulk assign assignments.csv --account Staging
+      $ awsideman bulk assign assignments.csv --account Development
+
+      # Use account override with JSON file (account_name field can be omitted)
+      $ awsideman bulk assign assignments.json --account Production
 
       # Validate input and preview changes without applying them
       $ awsideman bulk assign assignments.csv --dry-run
@@ -195,14 +207,20 @@ def bulk_assign(
         # Validate SSO instance and get instance ARN and identity store ID
         instance_arn, identity_store_id = validate_sso_instance(profile_data)
 
-        # Create AWS client manager
-        aws_client = AWSClientManager(profile_name)
+        # Create AWS client manager with caching enabled
+        from ..cache.utilities import create_aws_client_manager
+
+        aws_client = create_aws_client_manager(
+            profile=profile_name, enable_caching=True, auto_configure_cache=True
+        )
 
         console.print(f"[blue]Starting bulk assign operation for: {input_file}[/blue]")
         console.print(f"[dim]Profile: {profile_name}[/dim]")
         console.print(f"[dim]Dry run: {dry_run}[/dim]")
         console.print(f"[dim]Continue on error: {continue_on_error}[/dim]")
         console.print(f"[dim]Batch size: {batch_size}[/dim]")
+        if account_override:
+            console.print(f"[dim]Account override: {account_override}[/dim]")
         console.print()
 
         # Step 1: Process input file
@@ -216,7 +234,7 @@ def bulk_assign(
             )
 
             # Validate file format
-            validation_errors = processor.validate_format()
+            validation_errors = processor.validate_format(account_override)
             if validation_errors:
                 console.print("[red]✗ File validation failed:[/red]")
                 for error in validation_errors:
@@ -227,8 +245,17 @@ def bulk_assign(
                 raise typer.Exit(1)
 
             # Parse assignments from file
-            assignments = processor.parse_assignments()
+            assignments = processor.parse_assignments(account_override)
             console.print(f"[green]✓ Successfully parsed {len(assignments)} assignments[/green]")
+
+            # Apply account override if provided
+            if account_override:
+                console.print(f"[blue]Applying account override: {account_override}[/blue]")
+                for assignment in assignments:
+                    assignment["account_name"] = account_override
+                console.print(
+                    f"[green]✓ Applied account override to {len(assignments)} assignments[/green]"
+                )
 
         except ValueError as e:
             console.print(f"[red]✗ File processing error: {str(e)}[/red]")
@@ -244,9 +271,7 @@ def bulk_assign(
             # Create resource resolver
             resolver = ResourceResolver(aws_client, instance_arn, identity_store_id)
 
-            # Pre-warm cache for better performance
-            console.print("[dim]Pre-warming resolution cache...[/dim]")
-            resolver.warm_cache_for_assignments(assignments)
+            # Cache will populate naturally as needed during resolution
 
             # Resolve all assignments
             resolved_assignments = []
@@ -410,6 +435,11 @@ def bulk_revoke(
     batch_size: int = typer.Option(
         10, "--batch-size", help="Number of assignments to process in parallel (1-50, default: 10)"
     ),
+    account_override: Optional[str] = typer.Option(
+        None,
+        "--account",
+        help="Override account name for all assignments (useful for applying same assignments to different accounts)",
+    ),
     force: bool = typer.Option(
         False, "--force", "-f", help="Skip confirmation prompts and proceed automatically"
     ),
@@ -428,7 +458,7 @@ def bulk_revoke(
     CSV Format (required columns):
       principal_name      - User or group name (e.g., "john.doe", "Developers")
       permission_set_name - Permission set name (e.g., "ReadOnlyAccess")
-      account_name        - AWS account name (e.g., "Production")
+      account_name        - AWS account name (e.g., "Production") [OPTIONAL if --account is used]
       principal_type      - "USER" or "GROUP" (optional, defaults to "USER")
 
     JSON Format:
@@ -437,7 +467,7 @@ def bulk_revoke(
           {
             "principal_name": "john.doe",
             "permission_set_name": "ReadOnlyAccess",
-            "account_name": "Production",
+            "account_name": "Production",  // OPTIONAL if --account is used
             "principal_type": "USER"
           }
         ]
@@ -447,6 +477,14 @@ def bulk_revoke(
 
       # Basic bulk revoke from CSV with human-readable names
       $ awsideman bulk revoke user-assignments.csv
+
+      # Revoke same assignments from different account using account override
+      $ awsideman bulk revoke assignments.csv --account Production
+      $ awsideman bulk revoke assignments.csv --account Staging
+      $ awsideman bulk revoke assignments.csv --account Development
+
+      # Use account override with JSON file (account_name field can be omitted)
+      $ awsideman bulk revoke assignments.json --account Production
 
       # Validate input and preview changes without applying them
       $ awsideman bulk revoke assignments.csv --dry-run
@@ -513,8 +551,12 @@ def bulk_revoke(
         # Validate SSO instance and get instance ARN and identity store ID
         instance_arn, identity_store_id = validate_sso_instance(profile_data)
 
-        # Create AWS client manager
-        aws_client = AWSClientManager(profile_name)
+        # Create AWS client manager with caching enabled
+        from ..cache.utilities import create_aws_client_manager
+
+        aws_client = create_aws_client_manager(
+            profile=profile_name, enable_caching=True, auto_configure_cache=True
+        )
 
         console.print(f"[blue]Starting bulk revoke operation for: {input_file}[/blue]")
         console.print(f"[dim]Profile: {profile_name}[/dim]")
@@ -522,6 +564,8 @@ def bulk_revoke(
         console.print(f"[dim]Continue on error: {continue_on_error}[/dim]")
         console.print(f"[dim]Batch size: {batch_size}[/dim]")
         console.print(f"[dim]Force: {force}[/dim]")
+        if account_override:
+            console.print(f"[dim]Account override: {account_override}[/dim]")
         console.print()
 
         # Step 1: Process input file
@@ -535,7 +579,7 @@ def bulk_revoke(
             )
 
             # Validate file format
-            validation_errors = processor.validate_format()
+            validation_errors = processor.validate_format(account_override)
             if validation_errors:
                 console.print("[red]✗ File validation failed:[/red]")
                 for error in validation_errors:
@@ -546,8 +590,17 @@ def bulk_revoke(
                 raise typer.Exit(1)
 
             # Parse assignments from file
-            assignments = processor.parse_assignments()
+            assignments = processor.parse_assignments(account_override)
             console.print(f"[green]✓ Successfully parsed {len(assignments)} assignments[/green]")
+
+            # Apply account override if provided
+            if account_override:
+                console.print(f"[blue]Applying account override: {account_override}[/blue]")
+                for assignment in assignments:
+                    assignment["account_name"] = account_override
+                console.print(
+                    f"[green]✓ Applied account override to {len(assignments)} assignments[/green]"
+                )
 
         except ValueError as e:
             console.print(f"[red]✗ File processing error: {str(e)}[/red]")
@@ -563,9 +616,7 @@ def bulk_revoke(
             # Create resource resolver
             resolver = ResourceResolver(aws_client, instance_arn, identity_store_id)
 
-            # Pre-warm cache for better performance
-            console.print("[dim]Pre-warming resolution cache...[/dim]")
-            resolver.warm_cache_for_assignments(assignments)
+            # Cache will populate naturally as needed during resolution
 
             # Resolve all assignments
             resolved_assignments = []

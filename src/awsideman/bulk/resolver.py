@@ -50,7 +50,12 @@ class ResourceResolver:
         self.sso_admin_client = aws_client_manager.get_identity_center_client()
         self.organizations_client = aws_client_manager.get_organizations_client()
 
-        # Caches for resolved names
+        # Get persistent cache manager for resolution results
+        from ..cache.manager import CacheManager
+
+        self.cache_manager = CacheManager(profile=aws_client_manager.profile)
+
+        # Caches for resolved names (now using persistent cache)
         self._principal_cache: Dict[str, ResolutionResult] = {}
         self._permission_set_cache: Dict[str, ResolutionResult] = {}
         self._account_cache: Dict[str, ResolutionResult] = {}
@@ -69,9 +74,17 @@ class ResourceResolver:
         Returns:
             ResolutionResult with principal ID or error message
         """
-        cache_key = f"{principal_type}:{principal_name}"
+        cache_key = f"principal:{principal_type}:{principal_name}"
 
-        # Check cache first
+        # Check persistent cache first
+        try:
+            cached_result = self.cache_manager.get(cache_key)
+            if cached_result is not None:
+                return ResolutionResult(**cached_result)
+        except Exception:
+            pass  # Fall back to in-memory cache
+
+        # Check in-memory cache
         if cache_key in self._principal_cache:
             return self._principal_cache[cache_key]
 
@@ -86,8 +99,15 @@ class ResourceResolver:
                     error_message=f"Invalid principal type '{principal_type}'. Must be 'USER' or 'GROUP'",
                 )
 
-            # Cache the result
+            # Cache the result in both persistent and in-memory cache
             self._principal_cache[cache_key] = result
+            try:
+                from datetime import timedelta
+
+                self.cache_manager.set(cache_key, result.__dict__, ttl=timedelta(hours=1))
+            except Exception:
+                pass  # Don't fail if persistent caching fails
+
             return result
 
         except Exception as e:
@@ -96,6 +116,12 @@ class ResourceResolver:
                 error_message=f"Error resolving principal '{principal_name}': {str(e)}",
             )
             self._principal_cache[cache_key] = result
+            try:
+                from datetime import timedelta
+
+                self.cache_manager.set(cache_key, result.__dict__, ttl=timedelta(minutes=5))
+            except Exception:
+                pass
             return result
 
     def _resolve_user_name(self, user_name: str) -> ResolutionResult:
@@ -165,7 +191,17 @@ class ResourceResolver:
         Returns:
             ResolutionResult with permission set ARN or error message
         """
-        # Check cache first
+        cache_key = f"permission_set:{permission_set_name}"
+
+        # Check persistent cache first
+        try:
+            cached_result = self.cache_manager.get(cache_key)
+            if cached_result is not None:
+                return ResolutionResult(**cached_result)
+        except Exception:
+            pass  # Fall back to in-memory cache
+
+        # Check in-memory cache
         if permission_set_name in self._permission_set_cache:
             return self._permission_set_cache[permission_set_name]
 
@@ -200,6 +236,14 @@ class ResourceResolver:
                     if ps_name == permission_set_name:
                         result = ResolutionResult(success=True, resolved_value=permission_set_arn)
                         self._permission_set_cache[permission_set_name] = result
+                        try:
+                            from datetime import timedelta
+
+                            self.cache_manager.set(
+                                cache_key, result.__dict__, ttl=timedelta(hours=1)
+                            )
+                        except Exception:
+                            pass
                         return result
 
                 except ClientError as e:
@@ -214,17 +258,35 @@ class ResourceResolver:
                 success=False, error_message=f"Permission set '{permission_set_name}' not found"
             )
             self._permission_set_cache[permission_set_name] = result
+            try:
+                from datetime import timedelta
+
+                self.cache_manager.set(cache_key, result.__dict__, ttl=timedelta(minutes=5))
+            except Exception:
+                pass
             return result
 
         except ClientError as e:
             error_msg = f"AWS API error resolving permission set '{permission_set_name}': {str(e)}"
             result = ResolutionResult(success=False, error_message=error_msg)
             self._permission_set_cache[permission_set_name] = result
+            try:
+                from datetime import timedelta
+
+                self.cache_manager.set(cache_key, result.__dict__, ttl=timedelta(minutes=5))
+            except Exception:
+                pass
             return result
         except Exception as e:
             error_msg = f"Error resolving permission set '{permission_set_name}': {str(e)}"
             result = ResolutionResult(success=False, error_message=error_msg)
             self._permission_set_cache[permission_set_name] = result
+            try:
+                from datetime import timedelta
+
+                self.cache_manager.set(cache_key, result.__dict__, ttl=timedelta(minutes=5))
+            except Exception:
+                pass
             return result
 
     def resolve_account_name(self, account_name: str) -> ResolutionResult:
@@ -236,33 +298,94 @@ class ResourceResolver:
         Returns:
             ResolutionResult with account ID or error message
         """
-        # Check cache first
+        cache_key = f"account:{account_name}"
+
+        # Check persistent cache first
+        try:
+            cached_result = self.cache_manager.get(cache_key)
+            if cached_result is not None:
+                return ResolutionResult(**cached_result)
+        except Exception:
+            pass  # Fall back to in-memory cache
+
+        # Check in-memory cache
         if account_name in self._account_cache:
             return self._account_cache[account_name]
 
         try:
-            # Populate account cache if empty
-            if not self._account_name_to_id_cache:
-                self._populate_account_cache()
+            # Try to resolve account individually first (faster for single accounts)
+            result = self._resolve_account_individual(account_name)
 
-            # Look up account by name
-            if account_name in self._account_name_to_id_cache:
-                account_id = self._account_name_to_id_cache[account_name]
-                result = ResolutionResult(success=True, resolved_value=account_id)
-            else:
-                result = ResolutionResult(
-                    success=False,
-                    error_message=f"Account '{account_name}' not found in organization",
-                )
+            # If individual resolution fails, fall back to full organization cache
+            if not result.success and not self._account_name_to_id_cache:
+                try:
+                    self._populate_account_cache()
+                    # Try lookup in the full cache
+                    if account_name in self._account_name_to_id_cache:
+                        account_id = self._account_name_to_id_cache[account_name]
+                        result = ResolutionResult(success=True, resolved_value=account_id)
+                except Exception as e:
+                    console.print(
+                        f"[yellow]Warning: Could not populate account cache: {str(e)}[/yellow]"
+                    )
 
             self._account_cache[account_name] = result
+            try:
+                from datetime import timedelta
+
+                self.cache_manager.set(cache_key, result.__dict__, ttl=timedelta(hours=1))
+            except Exception:
+                pass
             return result
 
         except Exception as e:
             error_msg = f"Error resolving account '{account_name}': {str(e)}"
             result = ResolutionResult(success=False, error_message=error_msg)
             self._account_cache[account_name] = result
+            try:
+                from datetime import timedelta
+
+                self.cache_manager.set(cache_key, result.__dict__, ttl=timedelta(minutes=5))
+            except Exception:
+                pass
             return result
+
+    def _resolve_account_individual(self, account_name: str) -> ResolutionResult:
+        """Try to resolve account individually without building full organization hierarchy.
+
+        Args:
+            account_name: Name of the AWS account
+
+        Returns:
+            ResolutionResult with account ID or error message
+        """
+        try:
+            # Try to list accounts and find by name (more efficient than full hierarchy)
+            paginator = self.organizations_client.get_paginator("list_accounts")
+
+            for page in paginator.paginate():
+                accounts = page.get("Accounts", [])
+                for account in accounts:
+                    if account.get("Name") == account_name:
+                        account_id = account.get("Id")
+                        if account_id:
+                            # Cache this individual account
+                            self._account_name_to_id_cache[account_name] = account_id
+                            self._account_id_to_name_cache[account_id] = account_name
+                            return ResolutionResult(success=True, resolved_value=account_id)
+
+            # Account not found in direct listing
+            return ResolutionResult(
+                success=False,
+                error_message=f"Account '{account_name}' not found in organization",
+            )
+
+        except Exception as e:
+            # If individual resolution fails, return error (will fall back to full cache)
+            return ResolutionResult(
+                success=False,
+                error_message=f"Error resolving account '{account_name}': {str(e)}",
+            )
 
     def _populate_account_cache(self):
         """Populate the account name to ID cache using Organizations API."""
@@ -336,11 +459,17 @@ class ResourceResolver:
         # Resolve account name to ID
         account_name = assignment.get("account_name", "")
         if account_name:
-            account_result = self.resolve_account_name(account_name)
-            if account_result.success:
-                resolved_assignment["account_id"] = account_result.resolved_value
+            # Check if account_name is already a numeric ID (12 digits)
+            if account_name.isdigit() and len(account_name) == 12:
+                # Already an account ID, no resolution needed
+                resolved_assignment["account_id"] = account_name
             else:
-                resolution_errors.append(account_result.error_message)
+                # Need to resolve account name to ID
+                account_result = self.resolve_account_name(account_name)
+                if account_result.success:
+                    resolved_assignment["account_id"] = account_result.resolved_value
+                else:
+                    resolution_errors.append(account_result.error_message)
 
         # Add resolution status
         resolved_assignment["resolution_success"] = len(resolution_errors) == 0

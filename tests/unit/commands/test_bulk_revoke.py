@@ -31,7 +31,7 @@ class TestBulkRevokeCommand:
             with (
                 patch("src.awsideman.commands.bulk.validate_profile") as mock_validate_profile,
                 patch("src.awsideman.commands.bulk.validate_sso_instance") as mock_validate_sso,
-                patch("src.awsideman.commands.bulk.AWSClientManager") as mock_aws_client,
+                patch("src.awsideman.cache.utilities.create_aws_client_manager") as mock_aws_client,
                 patch("src.awsideman.commands.bulk.console"),
             ):
                 # Setup mocks
@@ -137,7 +137,7 @@ class TestBulkRevokeCommand:
             with (
                 patch("src.awsideman.commands.bulk.validate_profile") as mock_validate_profile,
                 patch("src.awsideman.commands.bulk.validate_sso_instance") as mock_validate_sso,
-                patch("src.awsideman.commands.bulk.AWSClientManager") as mock_aws_client,
+                patch("src.awsideman.cache.utilities.create_aws_client_manager") as mock_aws_client,
                 patch("src.awsideman.commands.bulk.console"),
                 patch("src.awsideman.commands.bulk.asyncio") as mock_asyncio,
             ):

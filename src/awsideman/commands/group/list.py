@@ -25,6 +25,8 @@ def _list_groups_internal(
     region: Optional[str] = None,
     enable_caching: bool = True,
     verbose: bool = False,
+    interactive: bool = True,
+    suppress_display: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
     Internal implementation of list_groups that can be called directly from tests.
@@ -89,66 +91,91 @@ def _list_groups_internal(
         groups = response.get("Groups", [])
         next_token = response.get("NextToken")
 
-        # Display the results using a Rich table
+        # Display the results using a Rich table (unless suppressed)
         if not groups:
-            console.print("[yellow]No groups found.[/yellow]")
+            if not suppress_display:
+                console.print("[yellow]No groups found.[/yellow]")
             return [], next_token
 
-        # Display pagination status
-        page_info = ""
+        if not suppress_display:
+            # Display pagination status
+            page_info = ""
+            if next_token:
+                page_info = " (more results available)"
+            if limit:
+                page_info = f" (showing up to {limit} results{page_info.replace(' (', ', ') if page_info else ''})"
+
+            console.print(f"[green]Found {len(groups)} groups{page_info}.[/green]")
+
+            # Create a table for displaying groups
+            table = Table(title=f"Groups in Identity Store {identity_store_id}")
+
+            # Add columns to the table
+            table.add_column("Group ID", style="cyan")
+            table.add_column("Display Name", style="green")
+            table.add_column("Description", style="blue")
+
+            # Add rows to the table
+            for group in groups:
+                group_id = group.get("GroupId", "")
+                display_name = group.get("DisplayName", "")
+                description = group.get("Description", "")
+
+                # Add the row to the table
+                table.add_row(group_id, display_name, description)
+
+            # Display the table
+            console.print(table)
+
+        # Handle pagination
         if next_token:
-            page_info = " (more results available)"
-        if limit:
-            page_info = f" (showing up to {limit} results{page_info.replace(' (', ', ') if page_info else ''})"
+            if interactive and not suppress_display:
+                console.print(
+                    "\n[blue]Press ENTER to see the next page, or any other key to exit...[/blue]"
+                )
+                try:
+                    # Wait for single key press
+                    key = get_single_key()
 
-        console.print(f"[green]Found {len(groups)} groups{page_info}.[/green]")
+                    # If the user pressed Enter (or Return), fetch the next page
+                    if key in ["\r", "\n", ""]:
+                        console.print("\n[blue]Fetching next page...[/blue]\n")
+                        # Call _list_groups_internal recursively with the next token
+                        return _list_groups_internal(
+                            filter=filter,
+                            limit=limit,
+                            next_token=next_token,
+                            profile=profile,
+                            region=region,
+                            enable_caching=enable_caching,
+                            verbose=verbose,
+                            interactive=interactive,
+                            suppress_display=suppress_display,
+                        )
+                    else:
+                        console.print("\n[yellow]Pagination stopped.[/yellow]")
+                except KeyboardInterrupt:
+                    console.print("\n[yellow]Pagination stopped by user.[/yellow]")
+            elif suppress_display:
+                # For export commands, automatically fetch all pages
+                all_groups = groups.copy()
+                current_token = next_token
 
-        # Create a table for displaying groups
-        table = Table(title=f"Groups in Identity Store {identity_store_id}")
-
-        # Add columns to the table
-        table.add_column("Group ID", style="cyan")
-        table.add_column("Display Name", style="green")
-        table.add_column("Description", style="blue")
-
-        # Add rows to the table
-        for group in groups:
-            group_id = group.get("GroupId", "")
-            display_name = group.get("DisplayName", "")
-            description = group.get("Description", "")
-
-            # Add the row to the table
-            table.add_row(group_id, display_name, description)
-
-        # Display the table
-        console.print(table)
-
-        # Handle pagination - interactive by default
-        if next_token:
-            console.print(
-                "\n[blue]Press ENTER to see the next page, or any other key to exit...[/blue]"
-            )
-            try:
-                # Wait for single key press
-                key = get_single_key()
-
-                # If the user pressed Enter (or Return), fetch the next page
-                if key in ["\r", "\n", ""]:
-                    console.print("\n[blue]Fetching next page...[/blue]\n")
-                    # Call _list_groups_internal recursively with the next token
-                    return _list_groups_internal(
+                while current_token:
+                    next_groups, current_token = _list_groups_internal(
                         filter=filter,
                         limit=limit,
-                        next_token=next_token,
+                        next_token=current_token,
                         profile=profile,
                         region=region,
                         enable_caching=enable_caching,
                         verbose=verbose,
+                        interactive=False,
+                        suppress_display=True,
                     )
-                else:
-                    console.print("\n[yellow]Pagination stopped.[/yellow]")
-            except KeyboardInterrupt:
-                console.print("\n[yellow]Pagination stopped by user.[/yellow]")
+                    all_groups.extend(next_groups)
+
+                return all_groups, None
 
         # Return the groups and next token for further processing
         return groups, next_token

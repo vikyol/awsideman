@@ -28,6 +28,7 @@ def mock_asyncio_sleep():
 def mock_aws_client_manager():
     """Create a mock AWS client manager."""
     manager = Mock(spec=AWSClientManager)
+    manager.profile = "test-profile"  # Add the missing profile attribute
 
     # Mock SSO Admin client
     sso_admin_client = Mock()

@@ -4,6 +4,9 @@ This module provides the list command for displaying permission set assignments
 in AWS Identity Center. It supports filtering by account, permission set, and principal.
 """
 
+import csv
+import json
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import typer
@@ -29,8 +32,8 @@ config = Config()
 
 
 def list_assignments(
-    account_id: Optional[str] = typer.Option(
-        None, "--account-id", "-a", help="Filter by AWS account ID or name"
+    account: Optional[str] = typer.Option(
+        None, "--account", "-a", help="Filter by AWS account ID or name"
     ),
     permission_set: Optional[str] = typer.Option(
         None, "--permission-set", "-p", help="Filter by permission set name or ARN"
@@ -48,6 +51,12 @@ def list_assignments(
     interactive: bool = typer.Option(
         True, "--interactive/--no-interactive", help="Enable/disable interactive pagination"
     ),
+    output_format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (json, csv, table)"
+    ),
+    output_file: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path (optional)"
+    ),
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
     no_cache: bool = advanced_cache_option(),
@@ -57,14 +66,15 @@ def list_assignments(
 
     Displays a table of assignments with permission set name, principal name, principal type, and target account.
     Results can be filtered by account, permission set, and principal. All filters accept both names and IDs/ARNs.
+    Results can be exported in various formats.
 
     Examples:
         # List all assignments
         $ awsideman assignment list
 
         # List assignments for a specific account (by ID or name)
-        $ awsideman assignment list --account-id 123456789012
-        $ awsideman assignment list --account-id "Production Account"
+        $ awsideman assignment list --account 123456789012
+        $ awsideman assignment list --account "Production Account"
 
         # List assignments for a specific permission set (by name or ARN)
         $ awsideman assignment list --permission-set "AdministratorAccess"
@@ -74,6 +84,12 @@ def list_assignments(
         $ awsideman assignment list --principal "john.doe@company.com"
         $ awsideman assignment list --principal "Admins"
         $ awsideman assignment list --principal user-1234567890abcdef
+
+        # Export to CSV
+        $ awsideman assignment list --format csv --output assignments.csv
+
+        # Export to JSON
+        $ awsideman assignment list --format json --output assignments.json
 
         # List assignments with a specific limit
         $ awsideman assignment list --limit 10
@@ -123,11 +139,22 @@ def list_assignments(
         handle_network_error(e)
 
     # Resolve names to IDs/ARNs if provided
-    resolved_account_id = account_id
+    resolved_account_id = account
     resolved_permission_set_arn = permission_set
     resolved_principal_id = principal
 
-    if account_id or permission_set or principal:
+    # Check if we need to resolve any resource names
+    needs_resolution = (
+        (account and not account.isdigit())  # Account name needs resolution
+        or (
+            permission_set and not permission_set.startswith("arn:aws:sso:::")
+        )  # Permission set name needs resolution
+        or (
+            principal and not principal.startswith(("user-", "group-"))
+        )  # Principal name needs resolution
+    )
+
+    if needs_resolution:
         with console.status("[blue]Resolving resource names...[/blue]"):
             try:
                 resolver = ResourceResolver(
@@ -137,16 +164,19 @@ def list_assignments(
                 )
 
                 # Resolve account name to ID if it's not already an ID
-                if account_id and not account_id.isdigit():
-                    account_result = resolver.resolve_account_name(account_id)
+                if account and not account.isdigit():
+                    account_result = resolver.resolve_account_name(account)
                     if account_result.success:
                         resolved_account_id = account_result.resolved_value
                         console.print(
-                            f"[green]Resolved account '{account_id}' to ID: {resolved_account_id}[/green]"
+                            f"[green]Resolved account '{account}' to ID: {resolved_account_id}[/green]"
                         )
                     else:
                         console.print(f"[red]Error: {account_result.error_message}[/red]")
                         raise typer.Exit(1)
+                elif account and account.isdigit():
+                    # Account is already an ID, no resolution needed
+                    resolved_account_id = account
 
                 # Resolve permission set name to ARN if it's not already an ARN
                 if permission_set and not permission_set.startswith("arn:aws:sso:::"):
@@ -184,6 +214,10 @@ def list_assignments(
             except Exception as e:
                 console.print(f"[red]Error resolving resource names: {str(e)}[/red]")
                 raise typer.Exit(1)
+    else:
+        # No resolution needed, use provided values directly
+        if account and account.isdigit():
+            resolved_account_id = account
 
     # Initialize pagination variables
     current_token = next_token
@@ -195,17 +229,17 @@ def list_assignments(
             all_assignments = []
 
             # Handle different filtering scenarios
+            # Use expensive path only when we need to search across all accounts
             if (
                 (resolved_permission_set_arn and not resolved_account_id)
                 or (resolved_principal_id and not resolved_account_id)
-                or (resolved_account_id and not resolved_permission_set_arn)
                 or (
                     not resolved_account_id
                     and not resolved_permission_set_arn
                     and not resolved_principal_id
                 )
             ):
-                # If only permission set, principal, or account is specified, we need to iterate through all accounts
+                # If only permission set or principal is specified (without account), we need to iterate through all accounts
                 if resolved_permission_set_arn:
                     console.print(
                         "[blue]Searching across all accounts for permission set assignments...[/blue]"
@@ -213,10 +247,6 @@ def list_assignments(
                 elif resolved_principal_id:
                     console.print(
                         "[blue]Searching across all accounts for principal assignments...[/blue]"
-                    )
-                elif resolved_account_id:
-                    console.print(
-                        "[blue]Searching across all permission sets for account assignments...[/blue]"
                     )
                 else:
                     console.print(
@@ -231,16 +261,12 @@ def list_assignments(
                     for page in paginator.paginate():
                         accounts.extend(page.get("Accounts", []))
 
-                    # Get all permission sets if we need to search by principal, account only, or no filters
+                    # Get all permission sets if we need to search by principal or no filters
                     permission_sets = []
-                    if (
-                        resolved_principal_id
-                        or (resolved_account_id and not resolved_permission_set_arn)
-                        or (
-                            not resolved_account_id
-                            and not resolved_permission_set_arn
-                            and not resolved_principal_id
-                        )
+                    if resolved_principal_id or (
+                        not resolved_account_id
+                        and not resolved_permission_set_arn
+                        and not resolved_principal_id
                     ):
                         ps_paginator = sso_admin_client.get_paginator("list_permission_sets")
                         for page in ps_paginator.paginate(InstanceArn=instance_arn):
@@ -286,36 +312,6 @@ def list_assignments(
                                             ):
                                                 matching_assignments.append(assignment)
                                         return matching_assignments
-                                    except Exception:
-                                        return []
-
-                                # Process permission sets in parallel for this account
-                                with ThreadPoolExecutor(
-                                    max_workers=min(10, len(permission_sets))
-                                ) as ps_executor:
-                                    ps_futures = {
-                                        ps_executor.submit(
-                                            fetch_permission_set_assignments, ps_arn
-                                        ): ps_arn
-                                        for ps_arn in permission_sets
-                                    }
-
-                                    for ps_future in as_completed(ps_futures):
-                                        try:
-                                            ps_assignments = ps_future.result(timeout=30)
-                                            account_assignments.extend(ps_assignments)
-                                        except Exception:
-                                            continue
-                            elif resolved_account_id:
-                                # Search by account across all permission sets
-                                def fetch_permission_set_assignments(permission_set_arn):
-                                    try:
-                                        response = sso_admin_client.list_account_assignments(
-                                            InstanceArn=instance_arn,
-                                            AccountId=account_id,
-                                            PermissionSetArn=permission_set_arn,
-                                        )
-                                        return response.get("AccountAssignments", [])
                                     except Exception:
                                         return []
 
@@ -430,17 +426,83 @@ def list_assignments(
                     )
                     raise typer.Exit(1)
             else:
-                # Standard filtering with account ID and/or permission set
-                list_params: Dict[str, Any] = {
-                    "InstanceArn": instance_arn,
-                }
-
-                # Add filters if provided
-                if resolved_account_id:
-                    list_params["AccountId"] = resolved_account_id
-
+                # Efficient path: when account is specified (with or without permission set/principal)
                 if resolved_permission_set_arn:
-                    list_params["PermissionSetArn"] = resolved_permission_set_arn
+                    # We have both account and permission set - can use direct API call
+                    list_params: Dict[str, Any] = {
+                        "InstanceArn": instance_arn,
+                        "AccountId": resolved_account_id,
+                        "PermissionSetArn": resolved_permission_set_arn,
+                    }
+
+                    # Set the maximum number of results to return if limit is provided
+                    if limit:
+                        list_params["MaxResults"] = min(
+                            limit, 100
+                        )  # AWS API typically limits to 100 items per page
+
+                    # Fetch assignments with pagination
+                    while True:
+                        # Add the pagination token if available
+                        if current_token:
+                            list_params["NextToken"] = current_token
+
+                        # Make the API call to list account assignments
+                        response = sso_admin_client.list_account_assignments(**list_params)
+
+                        # Extract assignments from the response
+                        assignments = response.get("AccountAssignments", [])
+
+                        # Add assignments to the list
+                        all_assignments.extend(assignments)
+
+                        # Check if there are more assignments to fetch
+                        current_token = response.get("NextToken")
+
+                        # If there's no next token or we've reached the limit, break the loop
+                        if not current_token or (limit and len(all_assignments) >= limit):
+                            break
+                else:
+                    # We have account but no permission set - need to get all permission sets first
+                    console.print(
+                        "[blue]Searching across all permission sets for account assignments...[/blue]"
+                    )
+
+                    # Get all permission sets
+                    ps_paginator = sso_admin_client.get_paginator("list_permission_sets")
+                    permission_sets = []
+                    for page in ps_paginator.paginate(InstanceArn=instance_arn):
+                        permission_sets.extend(page.get("PermissionSets", []))
+
+                    # Use parallel processing for better performance
+                    import time
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                    def fetch_permission_set_assignments(permission_set_arn):
+                        """Fetch assignments for a single permission set and account."""
+                        try:
+                            response = sso_admin_client.list_account_assignments(
+                                InstanceArn=instance_arn,
+                                AccountId=resolved_account_id,
+                                PermissionSetArn=permission_set_arn,
+                            )
+                            return response.get("AccountAssignments", [])
+                        except Exception:
+                            return []
+
+                    # Process permission sets in parallel
+                    with ThreadPoolExecutor(max_workers=min(10, len(permission_sets))) as executor:
+                        futures = {
+                            executor.submit(fetch_permission_set_assignments, ps_arn): ps_arn
+                            for ps_arn in permission_sets
+                        }
+
+                        for future in as_completed(futures):
+                            try:
+                                ps_assignments = future.result(timeout=30)
+                                all_assignments.extend(ps_assignments)
+                            except Exception:
+                                continue
 
                 # Note: Principal filtering will be done locally after fetching results
                 # as the AWS API doesn't support PrincipalId/PrincipalType parameters
@@ -450,43 +512,22 @@ def list_assignments(
                     )
                     principal_type = "USER"
 
-                # Set the maximum number of results to return if limit is provided
-                if limit:
-                    list_params["MaxResults"] = min(
-                        limit, 100
-                    )  # AWS API typically limits to 100 items per page
-
-                # Fetch assignments with pagination
-                while True:
-                    # Add the pagination token if available
-                    if current_token:
-                        list_params["NextToken"] = current_token
-
-                    # Make the API call to list account assignments
-                    response = sso_admin_client.list_account_assignments(**list_params)
-
-                    # Extract assignments from the response
-                    assignments = response.get("AccountAssignments", [])
-
-                    # Add assignments to the list
-                    all_assignments.extend(assignments)
-
-                    # Check if there are more assignments to fetch
-                    current_token = response.get("NextToken")
-
-                    # If there's no next token or we've reached the limit, break the loop
-                    if not current_token or (limit and len(all_assignments) >= limit):
-                        break
-
             # Apply local filtering for principal ID and type if specified
-            if resolved_principal_id:
+            if resolved_principal_id or principal_type:
                 filtered_assignments = []
                 for assignment in all_assignments:
-                    if assignment.get("PrincipalId") == resolved_principal_id:
-                        # If principal_type is specified, also check that
-                        if principal_type and assignment.get("PrincipalType") != principal_type:
-                            continue
-                        filtered_assignments.append(assignment)
+                    # Filter by principal ID if specified
+                    if (
+                        resolved_principal_id
+                        and assignment.get("PrincipalId") != resolved_principal_id
+                    ):
+                        continue
+
+                    # Filter by principal type if specified
+                    if principal_type and assignment.get("PrincipalType") != principal_type:
+                        continue
+
+                    filtered_assignments.append(assignment)
                 all_assignments = filtered_assignments
 
             # Apply limit after filtering if specified
@@ -593,42 +634,111 @@ def list_assignments(
             # Check if there are any assignments to display
             if not processed_assignments:
                 console.print("[yellow]No assignments found.[/yellow]")
-                if account_id or permission_set or principal:
+                if account or permission_set or principal:
                     console.print("[yellow]Try removing filters to see more results.[/yellow]")
                 raise typer.Exit(0)
 
-            # Create a table for displaying assignments
-            table = Table(show_header=True, header_style="bold blue")
-            table.add_column("Permission Set", style="green")
-            table.add_column("Principal Name", style="cyan")
-            table.add_column("Principal Type", style="magenta")
-            table.add_column("Account", style="yellow")
+            # Handle different output formats
+            if output_format == "json":
+                output_data = {
+                    "export_timestamp": datetime.now(timezone.utc).isoformat(),
+                    "total_assignments": len(processed_assignments),
+                    "filters_applied": {
+                        "account": account,
+                        "permission_set": permission_set,
+                        "principal": principal,
+                        "principal_type": principal_type,
+                    },
+                    "assignments": processed_assignments,
+                }
 
-            # Add rows to the table
-            for assignment in processed_assignments:
-                table.add_row(
-                    assignment.get("PermissionSetName", "Unknown"),
-                    assignment.get("PrincipalName", "Unknown"),
-                    assignment.get("PrincipalType", "Unknown"),
-                    assignment.get("AccountDisplay", "Unknown"),
-                )
+                if output_file:
+                    with open(output_file, "w") as f:
+                        json.dump(output_data, f, indent=2)
+                    console.print(
+                        f"[green]Exported {len(processed_assignments)} assignments to {output_file}[/green]"
+                    )
+                else:
+                    print(json.dumps(output_data, indent=2))
 
-            # Display filter information if any filters are applied
-            filters_applied = []
-            if account_id:
-                filters_applied.append(f"Account: {account_id}")
-            if permission_set:
-                filters_applied.append(f"Permission Set: {permission_set}")
-            if principal:
-                filters_applied.append(f"Principal: {principal}")
-            if principal_type:
-                filters_applied.append(f"Principal Type: {principal_type}")
+            elif output_format == "csv":
+                if not processed_assignments:
+                    console.print("[yellow]No assignments to export.[/yellow]")
+                    return
 
-            if filters_applied:
-                console.print("Filters applied:", ", ".join(filters_applied), style="dim")
+                # Define CSV columns and map the processed assignment fields
+                fieldnames = [
+                    "permission_set_name",
+                    "principal_name",
+                    "principal_type",
+                    "account_id",
+                    "account_name",
+                ]
 
-            # Display the table
-            console.print(table)
+                # Convert processed assignments to CSV format
+                csv_assignments = []
+                for assignment in processed_assignments:
+                    csv_assignment = {
+                        "permission_set_name": assignment.get("PermissionSetName", ""),
+                        "principal_name": assignment.get("PrincipalName", ""),
+                        "principal_type": assignment.get("PrincipalType", ""),
+                        "account_id": assignment.get("TargetId", ""),
+                        "account_name": (
+                            assignment.get("AccountDisplay", "").split(" (")[0]
+                            if " (" in assignment.get("AccountDisplay", "")
+                            else assignment.get("AccountDisplay", "")
+                        ),
+                    }
+                    csv_assignments.append(csv_assignment)
+
+                if output_file:
+                    with open(output_file, "w", newline="") as f:
+                        writer = csv.DictWriter(f, fieldnames=fieldnames)
+                        writer.writeheader()
+                        writer.writerows(csv_assignments)
+                    console.print(
+                        f"[green]Exported {len(csv_assignments)} assignments to {output_file}[/green]"
+                    )
+                else:
+                    import sys
+
+                    writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(csv_assignments)
+            else:
+                # Table format (default behavior)
+                # Create a table for displaying assignments
+                table = Table(show_header=True, header_style="bold blue")
+                table.add_column("Permission Set", style="green")
+                table.add_column("Principal Name", style="cyan")
+                table.add_column("Principal Type", style="magenta")
+                table.add_column("Account", style="yellow")
+
+                # Add rows to the table
+                for assignment in processed_assignments:
+                    table.add_row(
+                        assignment.get("PermissionSetName", "Unknown"),
+                        assignment.get("PrincipalName", "Unknown"),
+                        assignment.get("PrincipalType", "Unknown"),
+                        assignment.get("AccountDisplay", "Unknown"),
+                    )
+
+                # Display filter information if any filters are applied
+                filters_applied = []
+                if account:
+                    filters_applied.append(f"Account: {account}")
+                if permission_set:
+                    filters_applied.append(f"Permission Set: {permission_set}")
+                if principal:
+                    filters_applied.append(f"Principal: {principal}")
+                if principal_type:
+                    filters_applied.append(f"Principal Type: {principal_type}")
+
+                if filters_applied:
+                    console.print("Filters applied:", ", ".join(filters_applied), style="dim")
+
+                # Display the table
+                console.print(table)
 
             # Display pagination information if there's a next token and interactive mode is enabled
             if current_token and interactive:

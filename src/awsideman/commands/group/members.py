@@ -1,6 +1,9 @@
 """Group member management commands for awsideman."""
 
+import csv
+import json
 import re
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import typer
@@ -17,6 +20,17 @@ from .helpers import (
     validate_non_empty,
     validate_sso_instance,
 )
+
+
+def _extract_email(user: dict) -> str:
+    """Safely extract email from user data."""
+    try:
+        emails = user.get("Emails", [])
+        if emails and len(emails) > 0 and isinstance(emails[0], dict):
+            return emails[0].get("Value", "")
+        return ""
+    except (IndexError, TypeError, AttributeError):
+        return ""
 
 
 def _list_members_internal(
@@ -268,6 +282,12 @@ def list_members(
     next_token: Optional[str] = typer.Option(
         None, "--next-token", "-n", help="Pagination token (for internal use)"
     ),
+    output_format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (json, csv, table)"
+    ),
+    output_file: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path (optional)"
+    ),
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
@@ -278,7 +298,7 @@ def list_members(
     """List all members of a group.
 
     Displays a table of users who are members of the specified group.
-    Results can be paginated. Press ENTER to see the next page of results.
+    Results can be paginated and exported in various formats.
 
     If user details show as "N/A", use --debug to see detailed error information.
 
@@ -289,6 +309,12 @@ def list_members(
         # List members with a limit
         $ awsideman group list-members Developers --limit 50
 
+        # Export to CSV
+        $ awsideman group list-members Engineers --format csv --output engineers.csv
+
+        # Export to JSON
+        $ awsideman group list-members TestGroup --format json --output testgroup.json
+
         # List members using a specific AWS profile
         $ awsideman group list-members Engineers --profile dev-account
 
@@ -298,6 +324,92 @@ def list_members(
     memberships, next_token_result = _list_members_internal(
         group_identifier, limit, next_token, profile, debug
     )
+
+    # Process memberships data for export formats
+    if output_format in ["json", "csv"]:
+        # Get AWS clients to enrich the data
+        from ..common import validate_profile_with_cache
+
+        profile, region, enable_caching = validate_profile_with_cache(profile, None)
+
+        from ...aws_clients.manager import AWSClientManager
+
+        client_manager = AWSClientManager(profile=profile, region=region)
+        identitystore_client = client_manager.get_identity_store_client()
+
+        # Get SSO instance info
+        instance_arn, identity_store_id = validate_sso_instance(profile)
+
+        # Process each membership to get user details
+        processed_memberships = []
+        for membership in memberships:
+            membership_id = membership.get("MembershipId", "")
+            user_id = membership.get("MemberId", {}).get("UserId", "")
+
+            # Get user details
+            try:
+                user_response = identitystore_client.describe_user(
+                    IdentityStoreId=identity_store_id, UserId=user_id
+                )
+                user = user_response
+                username = user.get("UserName", "N/A")
+                display_name = user.get("DisplayName", "N/A")
+            except Exception:
+                username = "N/A"
+                display_name = "N/A"
+
+            processed_membership = {
+                "membership_id": membership_id,
+                "user_id": user_id,
+                "user_name": username,
+                "display_name": display_name,
+            }
+            processed_memberships.append(processed_membership)
+
+    # Handle different output formats
+    if output_format == "json":
+        output_data = {
+            "group_identifier": group_identifier,
+            "export_timestamp": datetime.now(timezone.utc).isoformat(),
+            "total_members": len(processed_memberships),
+            "members": processed_memberships,
+        }
+
+        if output_file:
+            with open(output_file, "w") as f:
+                json.dump(output_data, f, indent=2)
+            console.print(
+                f"[green]Exported {len(processed_memberships)} members to {output_file}[/green]"
+            )
+        else:
+            print(json.dumps(output_data, indent=2))
+
+    elif output_format == "csv":
+        if not processed_memberships:
+            console.print("[yellow]No members to export.[/yellow]")
+            return memberships, next_token_result, group_identifier
+
+        # Define CSV columns
+        fieldnames = ["membership_id", "user_id", "user_name", "display_name"]
+
+        if output_file:
+            with open(output_file, "w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(processed_memberships)
+            console.print(
+                f"[green]Exported {len(processed_memberships)} members to {output_file}[/green]"
+            )
+        else:
+            import sys
+
+            writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(processed_memberships)
+    else:
+        # Table format (default behavior)
+        pass  # The existing table display logic is already in _list_members_internal
+
     # Return the expected tuple format for tests
     return memberships, next_token_result, group_identifier
 
@@ -578,6 +690,332 @@ def remove_member(
 
     except ClientError as e:
         handle_aws_error(e, operation="DeleteGroupMembership")
+        raise typer.Exit(1)
+    except (ConnectionError, EndpointConnectionError) as e:
+        handle_network_error(e)
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+def export_members(
+    output_format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (json, csv, table)"
+    ),
+    output_file: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path (optional)"
+    ),
+    group_filter: Optional[str] = typer.Option(
+        None,
+        "--filter",
+        help="Filter groups by attribute in format 'attribute=value' (e.g., DisplayName=engineering)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+):
+    try:
+        return _export_members_impl(output_format, output_file, group_filter, profile, verbose)
+    except Exception as e:
+        console.print(f"[red]Error in export_members: {e}[/red]")
+        console.print(f"[red]Error type: {type(e)}[/red]")
+        import traceback
+
+        console.print(f"[red]Traceback: {traceback.format_exc()}[/red]")
+        raise
+
+
+def _export_members_impl(
+    output_format: str,
+    output_file: Optional[str],
+    group_filter: Optional[str],
+    profile: Optional[str],
+    verbose: bool,
+):
+    """Export all group memberships across all groups.
+
+    Exports a comprehensive list of all users and their group memberships.
+    Automatically handles pagination to retrieve all memberships across all pages.
+    Results can be filtered by group attributes and exported in various formats.
+
+    Examples:
+        # Export all group memberships to CSV
+        $ awsideman group export-members --format csv --output group_memberships.csv
+
+        # Export filtered groups to JSON
+        $ awsideman group export-members --format json --filter "DisplayName=Prod*" --output prod_groups.json
+
+        # Export to table format (default)
+        $ awsideman group export-members --verbose
+    """
+    try:
+        # Validate profile and get AWS client with cache integration
+        from ..common import validate_profile_with_cache
+
+        profile, region_data, enable_caching = validate_profile_with_cache(profile, None)
+
+        # Extract region string from the region data
+        if isinstance(region_data, dict):
+            region = region_data.get("region", "eu-north-1")
+        else:
+            region = region_data
+
+        # Get AWS clients
+        from ...aws_clients.manager import AWSClientManager
+
+        client_manager = AWSClientManager(profile=profile, region=region)
+        identitystore_client = client_manager.get_identity_store_client()
+
+        # Get SSO instance info from region data
+        try:
+            if isinstance(region_data, dict):
+                instance_arn = region_data.get("sso_instance_arn")
+                identity_store_id = region_data.get("identity_store_id")
+                if not instance_arn or not identity_store_id:
+                    raise ValueError("SSO instance information not found in profile data")
+            else:
+                instance_arn, identity_store_id = validate_sso_instance(profile)
+        except Exception as e:
+            console.print(f"[red]Error validating SSO instance: {e}[/red]")
+            console.print(f"[red]Error type: {type(e)}[/red]")
+            raise
+
+        console.print("[green]Exporting group memberships...[/green]")
+
+        # Get all groups
+        try:
+            from .list import _list_groups_internal
+
+            groups, _ = _list_groups_internal(
+                filter=group_filter,
+                limit=None,
+                next_token=None,
+                profile=profile,
+                region=region,
+                enable_caching=enable_caching,
+                verbose=verbose,
+                interactive=False,
+                suppress_display=True,
+            )
+        except Exception as e:
+            console.print(f"[red]Error getting groups: {e}[/red]")
+            console.print(f"[red]Error type: {type(e)}[/red]")
+            raise
+
+        if not groups:
+            console.print("[yellow]No groups found matching the filter criteria.[/yellow]")
+            return
+
+        # Collect all group memberships
+        all_memberships = []
+
+        for group in groups:
+            group_id = group["GroupId"]
+            group_name = group["DisplayName"]
+
+            if verbose:
+                console.print(f"[blue]Processing group: {group_name}[/blue]")
+
+            # Get members for this group with pagination
+            try:
+                # Use paginator to get all memberships across all pages
+                paginator = identitystore_client.get_paginator("list_group_memberships")
+                memberships = []
+
+                for page in paginator.paginate(IdentityStoreId=identity_store_id, GroupId=group_id):
+                    memberships.extend(page.get("GroupMemberships", []))
+
+                if verbose and len(memberships) > 0:
+                    console.print(
+                        f"[blue]Found {len(memberships)} members in group {group_name}[/blue]"
+                    )
+
+                # Get user details for each membership
+                for membership in memberships:
+                    user_id = membership["MemberId"]["UserId"]
+
+                    try:
+                        user_response = identitystore_client.describe_user(
+                            IdentityStoreId=identity_store_id, UserId=user_id
+                        )
+                        # The AWS Identity Store API returns user data at the top level, not nested under "User"
+                        user = user_response
+
+                        membership_data = {
+                            "group_id": group_id,
+                            "group_name": group_name,
+                            "group_description": group.get("Description", ""),
+                            "membership_id": membership["MembershipId"],
+                            "user_id": user_id,
+                            "user_name": user.get("UserName", ""),
+                            "display_name": user.get("DisplayName", ""),
+                            "email": _extract_email(user),
+                            "export_timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        all_memberships.append(membership_data)
+
+                    except ClientError as user_error:
+                        if verbose:
+                            console.print(
+                                f"[yellow]Warning: Could not get details for user {user_id}: {user_error}[/yellow]"
+                            )
+                        # Still include the membership with limited data
+                        membership_data = {
+                            "group_id": group_id,
+                            "group_name": group_name,
+                            "group_description": group.get("Description", ""),
+                            "membership_id": membership["MembershipId"],
+                            "user_id": user_id,
+                            "user_name": "N/A",
+                            "display_name": "N/A",
+                            "email": "N/A",
+                            "export_timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        all_memberships.append(membership_data)
+
+            except ClientError as e:
+                console.print(
+                    f"[yellow]Warning: Could not get members for group {group_name}: {e}[/yellow]"
+                )
+                continue
+
+        # Generate output
+        if output_format == "json":
+            output_data = {
+                "export_timestamp": datetime.now(timezone.utc).isoformat(),
+                "total_memberships": len(all_memberships),
+                "total_groups": len(groups),
+                "filter_applied": group_filter,
+                "memberships": all_memberships,
+            }
+
+            if output_file:
+                with open(output_file, "w") as f:
+                    json.dump(output_data, f, indent=2)
+                console.print(
+                    f"[green]Exported {len(all_memberships)} memberships to {output_file}[/green]"
+                )
+            else:
+                print(json.dumps(output_data, indent=2))
+
+        elif output_format == "csv":
+            if not all_memberships:
+                console.print("[yellow]No memberships to export.[/yellow]")
+                return
+
+            # Process memberships for CSV output
+            processed_memberships = []
+
+            for membership in all_memberships:
+                processed_membership = {
+                    "group_name": membership.get("group_name", ""),
+                    "user_name": membership.get("user_name", ""),
+                    "display_name": membership.get("display_name", ""),
+                    "group_id": membership.get("group_id", ""),
+                    "membership_id": membership.get("membership_id", ""),
+                }
+
+                processed_memberships.append(processed_membership)
+
+            # Check if any user has a different email than username
+            needs_email_column = False
+            for membership in all_memberships:
+                user_name = membership.get("user_name", "")
+                email = membership.get("email", "")
+                if user_name != email and email.strip() != "":
+                    needs_email_column = True
+                    break
+
+            # Add email column to all memberships if needed
+            if needs_email_column:
+                for i, membership in enumerate(all_memberships):
+                    user_name = membership.get("user_name", "")
+                    email = membership.get("email", "")
+                    if user_name != email and email.strip() != "":
+                        processed_memberships[i]["email"] = email
+                    else:
+                        processed_memberships[i]["email"] = ""
+
+            # Define CSV columns based on whether email is needed
+            base_fieldnames = [
+                "group_name",
+                "user_name",
+                "display_name",
+                "group_id",
+                "membership_id",
+            ]
+
+            if needs_email_column:
+                fieldnames = base_fieldnames + ["email"]
+            else:
+                fieldnames = base_fieldnames
+
+            try:
+                if output_file:
+                    with open(output_file, "w", newline="") as f:
+                        writer = csv.DictWriter(f, fieldnames=fieldnames)
+                        writer.writeheader()
+                        writer.writerows(processed_memberships)
+                    console.print(
+                        f"[green]Exported {len(processed_memberships)} memberships to {output_file}[/green]"
+                    )
+                else:
+                    import sys
+
+                    writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(processed_memberships)
+            except Exception as e:
+                console.print(f"[red]Error writing CSV: {e}[/red]")
+                console.print(f"[red]Error type: {type(e)}[/red]")
+                if processed_memberships:
+                    console.print(f"[red]First membership: {processed_memberships[0]}[/red]")
+                    console.print(
+                        f"[red]First membership type: {type(processed_memberships[0])}[/red]"
+                    )
+                raise
+        else:
+            # Table format
+            if not all_memberships:
+                console.print("[yellow]No memberships found.[/yellow]")
+                return
+
+            table = Table(title="Group Memberships")
+            table.add_column("Group Name", style="cyan")
+            table.add_column("User Name", style="green")
+            table.add_column("Display Name", style="yellow")
+            table.add_column("Email", style="blue")
+
+            for membership in all_memberships:
+                table.add_row(
+                    membership["group_name"],
+                    membership["user_name"],
+                    membership["display_name"],
+                    membership["email"],
+                )
+
+            if output_file:
+                # Save table to file
+                from rich.console import Console
+
+                file_console = Console(file=open(output_file, "w", encoding="utf-8"))
+                file_console.print(table)
+                file_console.file.close()
+                console.print(
+                    f"[green]Exported {len(all_memberships)} memberships to {output_file}[/green]"
+                )
+            else:
+                console.print(table)
+
+        # Summary
+        console.print(
+            f"[green]Exported {len(all_memberships)} memberships from {len(groups)} groups[/green]"
+        )
+
+    except ClientError as e:
+        handle_aws_error(e, operation="ExportGroupMembers")
         raise typer.Exit(1)
     except (ConnectionError, EndpointConnectionError) as e:
         handle_network_error(e)

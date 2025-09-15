@@ -21,6 +21,12 @@ This directory contains various example files demonstrating different bulk assig
 - **`mixed-assignments.json`** - Mixed assignments in JSON format
 - **`advanced-assignments.json`** - Advanced JSON with optional fields
 - **`validation-errors.json`** - JSON examples with validation errors
+- **`account-override-assignments.json`** - Assignments without account names (for use with --account override)
+
+### Account Override Examples
+
+- **`account-override-assignments.csv`** - CSV format without account names (for use with --account override)
+- **`account-override-assignments.json`** - JSON format without account names (for use with --account override)
 
 ## CLI Usage Examples
 
@@ -53,6 +59,26 @@ awsideman bulk revoke sample-user-assignments.csv --force
 awsideman bulk revoke mixed-assignments.csv --stop-on-error
 ```
 
+### Account Override Feature
+
+The account override feature allows you to apply the same assignment template to different accounts without modifying the input file:
+
+```bash
+# Apply same assignments to different accounts using account override
+awsideman bulk assign account-override-assignments.csv --account Production
+awsideman bulk assign account-override-assignments.csv --account Staging
+awsideman bulk assign account-override-assignments.csv --account Development
+
+# Use account override with JSON file (account_name field can be omitted)
+awsideman bulk assign account-override-assignments.json --account Production
+
+# Revoke same assignments from different accounts
+awsideman bulk revoke account-override-assignments.csv --account Production
+awsideman bulk revoke account-override-assignments.csv --account Staging
+```
+
+**Note**: When using `--account` override, the `account_name` field in your input file becomes optional and will be replaced with the specified account name.
+
 ### Using Different Profiles
 
 ```bash
@@ -70,7 +96,7 @@ awsideman bulk assign mixed-assignments.csv --profile staging --dry-run
 **Required Columns:**
 - `principal_name` - Name of the user or group (human-readable)
 - `permission_set_name` - Name of the permission set (human-readable)
-- `account_name` - Name of the AWS account (human-readable)
+- `account_name` - Name of the AWS account (human-readable) [OPTIONAL if --account is used]
 
 **Optional Columns:**
 - `principal_type` - Type of principal (USER or GROUP, defaults to USER)
@@ -93,7 +119,7 @@ The JSON format uses a structured format with an `assignments` array:
 **Required Fields:**
 - `principal_name` - Name of the user or group
 - `permission_set_name` - Name of the permission set
-- `account_name` - Name of the AWS account
+- `account_name` - Name of the AWS account [OPTIONAL if --account is used]
 
 **Optional Fields:**
 - `principal_type` - Type of principal (USER or GROUP, defaults to USER)

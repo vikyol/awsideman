@@ -26,7 +26,7 @@ def test_list_assignments_function_signature():
     # Check that it has the expected parameters
     sig = inspect.signature(list_assignments)
     expected_params = {
-        "account_id",
+        "account",
         "permission_set",
         "principal",
         "principal_type",
@@ -68,7 +68,7 @@ def test_list_assignments_typer_integration():
 
     # Check that the function has the expected type hints
     annotations = list_assignments.__annotations__
-    assert "account_id" in annotations
+    assert "account" in annotations
     assert "permission_set" in annotations
     assert "principal" in annotations
     assert "principal_type" in annotations

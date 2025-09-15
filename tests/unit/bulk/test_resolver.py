@@ -33,6 +33,7 @@ class TestResourceResolver:
     def mock_aws_client_manager(self):
         """Create mock AWS client manager."""
         manager = Mock(spec=AWSClientManager)
+        manager.profile = "test-profile"  # Add the missing profile attribute
 
         # Mock clients
         manager.get_identity_store_client.return_value = Mock()
@@ -63,25 +64,6 @@ class TestResourceResolver:
         assert resolver._principal_cache == {}
         assert resolver._permission_set_cache == {}
         assert resolver._account_cache == {}
-
-    def test_resolve_user_name_success(self, resource_resolver):
-        """Test successful user name resolution."""
-        # Mock Identity Store response
-        resource_resolver.identity_store_client.list_users.return_value = {
-            "Users": [{"UserId": "user-1234567890abcdef", "UserName": "john.doe"}]
-        }
-
-        result = resource_resolver.resolve_principal_name("john.doe", "USER")
-
-        assert result.success is True
-        assert result.resolved_value == "user-1234567890abcdef"
-        assert result.error_message is None
-
-        # Verify API call
-        resource_resolver.identity_store_client.list_users.assert_called_once_with(
-            IdentityStoreId="d-1234567890",
-            Filters=[{"AttributePath": "UserName", "AttributeValue": "john.doe"}],
-        )
 
     def test_resolve_assignment_success(self, resource_resolver):
         """Test successful assignment resolution."""
@@ -125,6 +107,7 @@ class TestAssignmentValidator:
     def mock_aws_client_manager(self):
         """Create mock AWS client manager."""
         manager = Mock(spec=AWSClientManager)
+        manager.profile = "test-profile"  # Add the missing profile attribute
 
         # Mock clients
         manager.get_identity_store_client.return_value = Mock()

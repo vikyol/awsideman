@@ -15,7 +15,7 @@ from .delete import delete_group
 from .find import find_groups
 from .get import get_group
 from .list import list_groups
-from .members import add_member, list_members, remove_member
+from .members import add_member, export_members, list_members, remove_member
 from .update import update_group
 
 # Create the main app instance
@@ -31,8 +31,20 @@ app.command("update")(update_group)
 app.command("delete")(delete_group)
 app.command("find")(find_groups)
 app.command("list-members")(list_members)
+app.command("export-members")(export_members)
 app.command("add-member")(add_member)
 app.command("remove-member")(remove_member)
 
 # Export the app for backward compatibility
-__all__ = ["app", "list", "get", "create", "update", "delete", "find", "members", "helpers"]
+__all__ = [
+    "app",
+    "list",
+    "get",
+    "create",
+    "update",
+    "delete",
+    "find",
+    "members",
+    "helpers",
+    "export_members",
+]

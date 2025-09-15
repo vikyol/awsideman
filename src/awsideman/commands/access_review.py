@@ -7,6 +7,7 @@ for specified accounts or principals.
 
 import csv
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -22,6 +23,10 @@ from ..utils.config import Config
 app = typer.Typer(help="Access review commands for exporting permissions.")
 console = Console()
 config = Config()
+
+# Rate limiting for permission set describe operations
+_last_permission_set_call = 0
+_permission_set_call_delay = 0.1  # 100ms delay between calls
 
 
 def validate_profile(profile_name: Optional[str] = None) -> tuple[str, dict]:
@@ -151,7 +156,9 @@ def validate_sso_instance(profile_data: dict, profile_name: str = None) -> tuple
 
 @app.command("account")
 def export_account(
-    account_id: str = typer.Argument(..., help="AWS account ID to review"),
+    account_id: Optional[str] = typer.Argument(
+        None, help="AWS account ID to review, or '*' for all accounts"
+    ),
     output_format: str = typer.Option(
         "table", "--format", "-f", help="Output format (json, csv, table)"
     ),
@@ -161,9 +168,34 @@ def export_account(
     include_inactive: bool = typer.Option(
         False, "--include-inactive", help="Include inactive assignments"
     ),
+    filter_scope: Optional[str] = typer.Option(
+        None,
+        "--filter",
+        help="Filter accounts by scope: 'tag:env=dev' or 'tags:env=dev', 'ou:development', 'accounts:111111111111,222222222222'",
+    ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
 ):
-    """Export all permissions for a specific account."""
+    """Export all permissions for a specific account or all accounts.
+
+    Use '*' as account_id to export permissions across all accounts in the organization.
+    This requires AWS Organizations access.
+
+    Examples:
+        # Export permissions for a specific account
+        $ awsideman access-review account 111111111111
+
+        # Export permissions for all accounts
+        $ awsideman access-review account '*'
+
+        # Export permissions for accounts with specific tag
+        $ awsideman access-review account '*' --filter 'tag:env=dev'
+
+        # Export permissions for accounts in development OU
+        $ awsideman access-review account '*' --filter 'ou:development'
+
+        # Export to CSV with tag filtering
+        $ awsideman access-review account '*' --filter 'tag:Environment=Production' --format csv --output prod_permissions.csv
+    """
     try:
         # Validate profile and SSO instance
         profile_name, profile_data = validate_profile(profile)
@@ -189,16 +221,73 @@ def export_account(
         console.print(f"[green]Using configured SSO instance: {instance_arn}[/green]")
         console.print(f"[green]Identity Store ID: {identity_store_id}[/green]")
 
-        # Initialize AWS clients
+        # Initialize AWS clients with caching enabled
         region = profile_data.get("region")
-        client_manager = AWSClientManager(profile=profile_name, region=region)
+        client_manager = AWSClientManager(profile=profile_name, region=region, enable_caching=True)
         sso_admin_client = client_manager.get_identity_center_client()
         identitystore_client = client_manager.get_identity_store_client()
 
-        console.print(f"Exporting permissions for account: [bold]{account_id}[/bold]")
+        # Handle account_id logic
+        if account_id is None:
+            if filter_scope:
+                # When no account_id is provided but filter is, treat as all accounts with filter
+                account_id = "*"
+            else:
+                console.print("[red]Error: Either account_id or --filter must be specified[/red]")
+                console.print(
+                    "Use '*' for all accounts or specify a filter like '--filter tags:env=dev'"
+                )
+                raise typer.Exit(1)
 
-        # Get all assignments for the account
-        assignments = _get_account_assignments(sso_admin_client, instance_arn, account_id)
+        if account_id == "*":
+            if filter_scope:
+                console.print(
+                    f"Exporting permissions for accounts matching filter: [bold]{filter_scope}[/bold]"
+                )
+                # Parse filter and get target accounts
+                target_accounts = _parse_scope_and_get_accounts(filter_scope, client_manager)
+
+                if not target_accounts:
+                    console.print(
+                        "[yellow]No accounts found matching the specified filter.[/yellow]"
+                    )
+                    return
+
+                console.print(f"[blue]Found {len(target_accounts)} accounts matching filter[/blue]")
+
+                # Get assignments for filtered accounts
+                assignments = []
+                total_accounts = len(target_accounts)
+                for idx, account in enumerate(target_accounts, start=1):
+                    account_id = account["Id"]
+                    account_name = account["Name"]
+                    console.print(
+                        f"[blue]Processing account {idx}/{total_accounts}: {account_name} ({account_id})[/blue]"
+                    )
+                    try:
+                        account_assignments = _get_account_assignments(
+                            sso_admin_client, instance_arn, account_id
+                        )
+                        # Add account info to each assignment
+                        for assignment in account_assignments:
+                            assignment["AccountId"] = account_id
+                            assignment["AccountName"] = account_name
+                        assignments.extend(account_assignments)
+                    except Exception as e:
+                        console.print(
+                            f"[yellow]Warning: Could not get assignments for account {account_name}: {e}[/yellow]"
+                        )
+                        continue
+            else:
+                console.print("Exporting permissions for all accounts")
+                # Get all assignments across all accounts
+                assignments = _get_all_account_assignments(
+                    sso_admin_client, instance_arn, client_manager
+                )
+        else:
+            console.print(f"Exporting permissions for account: [bold]{account_id}[/bold]")
+            # Get all assignments for the specific account
+            assignments = _get_account_assignments(sso_admin_client, instance_arn, account_id)
 
         # Enrich assignments with details
         enriched_assignments = []
@@ -211,17 +300,53 @@ def export_account(
 
         # Generate output
         if output_format == "json":
-            output_data = {
-                "account_id": account_id,
-                "export_timestamp": datetime.now(timezone.utc).isoformat(),
-                "total_assignments": len(enriched_assignments),
-                "assignments": enriched_assignments,
-            }
+            if account_id == "*":
+                if filter_scope:
+                    output_data = {
+                        "scope": f"filtered_accounts: {filter_scope}",
+                        "export_timestamp": datetime.now(timezone.utc).isoformat(),
+                        "total_assignments": len(enriched_assignments),
+                        "assignments": enriched_assignments,
+                    }
+                else:
+                    output_data = {
+                        "scope": "all_accounts",
+                        "export_timestamp": datetime.now(timezone.utc).isoformat(),
+                        "total_assignments": len(enriched_assignments),
+                        "assignments": enriched_assignments,
+                    }
+            else:
+                output_data = {
+                    "account_id": account_id,
+                    "export_timestamp": datetime.now(timezone.utc).isoformat(),
+                    "total_assignments": len(enriched_assignments),
+                    "assignments": enriched_assignments,
+                }
             _output_json(output_data, output_file)
         elif output_format == "csv":
-            _output_csv(enriched_assignments, output_file, f"account_{account_id}_permissions")
+            if account_id == "*":
+                if filter_scope:
+                    # Create a safe filename from the filter
+                    safe_filter = filter_scope.replace(":", "_").replace("=", "_").replace(",", "_")
+                    _output_csv(
+                        enriched_assignments,
+                        output_file,
+                        f"filtered_accounts_{safe_filter}_permissions",
+                    )
+                else:
+                    _output_csv(enriched_assignments, output_file, "all_accounts_permissions")
+            else:
+                _output_csv(enriched_assignments, output_file, f"account_{account_id}_permissions")
         else:
-            _output_table(enriched_assignments, f"Permissions for Account: {account_id}")
+            if account_id == "*":
+                if filter_scope:
+                    _output_table(
+                        enriched_assignments, f"Permissions for Filtered Accounts: {filter_scope}"
+                    )
+                else:
+                    _output_table(enriched_assignments, "Permissions for All Accounts")
+            else:
+                _output_table(enriched_assignments, f"Permissions for Account: {account_id}")
 
         console.print(f"[green]Found {len(enriched_assignments)} permission assignments[/green]")
 
@@ -431,7 +556,7 @@ def export_permission_set(
 
         # Initialize AWS clients
         region = profile_data.get("region")
-        client_manager = AWSClientManager(profile=profile_name, region=region)
+        client_manager = AWSClientManager(profile=profile_name, region=region, enable_caching=True)
         sso_admin_client = client_manager.get_identity_center_client()
         identitystore_client = client_manager.get_identity_store_client()
 
@@ -545,6 +670,78 @@ def _get_account_assignments(
     return assignments
 
 
+def _get_all_account_assignments(
+    sso_admin_client, instance_arn: str, client_manager: AWSClientManager
+) -> List[Dict[str, Any]]:
+    """Get all assignments across all accounts."""
+    assignments = []
+
+    try:
+        # Get all accounts first
+        raw_org_client = client_manager.get_raw_organizations_client()
+        paginator = raw_org_client.get_paginator("list_accounts")
+        all_accounts = []
+        for page in paginator.paginate():
+            all_accounts.extend(page.get("Accounts", []))
+
+        # Filter out suspended/closed accounts
+        accounts = [acc for acc in all_accounts if acc.get("Status") == "ACTIVE"]
+        suspended_count = len(all_accounts) - len(accounts)
+
+        total_accounts = len(accounts)
+        console.print(
+            f"[blue]Found {len(all_accounts)} total accounts, {suspended_count} suspended/closed (excluded), {total_accounts} active accounts to process[/blue]"
+        )
+
+        # Get all permission sets
+        ps_paginator = sso_admin_client.get_paginator("list_permission_sets")
+        permission_sets = []
+        for page in ps_paginator.paginate(InstanceArn=instance_arn):
+            permission_sets.extend(page.get("PermissionSets", []))
+        console.print(f"[blue]Found {len(permission_sets)} permission sets[/blue]")
+
+        # For each account and permission set combination, get assignments
+        for idx, account in enumerate(accounts, start=1):
+            account_id = account["Id"]
+            account_name = account["Name"]
+            console.print(
+                f"[blue]Processing account {idx}/{total_accounts}: {account_name} ({account_id})[/blue]"
+            )
+
+            for permission_set_arn in permission_sets:
+                try:
+                    response = sso_admin_client.list_account_assignments(
+                        InstanceArn=instance_arn,
+                        AccountId=account_id,
+                        PermissionSetArn=permission_set_arn,
+                    )
+                    account_assignments = response.get("AccountAssignments", [])
+
+                    # Add account info to each assignment
+                    for assignment in account_assignments:
+                        assignment["AccountId"] = account_id
+                        assignment["AccountName"] = account_name
+
+                    assignments.extend(account_assignments)
+
+                except ClientError as e:
+                    # Skip permission sets that don't have assignments for this account
+                    if e.response.get("Error", {}).get("Code") != "ResourceNotFoundException":
+                        console.print(
+                            f"[yellow]Warning: Could not get assignments for account {account_name} ({account_id}): {e}[/yellow]"
+                        )
+                    continue
+
+    except ClientError as e:
+        console.print(f"[red]Error getting all account assignments: {e}[/red]")
+        raise
+
+    console.print(
+        f"[green]Collected {len(assignments)} assignments across {total_accounts if 'total_accounts' in locals() else 'N/A'} accounts[/green]"
+    )
+    return assignments
+
+
 def _get_principal_assignments_for_account(
     sso_admin_client, instance_arn: str, principal_id: str, principal_type: str, account_id: str
 ) -> List[Dict[str, Any]]:
@@ -600,9 +797,12 @@ def _get_principal_assignments(
         # Use the passed client manager to get organizations client with proper credentials
         raw_org_client = client_manager.get_raw_organizations_client()
         paginator = raw_org_client.get_paginator("list_accounts")
-        accounts = []
+        all_accounts = []
         for page in paginator.paginate():
-            accounts.extend(page.get("Accounts", []))
+            all_accounts.extend(page.get("Accounts", []))
+
+        # Filter out suspended/closed accounts
+        accounts = [acc for acc in all_accounts if acc.get("Status") == "ACTIVE"]
 
     except Exception as e:
         # If Organizations access fails, we can't enumerate all accounts
@@ -676,9 +876,12 @@ def _get_permission_set_assignments(
         # Use the passed client manager to get organizations client with proper credentials
         raw_org_client = client_manager.get_raw_organizations_client()
         paginator = raw_org_client.get_paginator("list_accounts")
-        accounts = []
+        all_accounts = []
         for page in paginator.paginate():
-            accounts.extend(page.get("Accounts", []))
+            all_accounts.extend(page.get("Accounts", []))
+
+        # Filter out suspended/closed accounts
+        accounts = [acc for acc in all_accounts if acc.get("Status") == "ACTIVE"]
     except Exception as e:
         # If Organizations access fails, we can't enumerate all accounts
         console.print(
@@ -877,17 +1080,27 @@ def _enrich_assignment(
     assignment: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
     """Enrich assignment with additional details."""
+    global _last_permission_set_call
+
     try:
         enriched = assignment.copy()
+
+        # Rate limiting for permission set describe operations
+        current_time = time.time()
+        time_since_last_call = current_time - _last_permission_set_call
+        if time_since_last_call < _permission_set_call_delay:
+            time.sleep(_permission_set_call_delay - time_since_last_call)
 
         # Get permission set details
         ps_response = sso_admin_client.describe_permission_set(
             InstanceArn=instance_arn, PermissionSetArn=assignment["PermissionSetArn"]
         )
+        _last_permission_set_call = time.time()
         enriched["permission_set_name"] = ps_response["PermissionSet"]["Name"]
         enriched["permission_set_description"] = ps_response["PermissionSet"].get("Description", "")
 
         # Get principal details
+        enriched["principal_type"] = assignment["PrincipalType"]
         if assignment["PrincipalType"] == "USER":
             try:
                 user_response = identitystore_client.describe_user(
@@ -977,7 +1190,7 @@ def _output_csv(
     for assignment in assignments:
         row = {
             "account_id": assignment.get("AccountId", ""),
-            "account_name": assignment.get("account_name", ""),
+            "account_name": assignment.get("account_name", "") or assignment.get("AccountName", ""),
             "principal_id": assignment.get("PrincipalId", ""),
             "principal_name": assignment.get("principal_name", ""),
             "principal_type": assignment.get("PrincipalType", ""),
@@ -1027,9 +1240,7 @@ def _output_table(assignments: List[Dict[str, Any]], title: str):
     table.add_column("Status", style="red")
 
     for assignment in assignments:
-        account_display = (
-            f"{assignment.get('account_name', assignment['AccountId'])} ({assignment['AccountId']})"
-        )
+        account_display = f"{assignment.get('AccountName', assignment.get('account_name', assignment['AccountId']))} ({assignment['AccountId']})"
         principal_display = assignment.get("principal_name", assignment["PrincipalId"])
         permission_set_display = assignment.get(
             "permission_set_name", assignment["PermissionSetArn"].split("/")[-1]
@@ -1087,11 +1298,17 @@ def _get_consolidated_principal_assignments(
         # Get all accounts once (this will be cached)
         org_client = client_manager.get_organizations_client()
         paginator = org_client.client.get_paginator("list_accounts")
-        accounts = []
+        all_accounts_raw = []
         for page in paginator.paginate():
-            accounts.extend(page.get("Accounts", []))
+            all_accounts_raw.extend(page.get("Accounts", []))
 
-        console.print(f"[blue]Found {len(accounts)} accounts in organization[/blue]")
+        # Filter out suspended/closed accounts
+        accounts = [acc for acc in all_accounts_raw if acc.get("Status") == "ACTIVE"]
+        suspended_count = len(all_accounts_raw) - len(accounts)
+
+        console.print(
+            f"[blue]Found {len(all_accounts_raw)} total accounts, {suspended_count} suspended/closed (excluded), {len(accounts)} active accounts in organization[/blue]"
+        )
 
         # Get all permission sets once (this will be cached)
         console.print(
@@ -1187,3 +1404,496 @@ def _get_consolidated_principal_assignments(
         console.print(f"[yellow]Warning: Error during consolidated search: {str(e)}[/yellow]")
 
     return direct_assignments, inherited_assignments
+
+
+@app.command("summarize")
+def summarize_access(
+    scope: str = typer.Argument(
+        ...,
+        help="Scope for summarization: 'accounts:tag:Environment=Production', 'ou:development', 'ou:root', or 'accounts:111111111111,222222222222'",
+    ),
+    metric: str = typer.Option(
+        "unique-users",
+        "--metric",
+        "-m",
+        help="Metric to calculate (unique-users, unique-groups, unique-permission-sets)",
+    ),
+    output_format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (json, csv, table)"
+    ),
+    output_file: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path (optional)"
+    ),
+    include_inactive: bool = typer.Option(
+        False, "--include-inactive", help="Include inactive assignments"
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
+):
+    """Summarize access patterns across accounts, OUs, or tags.
+
+    Provides aggregated statistics about users, groups, and permission sets
+    based on organizational scope or account filtering.
+
+    Examples:
+        # Summarize unique users in production accounts
+        $ awsideman access-review summarize "accounts:tag:Environment=Production" --metric unique-users
+
+        # Summarize access in development OU
+        $ awsideman access-review summarize "ou:development" --metric unique-permission-sets
+
+        # Summarize specific accounts
+        $ awsideman access-review summarize "accounts:111111111111,222222222222" --metric unique-users
+
+        # Export to CSV
+        $ awsideman access-review summarize "ou:root" --metric unique-users --format csv --output summary.csv
+    """
+    try:
+        # Validate profile and SSO instance
+        profile_name, profile_data = validate_profile(profile)
+        instance_arn, identity_store_id = validate_sso_instance(profile_data, profile_name)
+
+        # Initialize AWS clients
+        region = profile_data.get("region")
+        client_manager = AWSClientManager(profile=profile_name, region=region, enable_caching=True)
+        sso_admin_client = client_manager.get_identity_center_client()
+        identitystore_client = client_manager.get_identity_store_client()
+
+        console.print(f"[green]Summarizing access for scope: {scope}[/green]")
+
+        # Parse scope and get target accounts
+        target_accounts = _parse_scope_and_get_accounts(scope, client_manager)
+
+        if not target_accounts:
+            console.print("[yellow]No accounts found matching the specified scope.[/yellow]")
+            return
+
+        console.print(f"[blue]Found {len(target_accounts)} accounts to analyze[/blue]")
+
+        # Get all assignments for target accounts
+        all_assignments = []
+        for account in target_accounts:
+            account_id = account["Id"]
+            account_name = account["Name"]
+
+            try:
+                assignments = _get_account_assignments(sso_admin_client, instance_arn, account_id)
+
+                # Enrich assignments with details
+                for assignment in assignments:
+                    enriched = _enrich_assignment(
+                        sso_admin_client,
+                        identitystore_client,
+                        instance_arn,
+                        identity_store_id,
+                        assignment,
+                    )
+                    if enriched and (include_inactive or enriched.get("status") == "ACTIVE"):
+                        enriched["AccountId"] = account_id
+                        enriched["AccountName"] = account_name
+                        all_assignments.append(enriched)
+
+            except Exception as e:
+                console.print(
+                    f"[yellow]Warning: Could not get assignments for account {account_name}: {e}[/yellow]"
+                )
+                continue
+
+        # Calculate metrics
+        summary_data = _calculate_summary_metrics(all_assignments, metric, scope)
+
+        # Generate output
+        if output_format == "json":
+            output_data = {
+                "scope": scope,
+                "metric": metric,
+                "export_timestamp": datetime.now(timezone.utc).isoformat(),
+                "total_accounts": len(target_accounts),
+                "total_assignments": len(all_assignments),
+                "summary": summary_data,
+            }
+
+            if output_file:
+                with open(output_file, "w") as f:
+                    json.dump(output_data, f, indent=2)
+                console.print(f"[green]Summary exported to {output_file}[/green]")
+            else:
+                print(json.dumps(output_data, indent=2))
+
+        elif output_format == "csv":
+            if not summary_data:
+                console.print("[yellow]No data to export.[/yellow]")
+                return
+
+            # Convert summary to CSV format
+            csv_data = []
+            for key, value in summary_data.items():
+                if isinstance(value, dict):
+                    for sub_key, sub_value in value.items():
+                        csv_data.append(
+                            {
+                                "category": key,
+                                "subcategory": sub_key,
+                                "count": sub_value,
+                                "scope": scope,
+                                "metric": metric,
+                            }
+                        )
+                else:
+                    csv_data.append(
+                        {
+                            "category": key,
+                            "subcategory": "",
+                            "count": value,
+                            "scope": scope,
+                            "metric": metric,
+                        }
+                    )
+
+            fieldnames = ["category", "subcategory", "count", "scope", "metric"]
+
+            if output_file:
+                with open(output_file, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(csv_data)
+                console.print(f"[green]Summary exported to {output_file}[/green]")
+            else:
+                import sys
+
+                writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(csv_data)
+        else:
+            # Table format
+            _output_summary_table(summary_data, scope, metric)
+
+        console.print(
+            f"[green]Summary completed for {len(target_accounts)} accounts with {len(all_assignments)} assignments[/green]"
+        )
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        error_message = e.response.get("Error", {}).get("Message", str(e))
+        console.print(f"[red]AWS Error ({error_code}): {error_message}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error generating summary: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+def _parse_scope_and_get_accounts(
+    scope: str, client_manager: AWSClientManager
+) -> List[Dict[str, Any]]:
+    """Parse scope string and return list of target accounts."""
+    accounts = []
+
+    try:
+        if scope.startswith("tags:") or scope.startswith("tag:"):
+            # Handle tag filtering: tags:env=dev or tag:env=dev
+            if scope.startswith("tags:"):
+                tag_filter = scope[5:]  # Remove "tags:" prefix
+            else:
+                tag_filter = scope[4:]  # Remove "tag:" prefix
+
+            if "=" not in tag_filter:
+                raise ValueError("Tag filter must be in format 'Key=Value'")
+
+            key, value = tag_filter.split("=", 1)
+            accounts = _get_accounts_by_tag(client_manager, key, value)
+        elif scope.startswith("accounts:"):
+            # Handle account list or tag filtering
+            scope_value = scope[9:]  # Remove "accounts:" prefix
+
+            if scope_value == "*":
+                # All accounts
+                accounts = _get_all_accounts(client_manager)
+            elif scope_value.startswith("tag:"):
+                # Tag-based filtering: accounts:tag:Environment=Production
+                tag_filter = scope_value[4:]  # Remove "tag:" prefix
+                if "=" not in tag_filter:
+                    raise ValueError("Tag filter must be in format 'Key=Value'")
+
+                key, value = tag_filter.split("=", 1)
+                accounts = _get_accounts_by_tag(client_manager, key, value)
+            else:
+                # Comma-separated account IDs
+                account_ids = [aid.strip() for aid in scope_value.split(",")]
+                accounts = _get_accounts_by_ids(client_manager, account_ids)
+
+        elif scope.startswith("ou:"):
+            # OU-based filtering: ou:development, ou:root
+            ou_name = scope[3:]  # Remove "ou:" prefix
+            accounts = _get_accounts_by_ou(client_manager, ou_name)
+        else:
+            raise ValueError(f"Unsupported scope format: {scope}")
+
+    except Exception as e:
+        console.print(f"[red]Error parsing scope '{scope}': {e}[/red]")
+        raise typer.Exit(1)
+
+    return accounts
+
+
+def _get_all_accounts(client_manager: AWSClientManager) -> List[Dict[str, Any]]:
+    """Get all accounts in the organization."""
+    try:
+        org_client = client_manager.get_raw_organizations_client()
+        paginator = org_client.get_paginator("list_accounts")
+        all_accounts_raw = []
+
+        for page in paginator.paginate():
+            all_accounts_raw.extend(page.get("Accounts", []))
+
+        # Filter out suspended/closed accounts
+        all_accounts = [acc for acc in all_accounts_raw if acc.get("Status") == "ACTIVE"]
+        suspended_count = len(all_accounts_raw) - len(all_accounts)
+
+        console.print(
+            f"[green]Found {len(all_accounts_raw)} total accounts, {suspended_count} suspended/closed (excluded), {len(all_accounts)} active accounts in the organization[/green]"
+        )
+        return all_accounts
+
+    except Exception as e:
+        console.print(f"[red]Error getting all accounts: {e}[/red]")
+        return []
+
+
+def _get_accounts_by_tag(
+    client_manager: AWSClientManager, tag_key: str, tag_value: str
+) -> List[Dict[str, Any]]:
+    """Get accounts filtered by tag using manual tag checking."""
+    try:
+        # Use manual tag filtering to check account tags directly
+
+        # Get all accounts and check their tags manually
+        org_client = client_manager.get_raw_organizations_client()
+        paginator = org_client.get_paginator("list_accounts")
+        all_accounts_raw = []
+
+        for page in paginator.paginate():
+            all_accounts_raw.extend(page.get("Accounts", []))
+
+        # Filter out suspended/closed accounts first
+        all_accounts = [acc for acc in all_accounts_raw if acc.get("Status") == "ACTIVE"]
+        suspended_count = len(all_accounts_raw) - len(all_accounts)
+
+        filtered_accounts = []
+
+        # Check tags for each active account
+        for account in all_accounts:
+            try:
+                account_id = account.get("Id")
+                if account_id:
+                    # Get account tags
+                    tags_response = org_client.list_tags_for_resource(ResourceId=account_id)
+                    account_tags = {
+                        tag["Key"]: tag["Value"] for tag in tags_response.get("Tags", [])
+                    }
+
+                    # Check if account has the specified tag
+                    if account_tags.get(tag_key) == tag_value:
+                        filtered_accounts.append(account)
+
+            except Exception:
+                # Skip accounts where we can't check tags
+                continue
+
+        console.print(
+            f"[green]Found {len(filtered_accounts)} active accounts with tag {tag_key}={tag_value} (excluded {suspended_count} suspended/closed accounts)[/green]"
+        )
+        return filtered_accounts
+
+    except Exception as e:
+        console.print(f"[red]Error getting accounts by tag: {e}[/red]")
+        return []
+
+
+def _get_accounts_by_ids(
+    client_manager: AWSClientManager, account_ids: List[str]
+) -> List[Dict[str, Any]]:
+    """Get accounts by specific IDs."""
+    try:
+        org_client = client_manager.get_raw_organizations_client()
+        paginator = org_client.get_paginator("list_accounts")
+        all_accounts_raw = []
+
+        for page in paginator.paginate():
+            all_accounts_raw.extend(page.get("Accounts", []))
+
+        # Filter out suspended/closed accounts first
+        all_accounts = [acc for acc in all_accounts_raw if acc.get("Status") == "ACTIVE"]
+
+        # Filter to requested account IDs
+        filtered_accounts = []
+        for account in all_accounts:
+            if account["Id"] in account_ids:
+                filtered_accounts.append(account)
+
+        return filtered_accounts
+
+    except Exception as e:
+        console.print(f"[red]Error getting accounts by IDs: {e}[/red]")
+        return []
+
+
+def _get_accounts_by_ou(client_manager: AWSClientManager, ou_name: str) -> List[Dict[str, Any]]:
+    """Get accounts by organizational unit."""
+    try:
+        org_client = client_manager.get_raw_organizations_client()
+
+        # Get all OUs
+        root_ou_id = None
+
+        # Find root OU first
+        try:
+            root_response = org_client.describe_organization()
+            root_ou_id = root_response["Organization"]["MasterAccountId"]
+        except Exception:
+            # Fallback: try to find root OU
+            root_ou_id = "r-0000"  # This is a placeholder
+
+        # Find the target OU
+        target_ou_id = _find_ou_by_name(org_client, root_ou_id, ou_name)
+        if not target_ou_id:
+            console.print(f"[yellow]OU '{ou_name}' not found[/yellow]")
+            return []
+
+        # Get accounts in the OU
+        accounts = []
+        try:
+            account_paginator = org_client.get_paginator("list_accounts_for_parent")
+            for page in account_paginator.paginate(ParentId=target_ou_id):
+                accounts.extend(page.get("Accounts", []))
+        except Exception:
+            # If direct OU listing fails, try recursive search
+            accounts = _get_accounts_recursively(org_client, target_ou_id)
+
+        return accounts
+
+    except Exception as e:
+        console.print(f"[red]Error getting accounts by OU: {e}[/red]")
+        return []
+
+
+def _find_ou_by_name(org_client, parent_ou_id: str, ou_name: str) -> Optional[str]:
+    """Recursively find OU by name."""
+    try:
+        ou_paginator = org_client.get_paginator("list_organizational_units_for_parent")
+        for page in ou_paginator.paginate(ParentId=parent_ou_id):
+            for ou in page.get("OrganizationalUnits", []):
+                if ou["Name"].lower() == ou_name.lower():
+                    return ou["Id"]
+                # Recursively search child OUs
+                child_result = _find_ou_by_name(org_client, ou["Id"], ou_name)
+                if child_result:
+                    return child_result
+    except Exception:
+        pass
+    return None
+
+
+def _get_accounts_recursively(org_client, ou_id: str) -> List[Dict[str, Any]]:
+    """Recursively get all accounts in an OU and its children."""
+    accounts = []
+
+    try:
+        # Get direct accounts
+        account_paginator = org_client.get_paginator("list_accounts_for_parent")
+        for page in account_paginator.paginate(ParentId=ou_id):
+            accounts.extend(page.get("Accounts", []))
+
+        # Get child OUs and their accounts
+        ou_paginator = org_client.get_paginator("list_organizational_units_for_parent")
+        for page in ou_paginator.paginate(ParentId=ou_id):
+            for ou in page.get("OrganizationalUnits", []):
+                accounts.extend(_get_accounts_recursively(org_client, ou["Id"]))
+    except Exception:
+        pass
+
+    return accounts
+
+
+def _calculate_summary_metrics(
+    assignments: List[Dict[str, Any]], metric: str, scope: str
+) -> Dict[str, Any]:
+    """Calculate summary metrics from assignments."""
+    summary = {}
+
+    if metric == "unique-users":
+        # Count unique users
+        users = set()
+        for assignment in assignments:
+            if assignment.get("principal_type") == "USER":
+                users.add(assignment.get("principal_name", ""))
+
+        summary["unique_users"] = len(users)
+        summary["user_list"] = sorted(list(users))
+
+    elif metric == "unique-groups":
+        # Count unique groups
+        groups = set()
+        for assignment in assignments:
+            if assignment.get("principal_type") == "GROUP":
+                groups.add(assignment.get("principal_name", ""))
+
+        summary["unique_groups"] = len(groups)
+        summary["group_list"] = sorted(list(groups))
+
+    elif metric == "unique-permission-sets":
+        # Count unique permission sets
+        permission_sets = set()
+        for assignment in assignments:
+            ps_name = assignment.get("permission_set_name", "")
+            if ps_name:
+                permission_sets.add(ps_name)
+
+        summary["unique_permission_sets"] = len(permission_sets)
+        summary["permission_set_list"] = sorted(list(permission_sets))
+
+    else:
+        # Default: comprehensive summary
+        users = set()
+        groups = set()
+        permission_sets = set()
+        accounts = set()
+
+        for assignment in assignments:
+            if assignment.get("principal_type") == "USER":
+                users.add(assignment.get("principal_name", ""))
+            elif assignment.get("principal_type") == "GROUP":
+                groups.add(assignment.get("principal_name", ""))
+
+            ps_name = assignment.get("permission_set_name", "")
+            if ps_name:
+                permission_sets.add(ps_name)
+
+            account_name = assignment.get("AccountName", "")
+            if account_name:
+                accounts.add(account_name)
+
+        summary = {
+            "unique_users": len(users),
+            "unique_groups": len(groups),
+            "unique_permission_sets": len(permission_sets),
+            "unique_accounts": len(accounts),
+            "total_assignments": len(assignments),
+        }
+
+    return summary
+
+
+def _output_summary_table(summary_data: Dict[str, Any], scope: str, metric: str) -> None:
+    """Output summary data in table format."""
+    from rich.table import Table
+
+    table = Table(title=f"Access Summary - {scope}")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="green")
+
+    for key, value in summary_data.items():
+        if isinstance(value, list):
+            table.add_row(key, f"{len(value)} items")
+        else:
+            table.add_row(key, str(value))
+
+    console.print(table)

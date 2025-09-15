@@ -48,6 +48,7 @@ class TestMultiAccountPerformance:
     def mock_aws_client_manager(self):
         """Create a fast-responding mock AWS client manager for performance testing."""
         manager = Mock(spec=AWSClientManager)
+        manager.profile = "test-profile"  # Add the missing profile attribute
 
         # Mock Identity Store client with fast responses
         identity_store_client = Mock()

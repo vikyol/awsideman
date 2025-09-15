@@ -43,10 +43,17 @@ def check_status(
         help="Specific status type to check: health, provisioning, orphaned, sync, resource, summary",
     ),
     timeout: Optional[int] = typer.Option(
-        30, "--timeout", help="Timeout for status checks in seconds (default: 30)"
+        30,
+        "--timeout",
+        help="Timeout for status checks in seconds (default: 30, use 300+ for large organizations)",
     ),
     parallel: bool = typer.Option(
         True, "--parallel/--sequential", help="Run checks in parallel (default: parallel)"
+    ),
+    quick_scan: bool = typer.Option(
+        True,
+        "--quick-scan/--full-scan",
+        help="Use quick scan for orphaned assignments (default: quick scan)",
     ),
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
@@ -96,17 +103,27 @@ def check_status(
                     "[yellow]⚠ Warning: Could not clear cache, results may be stale[/yellow]"
                 )
 
-        # Create status check configuration
+        # Create status check configuration optimized for large organizations
+        # Use more conservative settings to avoid rate limiting
         status_config = StatusCheckConfig(
             timeout_seconds=timeout,
             enable_parallel_checks=parallel,
-            max_concurrent_checks=5,
-            retry_attempts=2,
-            retry_delay_seconds=1.0,
+            max_concurrent_checks=2 if parallel else 1,  # Reduced concurrency
+            retry_attempts=3,
+            retry_delay_seconds=2.0,  # Increased delay
+            api_call_delay_seconds=0.2,  # Delay between API calls
+            batch_size=5,  # Smaller batches
+            batch_delay_seconds=1.0,  # Delay between batches
+            max_retry_delay_seconds=15.0,  # Longer max delay
         )
 
         # Initialize the status orchestrator
         orchestrator = StatusOrchestrator(aws_client, status_config)
+
+        # Enable quick scan for orphaned assignments to avoid long waits
+        # For status checks, we only need to know IF there are orphaned assignments
+        if quick_scan:
+            orchestrator.enable_quick_scan(max_orphaned_to_find=1)
 
         # Show progress indicator for long-running operations
         if check_type == "orphaned":

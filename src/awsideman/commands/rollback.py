@@ -229,6 +229,36 @@ def select_operation_interactively(profile: Optional[str], dry_run: bool = False
                             f"[green]Permission Set:[/green] {selected_operation.permission_set_name}"
                         )
 
+                    # Show account information
+                    if hasattr(selected_operation, "account_ids") and hasattr(
+                        selected_operation, "account_names"
+                    ):
+                        console.print(
+                            f"[green]Accounts Affected:[/green] {len(selected_operation.account_ids)} account(s)"
+                        )
+                        # Show account names and IDs
+                        for i, (account_id, account_name) in enumerate(
+                            zip(selected_operation.account_ids, selected_operation.account_names)
+                        ):
+                            if i < 5:  # Show first 5 accounts
+                                console.print(f"  [dim]{account_name} ({account_id})[/dim]")
+                            elif i == 5:
+                                remaining = len(selected_operation.account_ids) - 5
+                                console.print(f"  [dim]... and {remaining} more account(s)[/dim]")
+                                break
+                    elif hasattr(selected_operation, "accounts_affected"):
+                        console.print(
+                            f"[green]Accounts Affected:[/green] {len(selected_operation.accounts_affected)} account(s)"
+                        )
+                        # Show account IDs
+                        for i, account_id in enumerate(selected_operation.accounts_affected):
+                            if i < 5:  # Show first 5 accounts
+                                console.print(f"  [dim]{account_id}[/dim]")
+                            elif i == 5:
+                                remaining = len(selected_operation.accounts_affected) - 5
+                                console.print(f"  [dim]... and {remaining} more account(s)[/dim]")
+                                break
+
                     return selected_operation.operation_id
                 else:
                     console.print(

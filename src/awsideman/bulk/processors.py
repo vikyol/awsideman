@@ -44,8 +44,11 @@ class CSVProcessor:
         }
         self.all_columns = self.required_columns | self.optional_columns
 
-    def validate_format(self) -> List[ValidationError]:
+    def validate_format(self, account_override: Optional[str] = None) -> List[ValidationError]:
         """Validate CSV format and return list of validation errors.
+
+        Args:
+            account_override: If provided, account_name becomes optional
 
         Returns:
             List of ValidationError objects describing any validation issues
@@ -78,8 +81,12 @@ class CSVProcessor:
                     normalized_col = col.lower().replace("-", "_").strip()
                     normalized_columns.add(normalized_col)
 
-                # Check for required columns
-                missing_required = self.required_columns - normalized_columns
+                # Check for required columns (account_name becomes optional if account_override is provided)
+                required_columns = self.required_columns.copy()
+                if account_override:
+                    required_columns.discard("account_name")
+
+                missing_required = required_columns - normalized_columns
                 if missing_required:
                     errors.append(
                         ValidationError(
@@ -102,10 +109,10 @@ class CSVProcessor:
                 for row_num, row in enumerate(reader, start=2):  # Start at 2 since row 1 is headers
                     row_count += 1
 
-                    # Check for empty required fields
+                    # Check for empty required fields (account_name becomes optional if account_override is provided)
                     for col_name, value in row.items():
                         normalized_col = col_name.lower().replace("-", "_").strip()
-                        if normalized_col in self.required_columns and not value.strip():
+                        if normalized_col in required_columns and not value.strip():
                             errors.append(
                                 ValidationError(
                                     f"Empty value in required column '{col_name}'",
@@ -149,8 +156,11 @@ class CSVProcessor:
 
         return errors
 
-    def parse_assignments(self) -> List[Dict[str, Any]]:
+    def parse_assignments(self, account_override: Optional[str] = None) -> List[Dict[str, Any]]:
         """Parse CSV file and return list of assignment dictionaries.
+
+        Args:
+            account_override: If provided, account_name becomes optional
 
         Returns:
             List of dictionaries containing assignment data
@@ -160,7 +170,7 @@ class CSVProcessor:
             FileNotFoundError: If file doesn't exist
         """
         # Validate format first
-        validation_errors = self.validate_format()
+        validation_errors = self.validate_format(account_override)
         if validation_errors:
             error_messages = [error.message for error in validation_errors]
             raise ValueError(f"CSV validation failed: {'; '.join(error_messages)}")
@@ -215,8 +225,8 @@ class JSONProcessor:
         }
         self.all_fields = self.required_fields | self.optional_fields
 
-        # JSON schema definition for assignment structure
-        self.schema = {
+        # JSON schema definition for assignment structure (will be modified based on account_override)
+        self._base_schema = {
             "type": "object",
             "properties": {
                 "assignments": {
@@ -242,8 +252,31 @@ class JSONProcessor:
             "additionalProperties": False,
         }
 
-    def validate_format(self) -> List[ValidationError]:
+    def _get_schema(self, account_override: Optional[str] = None) -> Dict[str, Any]:
+        """Get JSON schema, optionally modifying required fields based on account_override.
+
+        Args:
+            account_override: If provided, account_name becomes optional
+
+        Returns:
+            JSON schema dictionary
+        """
+        import copy
+
+        schema = copy.deepcopy(self._base_schema)
+
+        if account_override:
+            # Remove account_name from required fields
+            required_fields = schema["properties"]["assignments"]["items"]["required"]
+            required_fields.remove("account_name")
+
+        return schema
+
+    def validate_format(self, account_override: Optional[str] = None) -> List[ValidationError]:
         """Validate JSON format and schema, return list of validation errors.
+
+        Args:
+            account_override: If provided, account_name becomes optional
 
         Returns:
             List of ValidationError objects describing any validation issues
@@ -286,7 +319,7 @@ class JSONProcessor:
 
             # Validate each assignment
             for idx, assignment in enumerate(data["assignments"]):
-                assignment_errors = self._validate_assignment(assignment, idx)
+                assignment_errors = self._validate_assignment(assignment, idx, account_override)
                 errors.extend(assignment_errors)
 
             # Check for unknown top-level keys
@@ -312,12 +345,15 @@ class JSONProcessor:
 
         return errors
 
-    def _validate_assignment(self, assignment: Any, index: int) -> List[ValidationError]:
+    def _validate_assignment(
+        self, assignment: Any, index: int, account_override: Optional[str] = None
+    ) -> List[ValidationError]:
         """Validate a single assignment object.
 
         Args:
             assignment: Assignment object to validate
             index: Index of assignment in array for error reporting
+            account_override: If provided, account_name becomes optional
 
         Returns:
             List of ValidationError objects for this assignment
@@ -330,8 +366,12 @@ class JSONProcessor:
             errors.append(ValidationError(f"{assignment_prefix}: must be an object"))
             return errors
 
-        # Check for required fields
-        missing_required = self.required_fields - set(assignment.keys())
+        # Check for required fields (account_name becomes optional if account_override is provided)
+        required_fields = self.required_fields.copy()
+        if account_override:
+            required_fields.discard("account_name")
+
+        missing_required = required_fields - set(assignment.keys())
         if missing_required:
             errors.append(
                 ValidationError(
@@ -392,8 +432,11 @@ class JSONProcessor:
 
         return errors
 
-    def parse_assignments(self) -> List[Dict[str, Any]]:
+    def parse_assignments(self, account_override: Optional[str] = None) -> List[Dict[str, Any]]:
         """Parse JSON file and return list of assignment dictionaries.
+
+        Args:
+            account_override: If provided, account_name becomes optional
 
         Returns:
             List of dictionaries containing assignment data
@@ -403,7 +446,7 @@ class JSONProcessor:
             FileNotFoundError: If file doesn't exist
         """
         # Validate format first
-        validation_errors = self.validate_format()
+        validation_errors = self.validate_format(account_override)
         if validation_errors:
             error_messages = [error.message for error in validation_errors]
             raise ValueError(f"JSON validation failed: {'; '.join(error_messages)}")

@@ -26,7 +26,6 @@ try:
         profile,
         rollback,
         sso,
-        status,
         templates,
         user,
     )
@@ -53,7 +52,6 @@ except ImportError:
         profile,
         rollback,
         sso,
-        status,
         templates,
         user,
     )
@@ -80,7 +78,7 @@ app.add_typer(assignment.app, name="assignment")
 app.add_typer(org.app, name="org")
 app.add_typer(cache.app, name="cache")
 app.add_typer(bulk.app, name="bulk")
-app.add_typer(status.app, name="status")
+# Note: status command is handled specially below to support --profile option
 app.add_typer(access_review.app, name="access-review")
 app.add_typer(templates.app, name="templates")
 app.add_typer(rollback.app, name="rollback")
@@ -233,6 +231,124 @@ def info(
 
     except Exception as e:
         console.print(f"[red]Error getting AWS Identity Center information: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+# Custom status command that accepts --profile option and delegates to subcommands
+@app.command("status")
+def status_command(
+    subcommand: Optional[str] = typer.Argument(
+        None, help="Status subcommand: check, inspect, cleanup, monitor"
+    ),
+    output_format: Optional[str] = typer.Option(
+        None, "--format", "-f", help="Output format: json, csv, table (default: table)"
+    ),
+    status_type: Optional[str] = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="Specific status type to check: health, provisioning, orphaned, sync, resource, summary",
+    ),
+    timeout: Optional[int] = typer.Option(
+        30,
+        "--timeout",
+        help="Timeout for status checks in seconds (default: 30, use 300+ for large organizations)",
+    ),
+    parallel: bool = typer.Option(
+        True, "--parallel/--sequential", help="Run checks in parallel (default: parallel)"
+    ),
+    quick_scan: bool = typer.Option(
+        True,
+        "--quick-scan/--full-scan",
+        help="Use quick scan for orphaned assignments (default: quick scan)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
+    ),
+    # Additional arguments for other subcommands
+    resource_type: Optional[str] = typer.Argument(
+        None, help="Resource type for inspect: user, group, permission-set"
+    ),
+    resource_id: Optional[str] = typer.Argument(None, help="Resource identifier for inspect"),
+    dry_run: bool = typer.Option(
+        True,
+        "--dry-run/--execute",
+        help="Show what would be cleaned up without making changes (for cleanup)",
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompts (for cleanup)"
+    ),
+    action: Optional[str] = typer.Argument(
+        None, help="Action for monitor: show, enable, disable, test, schedule"
+    ),
+):
+    """Check AWS Identity Center status and health.
+
+    This is the main status command. If no subcommand is specified, it defaults to 'check'.
+    For other status operations, use specific subcommands like 'inspect', 'cleanup', or 'monitor'.
+
+    Examples:
+        awsideman status --profile dev-account
+        awsideman status check --profile dev-account
+        awsideman status inspect user john.doe@example.com --profile dev-account
+        awsideman status cleanup --dry-run --profile dev-account
+        awsideman status monitor show --profile dev-account
+    """
+    # If no subcommand is specified, default to 'check'
+    if subcommand is None:
+        subcommand = "check"
+
+    # Import the status subcommands
+    from .commands.status.check import check_status
+    from .commands.status.cleanup import cleanup_orphaned
+    from .commands.status.inspect import inspect_resource
+    from .commands.status.monitor import monitor_config
+
+    # Route to the appropriate subcommand
+    if subcommand == "check":
+        check_status(
+            output_format=output_format,
+            status_type=status_type,
+            timeout=timeout,
+            parallel=parallel,
+            quick_scan=quick_scan,
+            profile=profile,
+        )
+    elif subcommand == "inspect":
+        if not resource_type or not resource_id:
+            console.print(
+                "[red]Error: inspect subcommand requires resource_type and resource_id arguments.[/red]"
+            )
+            console.print("Usage: awsideman status inspect <resource_type> <resource_id> [options]")
+            console.print(
+                "Example: awsideman status inspect user john.doe@example.com --profile dev-account"
+            )
+            raise typer.Exit(1)
+        inspect_resource(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            output_format=output_format,
+            profile=profile,
+        )
+    elif subcommand == "cleanup":
+        cleanup_orphaned(
+            dry_run=dry_run,
+            force=force,
+            profile=profile,
+        )
+    elif subcommand == "monitor":
+        if not action:
+            console.print("[red]Error: monitor subcommand requires an action argument.[/red]")
+            console.print("Usage: awsideman status monitor <action> [options]")
+            console.print("Actions: show, enable, disable, test, schedule")
+            raise typer.Exit(1)
+        monitor_config(
+            action=action,
+            profile=profile,
+        )
+    else:
+        console.print(f"[red]Error: Unknown subcommand '{subcommand}'.[/red]")
+        console.print("Valid subcommands: check, inspect, cleanup, monitor")
         raise typer.Exit(1)
 
 

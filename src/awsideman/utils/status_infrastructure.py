@@ -61,6 +61,11 @@ class StatusCheckConfig:
     enable_parallel_checks: bool = True
     max_concurrent_checks: int = 5
     include_detailed_errors: bool = True
+    # Rate limiting for large organizations
+    api_call_delay_seconds: float = 0.1  # Delay between API calls
+    batch_size: int = 10  # Process items in batches
+    batch_delay_seconds: float = 0.5  # Delay between batches
+    max_retry_delay_seconds: float = 10.0  # Maximum delay for exponential backoff
 
     def validate(self) -> List[str]:
         """Validate configuration parameters."""

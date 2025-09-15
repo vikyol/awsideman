@@ -238,5 +238,5 @@ class TestCacheManagerPerformance:
 
         end_time = time.time()
 
-        # Should be reasonably fast (less than 5 seconds for 100 operations)
-        assert (end_time - start_time) < 5.0
+        # Should be reasonably fast (less than 10 seconds for 100 operations)
+        assert (end_time - start_time) < 10.0

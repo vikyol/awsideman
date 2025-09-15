@@ -1,0 +1,29 @@
+{
+  "assignments": [
+    {
+      "principal_name": "john.doe",
+      "permission_set_name": "ReadOnlyAccess",
+      "principal_type": "USER"
+    },
+    {
+      "principal_name": "jane.smith",
+      "permission_set_name": "PowerUserAccess",
+      "principal_type": "USER"
+    },
+    {
+      "principal_name": "Developers",
+      "permission_set_name": "DeveloperAccess",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "DevOps-Team",
+      "permission_set_name": "AdministratorAccess",
+      "principal_type": "GROUP"
+    },
+    {
+      "principal_name": "QA-Engineers",
+      "permission_set_name": "ReadOnlyAccess",
+      "principal_type": "GROUP"
+    }
+  ]
+}

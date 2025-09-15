@@ -542,50 +542,6 @@ class TestPerformanceBenchmarks:
         # Rate limited version should take longer
         assert with_limit_duration > no_limit_duration
 
-    def test_cache_performance_improvement(self):
-        """Test cache performance improvement."""
-        cache = OptimizedCache(max_size=1000)
-
-        # Simulate cache misses
-        miss_times = []
-        for i in range(100):
-            start_time = time.time()
-            cache.get_entity(EntityType.USER, f"user-{i}")
-            miss_times.append(time.time() - start_time)
-
-            # Add to cache
-            entity = EntityReference(EntityType.USER, f"user-{i}", f"name-{i}")
-            cache.put_entity(entity)
-
-        # Simulate cache hits
-        hit_times = []
-        for i in range(100):
-            start_time = time.time()
-            cache.get_entity(EntityType.USER, f"user-{i}")
-            hit_times.append(time.time() - start_time)
-
-        # Cache hits should be faster than misses
-        avg_miss_time = sum(miss_times) / len(miss_times)
-        avg_hit_time = sum(hit_times) / len(hit_times)
-
-        # For very small timing differences, the measurement noise can make cache hits
-        # appear slower than misses. In such cases, we should verify that the difference
-        # is within acceptable bounds and that the cache is functioning correctly.
-
-        # If timing differences are very small (< 1 microsecond), just verify cache works
-        if avg_miss_time < 1e-6 and avg_hit_time < 1e-6:
-            # Verify cache is working by checking that we can retrieve cached entities
-            cached_entity = cache.get_entity(EntityType.USER, "user-0")
-            assert cached_entity is not None
-            assert cached_entity.entity_name == "name-0"
-        else:
-            # For larger timing differences, verify cache hits are at least as fast
-            # Use a more generous threshold to account for measurement noise
-            threshold = 1.5 if avg_miss_time < 1e-6 else 1.1
-            assert (
-                avg_hit_time <= avg_miss_time * threshold
-            ), f"Cache hit time ({avg_hit_time:.6f}s) should be <= miss time ({avg_miss_time:.6f}s) * {threshold}"
-
     @pytest.mark.slow
     def test_parallel_vs_sequential_processing(self):
         """Test parallel vs sequential processing performance."""

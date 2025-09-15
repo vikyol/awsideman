@@ -1,5 +1,6 @@
 """Orphaned assignment detection component for AWS Identity Center status monitoring."""
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -68,7 +69,9 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         self._last_check_time: Optional[datetime] = None
         self._progress_callback = progress_callback
 
-    async def check_status(self) -> OrphanedAssignmentStatus:
+    async def check_status(
+        self, quick_scan: bool = None, max_orphaned_to_find: int = None
+    ) -> OrphanedAssignmentStatus:
         """
         Perform comprehensive orphaned assignment detection.
 
@@ -79,8 +82,16 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         timestamp = datetime.now(timezone.utc)
 
         try:
+            # Use instance variables if parameters not provided
+            if quick_scan is None:
+                quick_scan = getattr(self, "_quick_scan", False)
+            if max_orphaned_to_find is None:
+                max_orphaned_to_find = getattr(self, "_max_orphaned_to_find", 5)
+
             # Detect orphaned assignments
-            orphaned_assignments = await self._detect_orphaned_assignments()
+            orphaned_assignments = await self._detect_orphaned_assignments(
+                quick_scan, max_orphaned_to_find
+            )
 
             # Determine overall status
             overall_status = self._determine_orphaned_assignment_status(orphaned_assignments)
@@ -145,19 +156,34 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
 
             return orphaned_status
 
-    async def _detect_orphaned_assignments(self) -> List[OrphanedAssignment]:
+    async def _detect_orphaned_assignments(
+        self, quick_scan: bool = False, max_orphaned_to_find: int = 5
+    ) -> List[OrphanedAssignment]:
         """
-        Detect orphaned permission set assignments using robust principal existence checking.
+        Detect orphaned assignments using the efficient bulk approach.
 
         This approach:
-        1. Gets ALL assignments for each permission set and account
-        2. Uses individual API calls to verify each principal exists
-        3. Has robust error handling to avoid false positives
+        1. Bulk fetch all valid principals once (ListUsers + ListGroups)
+        2. Bulk fetch all assignments (parallelized by account/permission set)
+        3. Detect orphans locally by comparing principal IDs
 
-        This is much more reliable than bulk listing users/groups which can fail.
+        This is much faster than individual API calls for each principal.
+        """
+        # Use the new bulk approach for better performance
+        return await self._detect_orphaned_assignments_bulk(quick_scan, max_orphaned_to_find)
 
-        Returns:
-            List[OrphanedAssignment]: List of orphaned assignments found
+    async def _detect_orphaned_assignments_bulk(
+        self, quick_scan: bool = False, max_orphaned_to_find: int = 5
+    ) -> List[OrphanedAssignment]:
+        """
+        Detect orphaned assignments using the efficient bulk approach.
+
+        This approach:
+        1. Bulk fetch all valid principals once (ListUsers + ListGroups)
+        2. Bulk fetch all assignments (parallelized by account/permission set)
+        3. Detect orphans locally by comparing principal IDs
+
+        This is much faster than individual API calls for each principal.
         """
         orphaned_assignments = []
         start_time = time.time()
@@ -201,9 +227,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                     "OrphanedAssignmentDetector",
                 )
 
-            self.logger.info(
-                f"Using robust principal checking approach for profile '{profile_name}'"
-            )
+            self.logger.info(f"Using bulk approach for profile '{profile_name}'")
 
             # Get all accounts in the organization (for account names)
             all_accounts = {}
@@ -219,7 +243,12 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                 self.logger.warning(f"Error accessing Organizations API: {str(e)}")
                 all_accounts = {}
 
-            # Get all permission sets and check assignments
+            # Step 1: Bulk fetch all valid principals (users and groups)
+            valid_user_ids, valid_group_ids, principal_names_map = (
+                await self._bulk_fetch_valid_principals(identity_store_id, identity_store_client)
+            )
+
+            # Step 2: Get all permission sets
             try:
                 # First, get all permission sets with pagination
                 all_permission_sets = []
@@ -238,177 +267,67 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                     if not next_token:
                         break
 
-                permission_sets = all_permission_sets
-                self.logger.info(f"Found {len(permission_sets)} permission sets")
+                self.logger.info(f"Found {len(all_permission_sets)} permission sets")
 
-                # Get permission set names for better reporting
-                permission_set_names = {}
-                for ps_arn in permission_sets:
-                    try:
-                        ps_details = client.describe_permission_set(
-                            InstanceArn=instance_arn, PermissionSetArn=ps_arn
-                        )
-                        ps_name = ps_details.get("PermissionSet", {}).get(
-                            "Name", ps_arn.split("/")[-1]
-                        )
-                        permission_set_names[ps_arn] = ps_name
-                    except Exception:
-                        ps_name = ps_arn.split("/")[-1]
-                        permission_set_names[ps_arn] = ps_name
-
-                # Get all accounts in the organization to check for orphaned assignments
-                # This is more comprehensive than only checking provisioned accounts
-                all_account_ids = set()
-
-                # First, get accounts from Organizations API if available
-                if all_accounts:
-                    all_account_ids.update(all_accounts.keys())
-                else:
-                    # Fallback: get accounts from permission set provisioning
-                    for ps_arn in permission_sets:
-                        try:
-                            accounts_response = client.list_accounts_for_provisioned_permission_set(
-                                InstanceArn=instance_arn, PermissionSetArn=ps_arn
-                            )
-                            all_account_ids.update(accounts_response.get("AccountIds", []))
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Error getting accounts for permission set {ps_arn}: {str(e)}"
-                            )
-
-                self.logger.info(
-                    f"Checking {len(all_account_ids)} accounts for orphaned assignments"
+                # Step 3: Bulk fetch all assignments
+                all_assignments = await self._bulk_fetch_all_assignments(
+                    client, instance_arn, all_permission_sets, all_accounts
                 )
 
-                # Calculate total operations for progress tracking
-                total_operations = len(permission_sets) * len(all_account_ids)
-                completed_operations = 0
+                # Step 4: Detect orphans locally by comparing principal IDs
+                self.logger.info("Detecting orphaned assignments locally...")
 
+                for assignment in all_assignments:
+                    principal_id = assignment.get("PrincipalId")
+                    principal_type = assignment.get("PrincipalType")
+
+                    if not principal_id or not principal_type:
+                        continue
+
+                    # Check if principal exists in our valid sets
+                    is_orphaned = False
+                    if principal_type == "USER":
+                        is_orphaned = principal_id not in valid_user_ids
+                    elif principal_type == "GROUP":
+                        is_orphaned = principal_id not in valid_group_ids
+
+                    if is_orphaned:
+                        # This is an orphaned assignment!
+                        self.logger.info(
+                            f"Found orphaned assignment: {assignment.get('permission_set_name')} -> {principal_id} in {assignment.get('account_id')}"
+                        )
+
+                        # Create orphaned assignment object
+                        orphaned_assignment = OrphanedAssignment(
+                            assignment_id=f"{assignment.get('permission_set_arn')}#{principal_id}#{assignment.get('account_id')}",
+                            permission_set_arn=assignment.get("permission_set_arn"),
+                            permission_set_name=assignment.get("permission_set_name"),
+                            account_id=assignment.get("account_id"),
+                            account_name=assignment.get("account_name"),
+                            principal_id=principal_id,
+                            principal_type=PrincipalType(principal_type),
+                            principal_name=principal_names_map.get(
+                                principal_id
+                            ),  # May be None if not found
+                            error_message=f"Principal {principal_type.lower()} with ID {principal_id} no longer exists in Identity Store",
+                            created_date=assignment.get("CreatedDate")
+                            or datetime.now(timezone.utc),
+                            last_accessed=None,
+                        )
+
+                        orphaned_assignments.append(orphaned_assignment)
+
+                        # If quick scan and we found enough orphaned assignments, stop
+                        if quick_scan and len(orphaned_assignments) >= max_orphaned_to_find:
+                            self.logger.info(
+                                f"Quick scan: Found {len(orphaned_assignments)} orphaned assignments, stopping scan"
+                            )
+                            break
+
+                elapsed_time = time.time() - start_time
                 self.logger.info(
-                    f"Starting comprehensive orphaned assignment detection: {total_operations} operations to perform"
+                    f"Bulk orphan detection completed in {elapsed_time:.2f} seconds, found {len(orphaned_assignments)} orphaned assignments"
                 )
-
-                # Check each permission set and account combination for assignments
-                for ps_arn in permission_sets:
-                    ps_name = permission_set_names[ps_arn]
-                    self.logger.debug(f"Checking permission set: {ps_name}")
-
-                    for account_id in all_account_ids:
-                        try:
-                            # Get ALL assignments for this permission set and account with pagination
-                            # This will work even if the permission set is not currently provisioned to the account
-                            all_assignments = []
-                            next_token = None
-
-                            while True:
-                                list_params = {
-                                    "InstanceArn": instance_arn,
-                                    "AccountId": account_id,
-                                    "PermissionSetArn": ps_arn,
-                                }
-                                if next_token:
-                                    list_params["NextToken"] = next_token
-
-                                assignments_response = client.list_account_assignments(
-                                    **list_params
-                                )
-                                batch_assignments = assignments_response.get(
-                                    "AccountAssignments", []
-                                )
-                                all_assignments.extend(batch_assignments)
-
-                                next_token = assignments_response.get("NextToken")
-                                if not next_token:
-                                    break
-
-                            assignments = all_assignments
-                            if assignments:
-                                self.logger.debug(
-                                    f"Found {len(assignments)} assignments for {ps_name} in account {account_id}"
-                                )
-
-                                # Check each assignment for orphaned principals using robust checking
-                                for assignment in assignments:
-                                    principal_id = assignment.get("PrincipalId")
-                                    principal_type = assignment.get("PrincipalType")
-
-                                    if not principal_id or not principal_type:
-                                        continue
-
-                                    # Use robust principal existence checking
-                                    principal_exists, principal_name, error_message = (
-                                        await self._check_principal_exists(
-                                            identity_store_id,
-                                            principal_id,
-                                            principal_type,
-                                            identity_store_client,
-                                        )
-                                    )
-
-                                    if not principal_exists:
-                                        # This is an orphaned assignment!
-                                        self.logger.info(
-                                            f"Found orphaned assignment: {ps_name} -> {principal_id} in {account_id}"
-                                        )
-
-                                        # Get account name
-                                        account_name = all_accounts.get(account_id, account_id)
-
-                                        # Create orphaned assignment object
-                                        orphaned_assignment = OrphanedAssignment(
-                                            assignment_id=f"{ps_arn}#{principal_id}#{account_id}",
-                                            permission_set_arn=ps_arn,
-                                            permission_set_name=ps_name,
-                                            account_id=account_id,
-                                            account_name=account_name,
-                                            principal_id=principal_id,
-                                            principal_type=PrincipalType(principal_type),
-                                            principal_name=principal_name,  # Use the name we found or None
-                                            error_message=error_message
-                                            or f"Principal {principal_type.lower()} with ID {principal_id} no longer exists in Identity Store",
-                                            created_date=assignment.get("CreatedDate")
-                                            or datetime.now(timezone.utc),
-                                            last_accessed=None,
-                                        )
-
-                                        orphaned_assignments.append(orphaned_assignment)
-
-                        except ClientError as e:
-                            error_code = e.response.get("Error", {}).get("Code", "Unknown")
-                            # ResourceNotFound is expected for accounts where permission set is not provisioned
-                            if error_code not in ["AccessDenied", "ResourceNotFound"]:
-                                self.logger.warning(
-                                    f"Error checking assignments for account {account_id}: {str(e)}"
-                                )
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Unexpected error checking account {account_id}: {str(e)}"
-                            )
-
-                        # Update progress tracking
-                        completed_operations += 1
-
-                        # Report progress every 50 operations or at the end
-                        if (
-                            completed_operations % 50 == 0
-                            or completed_operations == total_operations
-                        ):
-                            elapsed_time = time.time() - start_time
-                            rate = completed_operations / elapsed_time if elapsed_time > 0 else 0
-                            remaining_operations = total_operations - completed_operations
-                            eta_seconds = remaining_operations / rate if rate > 0 else 0
-
-                            progress_percent = (completed_operations / total_operations) * 100
-
-                            progress_msg = (
-                                f"Progress: {completed_operations}/{total_operations} operations "
-                                f"({progress_percent:.1f}%) - {rate:.1f} ops/sec - ETA: {eta_seconds:.0f}s"
-                            )
-                            self.logger.info(progress_msg)
-
-                            # Call progress callback if provided
-                            if self._progress_callback:
-                                self._progress_callback(progress_msg)
 
             except Exception as e:
                 self.logger.error(f"Error in assignment detection: {str(e)}")
@@ -426,7 +345,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         total_time = time.time() - start_time
         self.logger.info(
             f"Orphaned assignment detection completed in {total_time:.1f}s. "
-            f"Found {len(orphaned_assignments)} orphaned assignments out of {total_operations} operations."
+            f"Found {len(orphaned_assignments)} orphaned assignments."
         )
         return orphaned_assignments
 
@@ -532,17 +451,20 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         self, identity_store_id: str, principal_id: str, principal_type: str, identity_store_client
     ) -> tuple[bool, Optional[str], Optional[str]]:
         """
-        Check if a principal (user or group) still exists in the identity store.
+        Check if a principal exists with rate limiting and retry logic.
 
         Args:
             identity_store_id: Identity store ID
             principal_id: Principal ID to check
-            principal_type: Principal type (USER or GROUP)
-            identity_store_client: Identity Store client
+            principal_type: Type of principal (USER or GROUP)
+            identity_store_client: Identity store client
 
         Returns:
-            Tuple of (exists, principal_name, error_message)
+            Tuple of (exists, name, error_message)
         """
+        # Add delay between API calls to avoid rate limiting
+        if hasattr(self.config, "api_call_delay_seconds"):
+            await asyncio.sleep(self.config.api_call_delay_seconds)
         try:
             if principal_type == "USER":
                 # Try to describe the user
@@ -614,6 +536,240 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             # For unexpected errors, assume principal exists to avoid false positives
             return True, f"Unknown {principal_type.lower()}", None
 
+    async def _process_assignments_batch(
+        self,
+        assignments: List[Dict],
+        identity_store_id: str,
+        identity_store_client,
+        ps_arn: str,
+        ps_name: str,
+        account_id: str,
+        all_accounts: Dict,
+        orphaned_assignments: List,
+        quick_scan: bool = False,
+        max_orphaned_to_find: int = 5,
+    ) -> int:
+        """
+        Process assignments in batches to avoid rate limiting.
+
+        Args:
+            assignments: List of assignments to process
+            identity_store_id: Identity store ID
+            identity_store_client: Identity store client
+            ps_arn: Permission set ARN
+            ps_name: Permission set name
+            account_id: Account ID
+            all_accounts: Dictionary of account ID to name mapping
+            orphaned_assignments: List to append orphaned assignments to
+            quick_scan: If True, stop after finding max_orphaned_to_find assignments
+            max_orphaned_to_find: Maximum number of orphaned assignments to find (for quick scan)
+        """
+        # Get batch size from config, default to 5
+        batch_size = getattr(self.config, "batch_size", 5) if self.config else 5
+        batch_delay = getattr(self.config, "batch_delay_seconds", 1.0) if self.config else 1.0
+
+        assignments_processed = 0
+
+        # Process assignments in batches
+        for i in range(0, len(assignments), batch_size):
+            batch = assignments[i : i + batch_size]
+
+            # Process each assignment in the batch
+            for assignment in batch:
+                principal_id = assignment.get("PrincipalId")
+                principal_type = assignment.get("PrincipalType")
+
+                if not principal_id or not principal_type:
+                    continue
+
+                assignments_processed += 1
+
+                # Check give-up threshold more frequently (every 10 assignments)
+                if (
+                    quick_scan
+                    and assignments_processed % 10 == 0
+                    and len(orphaned_assignments) == 0
+                ):
+                    # This is a rough estimate - we're checking every 10 assignments
+                    # The actual count will be more accurate when we return from the batch
+                    pass
+
+                # Use robust principal existence checking
+                principal_exists, principal_name, error_message = (
+                    await self._check_principal_exists(
+                        identity_store_id,
+                        principal_id,
+                        principal_type,
+                        identity_store_client,
+                    )
+                )
+
+                if not principal_exists:
+                    # This is an orphaned assignment!
+                    self.logger.info(
+                        f"Found orphaned assignment: {ps_name} -> {principal_id} in {account_id}"
+                    )
+
+                    # Get account name
+                    account_name = all_accounts.get(account_id, account_id)
+
+                    # Create orphaned assignment object
+                    orphaned_assignment = OrphanedAssignment(
+                        assignment_id=f"{ps_arn}#{principal_id}#{account_id}",
+                        permission_set_arn=ps_arn,
+                        permission_set_name=ps_name,
+                        account_id=account_id,
+                        account_name=account_name,
+                        principal_id=principal_id,
+                        principal_type=PrincipalType(principal_type),
+                        principal_name=principal_name,  # Use the name we found or None
+                        error_message=error_message
+                        or f"Principal {principal_type.lower()} with ID {principal_id} no longer exists in Identity Store",
+                        created_date=assignment.get("CreatedDate") or datetime.now(timezone.utc),
+                        last_accessed=None,
+                    )
+
+                    orphaned_assignments.append(orphaned_assignment)
+
+                    # If quick scan and we found enough orphaned assignments, stop processing
+                    if quick_scan and len(orphaned_assignments) >= max_orphaned_to_find:
+                        self.logger.info(
+                            f"Quick scan: Found {len(orphaned_assignments)} orphaned assignments, stopping batch processing"
+                        )
+                        return assignments_processed
+
+            # Add delay between batches to avoid rate limiting
+            if i + batch_size < len(assignments):  # Don't delay after the last batch
+                await asyncio.sleep(batch_delay)
+
+        return assignments_processed
+
+    async def _bulk_fetch_valid_principals(
+        self, identity_store_id: str, identity_store_client
+    ) -> tuple[set, set, dict]:
+        """
+        Bulk fetch all valid principals (users and groups) from the identity store.
+
+        Args:
+            identity_store_id: Identity store ID
+            identity_store_client: Identity store client
+
+        Returns:
+            Tuple of (valid_user_ids, valid_group_ids, principal_names_map)
+        """
+        valid_user_ids = set()
+        valid_group_ids = set()
+        principal_names_map = {}  # Maps principal_id to name
+
+        try:
+            # Bulk fetch all users
+            self.logger.info("Fetching all users from identity store...")
+            user_paginator = identity_store_client.get_paginator("list_users")
+            user_count = 0
+            for page in user_paginator.paginate(IdentityStoreId=identity_store_id):
+                for user in page.get("Users", []):
+                    user_id = user["UserId"]
+                    user_name = user.get("UserName") or user.get("DisplayName", user_id)
+                    valid_user_ids.add(user_id)
+                    principal_names_map[user_id] = user_name
+                    user_count += 1
+
+            self.logger.info(f"Found {user_count} users")
+
+            # Bulk fetch all groups
+            self.logger.info("Fetching all groups from identity store...")
+            group_paginator = identity_store_client.get_paginator("list_groups")
+            group_count = 0
+            for page in group_paginator.paginate(IdentityStoreId=identity_store_id):
+                for group in page.get("Groups", []):
+                    group_id = group["GroupId"]
+                    group_name = group.get("DisplayName", group_id)
+                    valid_group_ids.add(group_id)
+                    principal_names_map[group_id] = group_name
+                    group_count += 1
+
+            self.logger.info(f"Found {group_count} groups")
+
+        except Exception as e:
+            self.logger.error(f"Error bulk fetching principals: {str(e)}")
+            raise
+
+        return valid_user_ids, valid_group_ids, principal_names_map
+
+    async def _bulk_fetch_all_assignments(
+        self, client, instance_arn: str, permission_sets: List[str], all_accounts: dict
+    ) -> List[dict]:
+        """
+        Bulk fetch all assignments across all permission sets and accounts.
+
+        Args:
+            client: SSO admin client
+            instance_arn: SSO instance ARN
+            permission_sets: List of permission set ARNs
+            all_accounts: Dictionary of account ID to name mapping
+
+        Returns:
+            List of all assignments with metadata
+        """
+        all_assignments = []
+
+        # Process permission sets in parallel batches
+        batch_size = 5  # Process 5 permission sets at a time
+        semaphore = asyncio.Semaphore(batch_size)
+
+        async def fetch_assignments_for_permission_set(ps_arn: str, ps_name: str):
+            async with semaphore:
+                assignments_for_ps = []
+
+                # Get assignments for this permission set across all accounts
+                for account_id, account_name in all_accounts.items():
+                    try:
+                        # Get all assignments for this permission set and account
+                        assignments_response = client.list_account_assignments(
+                            InstanceArn=instance_arn, AccountId=account_id, PermissionSetArn=ps_arn
+                        )
+
+                        for assignment in assignments_response.get("AccountAssignments", []):
+                            assignment_with_metadata = {
+                                **assignment,
+                                "permission_set_arn": ps_arn,
+                                "permission_set_name": ps_name,
+                                "account_id": account_id,
+                                "account_name": account_name,
+                            }
+                            assignments_for_ps.append(assignment_with_metadata)
+
+                    except ClientError as e:
+                        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                        if error_code not in ["AccessDenied", "ResourceNotFound"]:
+                            self.logger.warning(
+                                f"Error fetching assignments for {ps_name} in {account_id}: {str(e)}"
+                            )
+
+                return assignments_for_ps
+
+        # Create tasks for all permission sets
+        tasks = []
+        for ps_arn in permission_sets:
+            ps_name = f"PermissionSet-{ps_arn.split('/')[-1]}"  # Simple name for now
+            task = fetch_assignments_for_permission_set(ps_arn, ps_name)
+            tasks.append(task)
+
+        # Execute all tasks in parallel
+        if tasks:
+            self.logger.info(
+                f"Starting parallel assignment fetching for {len(tasks)} permission sets..."
+            )
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    self.logger.error(f"Error fetching assignments: {str(result)}")
+                else:
+                    all_assignments.extend(result)
+
+        self.logger.info(f"Fetched {len(all_assignments)} total assignments")
+        return all_assignments
+
     def _determine_orphaned_assignment_status(
         self, orphaned_assignments: List[OrphanedAssignment]
     ) -> Dict[str, Any]:
@@ -647,15 +803,22 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         if orphaned_count > 50 or len(old_assignments) > 10:
             return {
                 "status": StatusLevel.CRITICAL,
-                "message": f"Critical: {orphaned_count} orphaned assignments found ({len(old_assignments)} older than 30 days)",
+                "message": f"Critical: {orphaned_count} orphaned assignments found ({len(old_assignments)} older than 30 days). Run 'awsideman status cleanup --dry-run' to see all orphaned assignments and clean them up.",
                 "errors": [f"High number of orphaned assignments: {orphaned_count}"],
             }
 
         # Warning: Some orphaned assignments found
         elif orphaned_count > 0:
+            # Check if this was a quick scan
+            is_quick_scan = getattr(self, "_quick_scan", False)
+            if is_quick_scan:
+                message = f"Warning: {orphaned_count} orphaned assignments found (quick scan - may be more). Run 'awsideman status cleanup --dry-run' to see all orphaned assignments and clean them up."
+            else:
+                message = f"Warning: {orphaned_count} orphaned assignments found. Run 'awsideman status cleanup --dry-run' to see details and clean them up."
+
             return {
                 "status": StatusLevel.WARNING,
-                "message": f"Warning: {orphaned_count} orphaned assignments found",
+                "message": message,
                 "errors": [f"Orphaned assignments detected: {orphaned_count}"],
             }
 
