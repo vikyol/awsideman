@@ -153,16 +153,17 @@ def get_optimal_cache_config() -> AdvancedCacheConfig:
 
 def get_account_cache_optimizer() -> AccountCacheOptimizer:
     """Get an account cache optimizer instance."""
-    return AccountCacheOptimizer()
+    return AccountCacheOptimizer(organizations_client=None)
 
 
 def format_file_size(size_bytes: int) -> str:
     """Format file size in human-readable format."""
+    size_float = float(size_bytes)
     for unit in ["B", "KB", "MB", "GB"]:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.2f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.2f} TB"
+        if size_float < 1024.0:
+            return f"{size_float:.2f} {unit}"
+        size_float /= 1024.0
+    return f"{size_float:.2f} TB"
 
 
 def safe_json_loads(json_str: str) -> Optional[Dict[str, Any]]:
@@ -170,7 +171,10 @@ def safe_json_loads(json_str: str) -> Optional[Dict[str, Any]]:
     try:
         import json
 
-        return json.loads(json_str)
+        result = json.loads(json_str)
+        if isinstance(result, dict):
+            return result
+        return None
     except (json.JSONDecodeError, TypeError):
         return None
 

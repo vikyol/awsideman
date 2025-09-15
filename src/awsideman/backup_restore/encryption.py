@@ -837,7 +837,7 @@ class EncryptionProviderFactory:
         return NoOpEncryptionProvider()
 
     @staticmethod
-    def create_provider(provider_type: str, **config) -> EncryptionProviderInterface:
+    def create_provider(provider_type: str, **config: Any) -> EncryptionProviderInterface:
         """
         Create an encryption provider based on type and configuration.
 

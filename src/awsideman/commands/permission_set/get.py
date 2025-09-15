@@ -29,7 +29,7 @@ def get_permission_set(
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """Get detailed information about a specific permission set.
 
     Retrieves and displays comprehensive information about a permission set by its name or ARN.
@@ -130,8 +130,6 @@ def get_permission_set(
             # Display the panel and policies table
             console.print(panel)
             console.print(policies_table)
-
-            return permission_set
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")

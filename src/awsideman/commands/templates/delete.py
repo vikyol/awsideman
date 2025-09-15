@@ -16,7 +16,7 @@ def delete_template(
     name: str = typer.Argument(..., help="Name of the template to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Delete a template file.
 
     Removes a template from storage after confirmation. This operation cannot

@@ -64,7 +64,7 @@ def create_backup(
         "table", "--format", "-f", help="Output format: table or json"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Create a new backup of AWS Identity Center configuration.
 
     Creates a comprehensive backup of AWS Identity Center resources including

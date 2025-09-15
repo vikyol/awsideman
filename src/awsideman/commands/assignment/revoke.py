@@ -5,7 +5,7 @@ in AWS Identity Center. It supports both single-account and multi-account revoca
 with various filtering options.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -988,11 +988,26 @@ def revoke_multi_account_advanced(
         if ou_filter:
             console.print(f"  OU Filter: {ou_filter}")
             # Use the existing hierarchy builder to get accounts by OU
-            from ...utils.hierarchy_builder import build_organization_hierarchy, search_accounts
+            from ...aws_clients.manager import search_accounts
 
-            org_hierarchy = build_organization_hierarchy(aws_client)
-            ou_accounts = search_accounts(org_hierarchy, ou_filter)
-            accounts.extend(ou_accounts)
+            # Get the organizations client from the AWS client manager
+            org_client = aws_client.get_organizations_client()
+            ou_accounts = search_accounts(org_client, ou_filter)
+            # Convert AccountDetails to AccountInfo (from utils.models)
+            from ...utils.models import AccountInfo
+
+            account_infos = [
+                AccountInfo(
+                    account_id=acc.id,
+                    account_name=acc.name,
+                    email=acc.email,
+                    status=acc.status,
+                    tags=acc.tags.copy(),
+                    ou_path=acc.ou_path.copy(),
+                )
+                for acc in ou_accounts
+            ]
+            accounts.extend(account_infos)
 
         if account_pattern:
             console.print(f"  Account Pattern: {account_pattern}")
@@ -1463,7 +1478,7 @@ def revoke_single_account(
                         except Exception as e:
                             result_queue.put(("error", e))
 
-                    result_queue = queue.Queue()
+                    result_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
                     resolve_thread = threading.Thread(target=call_resolve_principal_info)
                     resolve_thread.daemon = True
                     resolve_thread.start()

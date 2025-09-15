@@ -8,6 +8,8 @@ This module provides commands to:
 - Run performance benchmarks
 """
 
+from typing import Any, Dict, List
+
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -38,7 +40,7 @@ def enable_optimizations(
     compression_algorithm: str = typer.Option(
         "lz4", "--algorithm", help="Compression algorithm (lz4, gzip, zlib)"
     ),
-):
+) -> None:
     """Enable performance optimizations for backup operations."""
     try:
         # Create performance optimizer with specified settings
@@ -299,7 +301,7 @@ def show_performance_stats():
 def run_performance_benchmark(
     data_size: str = typer.Option("medium", "--size", help="Data size: small, medium, large"),
     iterations: int = typer.Option(3, "--iterations", help="Number of benchmark iterations"),
-):
+) -> None:
     """Run performance benchmarks to test optimization effectiveness."""
     import asyncio
 
@@ -378,12 +380,12 @@ def run_performance_benchmark(
                     permission_set_arn=f"arn:aws:sso:::permissionSet/ps-{i}",
                     name=f"PermissionSet{i}",
                     description=f"Test permission set {i}",
-                    session_duration=3600,
+                    session_duration="3600",
                     relay_state="",
                     inline_policy="{}",
                     managed_policies=["arn:aws:iam::aws:policy/ReadOnlyAccess"],
                     customer_managed_policies=[],
-                    permissions_boundary="",
+                    permissions_boundary=None,
                 )
                 for i in range(ps_count)
             ]
@@ -440,7 +442,7 @@ def run_performance_benchmark(
                 },
             ]
 
-            results = []
+            results: List[Dict[str, Any]] = []
 
             with Progress(
                 SpinnerColumn(),
@@ -455,9 +457,9 @@ def run_performance_benchmark(
 
                     for i in range(iterations):
                         optimizer = PerformanceOptimizer(
-                            enable_compression=config["compression"],
-                            enable_deduplication=config["deduplication"],
-                            enable_parallel_processing=config["parallel"],
+                            enable_compression=bool(config["compression"]),
+                            enable_deduplication=bool(config["deduplication"]),
+                            enable_parallel_processing=bool(config["parallel"]),
                             enable_resource_monitoring=False,  # Disable for benchmark
                             max_workers=8,
                         )
@@ -467,8 +469,8 @@ def run_performance_benchmark(
                         start_time = time.time()
 
                         try:
-                            optimized_data, metadata = await optimizer.optimize_backup_data(
-                                backup_data
+                            optimized_data, optimization_metadata = (
+                                await optimizer.optimize_backup_data(backup_data)
                             )
                             optimization_time = time.time() - start_time
 
@@ -511,7 +513,7 @@ def run_performance_benchmark(
 
             for result in results:
                 table.add_row(
-                    result["name"],
+                    str(result["name"]),
                     f"{result['avg_time']:.3f}",
                     f"{result['avg_size']:,}",
                     f"{result['compression_ratio']:.2f}x",
@@ -520,8 +522,8 @@ def run_performance_benchmark(
             console.print(table)
 
             # Find best configurations
-            fastest = min(results, key=lambda x: x["avg_time"])
-            smallest = min(results, key=lambda x: x["avg_size"])
+            fastest = min(results, key=lambda x: float(x["avg_time"]))
+            smallest = min(results, key=lambda x: float(x["avg_size"]))
 
             console.print(f"\n🏆 Fastest: {fastest['name']} ({fastest['avg_time']:.3f}s)")
             console.print(

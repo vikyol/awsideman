@@ -78,7 +78,7 @@ def copy_assignments(
     max_workers: int = typer.Option(5, "--max-workers", help="Maximum number of parallel workers"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Copy permission assignments from source entity to target entity."""
     try:
         # Parse entity references

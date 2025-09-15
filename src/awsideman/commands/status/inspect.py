@@ -1,7 +1,7 @@
 """Resource inspection command implementation."""
 
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -33,7 +33,7 @@ def inspect_resource(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-):
+) -> None:
     """Inspect detailed status of a specific resource.
 
     Provides detailed status information for individual users, groups, or permission sets.
@@ -106,7 +106,7 @@ def inspect_resource(
 
 
 def _display_resource_inspection_result(
-    result, output_fmt: OutputFormat, resource_type: str, resource_id: str
+    result: Any, output_fmt: OutputFormat, resource_type: str, resource_id: str
 ) -> None:
     """Display resource inspection result."""
     if output_fmt == OutputFormat.JSON:
@@ -134,7 +134,7 @@ def _display_resource_inspection_result(
         _display_resource_inspection_table(result, resource_type, resource_id)
 
 
-def _display_resource_inspection_table(result, resource_type: str, resource_id: str) -> None:
+def _display_resource_inspection_table(result: Any, resource_type: str, resource_id: str) -> None:
     """Display resource inspection result as a table."""
     # Create status indicator
     status_indicators = {

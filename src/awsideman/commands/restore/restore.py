@@ -10,7 +10,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 from rich.table import Table
 
 from ...backup_restore.backends import FileSystemStorageBackend, S3StorageBackend
-from ...backup_restore.models import ConflictStrategy, ResourceType, RestoreOptions
+from ...backup_restore.models import ConflictStrategy, ResourceType, RestoreOptions, RestoreResult
 from ...backup_restore.restore_manager import RestoreManager
 from ...backup_restore.storage import StorageEngine
 from ...utils.config import Config
@@ -62,7 +62,7 @@ def restore_backup(
         "table", "--format", "-f", help="Output format: table or json"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Apply restore of AWS Identity Center configuration from a backup.
 
     Restores AWS Identity Center resources (users, groups, permission sets,
@@ -138,6 +138,7 @@ def restore_backup(
             raise typer.Exit(1)
 
         # Initialize storage backend
+        storage_backend_obj: FileSystemStorageBackend | S3StorageBackend
         if storage_backend.lower() == "filesystem":
             storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
             storage_backend_obj = FileSystemStorageBackend(
@@ -327,18 +328,15 @@ def restore_backup(
             console.print("[blue]Use --dry-run=false to perform the actual restore.[/blue]")
         else:
             console.print("[green]✓ Restore completed successfully![/green]")
-            if isinstance(restore_result.changes_applied, dict):
-                total_changes = sum(restore_result.changes_applied.values())
-                console.print(f"[blue]Restored {total_changes} resources.[/blue]")
-            else:
-                console.print(f"[blue]Restored {restore_result.changes_applied} resources.[/blue]")
+            total_changes = sum(restore_result.changes_applied.values())
+            console.print(f"[blue]Restored {total_changes} resources.[/blue]")
 
     except Exception as e:
         console.print(f"[red]Error during restore: {e}[/red]")
         raise typer.Exit(1)
 
 
-def display_restore_results(restore_result, dry_run: bool):
+def display_restore_results(restore_result: RestoreResult, dry_run: bool) -> None:
     """Display restore results in a formatted table."""
     operation_type = "Preview" if dry_run else "Restore"
 
@@ -359,12 +357,7 @@ def display_restore_results(restore_result, dry_run: bool):
     console.print(summary_table)
 
     # Detailed changes
-    if restore_result.changes_applied and (
-        isinstance(restore_result.changes_applied, dict)
-        and sum(restore_result.changes_applied.values()) > 0
-        or isinstance(restore_result.changes_applied, int)
-        and restore_result.changes_applied > 0
-    ):
+    if restore_result.changes_applied and sum(restore_result.changes_applied.values()) > 0:
         console.print("\n[bold cyan]Detailed Changes:[/bold cyan]")
         changes_table = Table()
         changes_table.add_column("Resource Type", style="cyan")

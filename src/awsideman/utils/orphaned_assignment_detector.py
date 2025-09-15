@@ -356,8 +356,8 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         ps_name: str,
         account_id: str,
         identity_store_id: str,
-        client,
-        identity_store_client,
+        client: Any,
+        identity_store_client: Any,
     ) -> List[OrphanedAssignment]:
         """
         Check for orphaned assignments in a specific account.
@@ -448,7 +448,11 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         return orphaned_assignments
 
     async def _check_principal_exists(
-        self, identity_store_id: str, principal_id: str, principal_type: str, identity_store_client
+        self,
+        identity_store_id: str,
+        principal_id: str,
+        principal_type: str,
+        identity_store_client: Any,
     ) -> tuple[bool, Optional[str], Optional[str]]:
         """
         Check if a principal exists with rate limiting and retry logic.
@@ -540,7 +544,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         self,
         assignments: List[Dict],
         identity_store_id: str,
-        identity_store_client,
+        identity_store_client: Any,
         ps_arn: str,
         ps_name: str,
         account_id: str,
@@ -645,7 +649,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         return assignments_processed
 
     async def _bulk_fetch_valid_principals(
-        self, identity_store_id: str, identity_store_client
+        self, identity_store_id: str, identity_store_client: Any
     ) -> tuple[set, set, dict]:
         """
         Bulk fetch all valid principals (users and groups) from the identity store.
@@ -697,7 +701,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         return valid_user_ids, valid_group_ids, principal_names_map
 
     async def _bulk_fetch_all_assignments(
-        self, client, instance_arn: str, permission_sets: List[str], all_accounts: dict
+        self, client: Any, instance_arn: str, permission_sets: List[str], all_accounts: dict
     ) -> List[dict]:
         """
         Bulk fetch all assignments across all permission sets and accounts.
@@ -717,7 +721,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         batch_size = 5  # Process 5 permission sets at a time
         semaphore = asyncio.Semaphore(batch_size)
 
-        async def fetch_assignments_for_permission_set(ps_arn: str, ps_name: str):
+        async def fetch_assignments_for_permission_set(ps_arn: str, ps_name: str) -> None:
             async with semaphore:
                 assignments_for_ps = []
 
@@ -891,7 +895,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         return []
 
     async def cleanup_orphaned_assignments(
-        self, assignments: List[OrphanedAssignment], progress_callback=None
+        self, assignments: List[OrphanedAssignment], progress_callback: Any = None
     ) -> CleanupResult:
         """
         Clean up orphaned assignments with detailed tracking.

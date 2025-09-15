@@ -568,7 +568,7 @@ class ParallelProcessor:
         self._executor: Optional[Union[ThreadPoolExecutor, ProcessPoolExecutor]] = None
 
     async def process_parallel(
-        self, func: Callable, items: List[Any], *args, **kwargs
+        self, func: Callable, items: List[Any], *args: Any, **kwargs: Any
     ) -> ParallelProcessingResult:
         """
         Process items in parallel using the specified function.
@@ -656,7 +656,12 @@ class ParallelProcessor:
         )
 
     async def process_batched(
-        self, func: Callable, items: List[Any], batch_size: Optional[int] = None, *args, **kwargs
+        self,
+        func: Callable,
+        items: List[Any],
+        batch_size: Optional[int] = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> ParallelProcessingResult:
         """
         Process items in batches for memory efficiency.
@@ -852,7 +857,7 @@ class PerformanceOptimizer(PerformanceOptimizerInterface):
                 self.resource_monitor.stop_monitoring()
 
     async def process_parallel_collection(
-        self, collection_tasks: List[Callable], *args, **kwargs
+        self, collection_tasks: List[Callable], *args: Any, **kwargs: Any
     ) -> List[Any]:
         """
         Process data collection tasks in parallel.

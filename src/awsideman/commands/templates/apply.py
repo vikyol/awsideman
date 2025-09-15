@@ -27,7 +27,7 @@ def apply_template(
     ),
     confirm: bool = typer.Option(False, "--confirm", "-y", help="Skip confirmation prompt"),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Apply a template to create permission assignments.
 
     Executes a template to create permission assignments in AWS Identity Center.

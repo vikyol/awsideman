@@ -73,7 +73,7 @@ class LocalMetadataIndex:
             logger.error(f"Failed to load metadata index: {e}")
             return {}
 
-    def _save_metadata_index(self, index: Dict[str, Any]):
+    def _save_metadata_index(self, index: Dict[str, Any]) -> None:
         """Save the metadata index to disk."""
         try:
             with open(self.metadata_file, "w") as f:
@@ -92,7 +92,7 @@ class LocalMetadataIndex:
             logger.error(f"Failed to load storage locations: {e}")
             return {}
 
-    def _save_storage_locations(self, locations: Dict[str, Dict[str, str]]):
+    def _save_storage_locations(self, locations: Dict[str, Dict[str, str]]) -> None:
         """Save storage location mappings to disk."""
         try:
             with open(self.storage_locations_file, "w") as f:
@@ -102,7 +102,7 @@ class LocalMetadataIndex:
 
     def add_backup_metadata(
         self, backup_id: str, metadata: BackupMetadata, storage_backend: str, storage_location: str
-    ):
+    ) -> None:
         """
         Add or update backup metadata in the local index.
 
@@ -235,7 +235,7 @@ class LocalMetadataIndex:
             logger.warning(f"Filter matching failed: {e}")
             return False
 
-    def remove_backup_metadata(self, backup_id: str):
+    def remove_backup_metadata(self, backup_id: str) -> None:
         """
         Remove backup metadata from local index.
 
@@ -262,7 +262,7 @@ class LocalMetadataIndex:
         except Exception as e:
             logger.error(f"Failed to remove backup {backup_id} from metadata index: {e}")
 
-    def sync_with_storage_backend(self, storage_backend, storage_location: str = ""):
+    def sync_with_storage_backend(self, storage_backend: Any, storage_location: str = "") -> None:
         """
         Sync local index with a storage backend to ensure consistency.
 

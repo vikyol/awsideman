@@ -102,6 +102,7 @@ def validate_config_value(key: str, value: str, valid_values: list) -> tuple[boo
         Tuple of (is_valid, error_message, converted_value)
     """
     # Handle special values
+    converted_value: bool | int | str | None = None
     if value.lower() in ["true", "false"]:
         converted_value = value.lower() == "true"
         # Check if boolean values are allowed
@@ -162,7 +163,7 @@ app = typer.Typer(help="Configure backup settings")
 @app.command("show")
 def show_backup_config(
     format: str = typer.Option("table", "--format", "-f", help="Output format: table, yaml, json"),
-):
+) -> None:
     """Show current backup configuration."""
     backup_config = config.get("backup", {})
 
@@ -181,7 +182,7 @@ def show_backup_config(
 def set_backup_config(
     key: str = typer.Argument(..., help="Configuration key (e.g., storage.default_backend)"),
     value: str = typer.Argument(..., help="Configuration value"),
-):
+) -> None:
     """Set a backup configuration value."""
     try:
         # Parse the key path (e.g., "storage.default_backend" -> ["storage", "default_backend"])
@@ -227,7 +228,7 @@ def set_backup_config(
 @app.command("get")
 def get_backup_config(
     key: str = typer.Argument(..., help="Configuration key (e.g., storage.default_backend)"),
-):
+) -> None:
     """Get a backup configuration value."""
     try:
         backup_config = config.get("backup", {})
@@ -256,7 +257,7 @@ def reset_backup_config(
         None, "--section", "-s", help="Reset specific section (e.g., storage, encryption)"
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Force reset without confirmation"),
-):
+) -> None:
     """Reset backup configuration to defaults."""
     from ...utils.config import DEFAULT_BACKUP_CONFIG
 
@@ -270,7 +271,11 @@ def reset_backup_config(
 
         backup_config = config.get("backup", {})
         if section in DEFAULT_BACKUP_CONFIG:
-            backup_config[section] = DEFAULT_BACKUP_CONFIG[section].copy()
+            section_config = DEFAULT_BACKUP_CONFIG[section]
+            if isinstance(section_config, dict):
+                backup_config[section] = section_config.copy()
+            else:
+                backup_config[section] = section_config
             config.set("backup", backup_config)
             console.print(f"[green]✓ Reset '{section}' section to defaults[/green]")
         else:
@@ -358,7 +363,7 @@ def list_config_keys(
     section: Optional[str] = typer.Option(
         None, "--section", "-s", help="Show keys for specific section only"
     ),
-):
+) -> None:
     """List all valid configuration keys and their expected values."""
     if section:
         if section not in VALID_CONFIG_KEYS:
@@ -367,15 +372,24 @@ def list_config_keys(
             raise typer.Exit(1)
 
         console.print(f"[bold blue]Valid configuration keys for section '{section}':[/bold blue]")
-        _display_section_keys(section, VALID_CONFIG_KEYS[section], "")
+        section_keys = VALID_CONFIG_KEYS[section]
+        if isinstance(section_keys, dict):
+            _display_section_keys(section, section_keys, "")
+        else:
+            console.print(f"[red]Error: Invalid section configuration for '{section}'[/red]")
     else:
         console.print("[bold blue]All valid backup configuration keys:[/bold blue]")
         for section_name, section_keys in VALID_CONFIG_KEYS.items():
             console.print(f"\n[bold cyan]{section_name}:[/bold cyan]")
-            _display_section_keys(section_name, section_keys, "")
+            if isinstance(section_keys, dict):
+                _display_section_keys(section_name, section_keys, "")
+            else:
+                console.print(
+                    f"[red]Error: Invalid section configuration for '{section_name}'[/red]"
+                )
 
 
-def _display_section_keys(section: str, keys: dict, prefix: str):
+def _display_section_keys(section: str, keys: dict, prefix: str) -> None:
     """Display configuration keys for a section."""
     for key, value_type in keys.items():
         if prefix:
@@ -418,7 +432,7 @@ def _display_section_keys(section: str, keys: dict, prefix: str):
             console.print(f"    {full_key} - {value_desc}")
 
 
-def _display_backup_config_table(backup_config: dict):
+def _display_backup_config_table(backup_config: dict) -> None:
     """Display backup configuration in a formatted table."""
     table = Table(title="Backup Configuration", show_header=True, header_style="bold magenta")
     table.add_column("Section", style="cyan")

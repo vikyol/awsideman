@@ -30,7 +30,7 @@ class ReportGenerator:
         """
         self.console = console
 
-    def generate_summary_report(self, results: BulkOperationResults, operation: str):
+    def generate_summary_report(self, results: BulkOperationResults, operation: str) -> None:
         """Generate and display summary report.
 
         Args:
@@ -117,7 +117,7 @@ class ReportGenerator:
         show_successful: bool = True,
         show_failed: bool = True,
         show_skipped: bool = True,
-    ):
+    ) -> None:
         """Generate detailed report with individual assignment results.
 
         Args:
@@ -194,7 +194,7 @@ class ReportGenerator:
         if output_file:
             self._save_detailed_report_to_file(results, output_file)
 
-    def generate_error_summary(self, results: BulkOperationResults):
+    def generate_error_summary(self, results: BulkOperationResults) -> None:
         """Generate summary of errors encountered during processing.
 
         Args:
@@ -241,7 +241,7 @@ class ReportGenerator:
         self.console.print()
         self.console.print(error_table)
 
-    def generate_performance_report(self, results: BulkOperationResults):
+    def generate_performance_report(self, results: BulkOperationResults) -> None:
         """Generate performance metrics report.
 
         Args:
@@ -312,7 +312,9 @@ class ReportGenerator:
             remaining_seconds = seconds % 60
             return f"{hours}h {remaining_minutes}m {remaining_seconds:.1f}s"
 
-    def _save_detailed_report_to_file(self, results: BulkOperationResults, output_file: Path):
+    def _save_detailed_report_to_file(
+        self, results: BulkOperationResults, output_file: Path
+    ) -> None:
         """Save detailed report to a file.
 
         Args:

@@ -1,7 +1,7 @@
 """Cache status command for awsideman."""
 
 import json
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 
@@ -15,7 +15,7 @@ from ..common import (
 from .helpers import console, get_cache_manager
 
 
-def _display_backend_configuration(cache_manager, actual_config=None) -> None:
+def _display_backend_configuration(cache_manager: Any, actual_config: Any = None) -> None:
     """Display backend configuration information."""
     try:
         # If we have actual configuration, use it for display
@@ -70,7 +70,7 @@ def _display_backend_configuration(cache_manager, actual_config=None) -> None:
         console.print(f"[yellow]Backend Config:[/yellow] Unable to retrieve ({e})")
 
 
-def _display_encryption_status(cache_manager) -> None:
+def _display_encryption_status(cache_manager: Any) -> None:
     """Display encryption status and key information."""
     try:
         # Check encryption status directly from backend
@@ -123,7 +123,7 @@ def _display_encryption_status(cache_manager) -> None:
         console.print(f"[yellow]Encryption:[/yellow] Unable to retrieve ({e})")
 
 
-def _display_cache_statistics(stats: dict, cache_manager=None) -> None:
+def _display_cache_statistics(stats: dict, cache_manager: Any = None) -> None:
     """Display cache statistics."""
     try:
         # Display backend-specific statistics and health status
@@ -185,7 +185,7 @@ def _display_cache_statistics(stats: dict, cache_manager=None) -> None:
         console.print(f"[yellow]Cache Statistics:[/yellow] Unable to retrieve ({e})")
 
 
-def _display_backend_statistics(cache_manager) -> None:
+def _display_backend_statistics(cache_manager: Any) -> None:
     """Display backend-specific statistics and health status."""
     try:
         backend = cache_manager.get_backend()
@@ -205,7 +205,7 @@ def _display_backend_statistics(cache_manager) -> None:
         console.print(f"[yellow]Backend Statistics:[/yellow] Unable to retrieve ({e})")
 
 
-def _display_backend_health(backend) -> None:
+def _display_backend_health(backend: Any) -> None:
     """Display backend health status."""
     try:
         if hasattr(backend, "health_check"):
@@ -233,7 +233,7 @@ def _display_backend_health(backend) -> None:
         console.print(f"[yellow]Backend Health:[/yellow] Unable to check ({e})")
 
 
-def _display_recent_cache_entries(cache_manager) -> None:
+def _display_recent_cache_entries(cache_manager: Any) -> None:
     """Display recent storage entries with expiration times."""
     try:
         console.print("\n[bold blue]Recent Storage Entries[/bold blue]")
@@ -288,7 +288,7 @@ def cache_status(
     region: Optional[str] = region_option(),
     no_cache: bool = advanced_cache_option(),
     verbose: bool = verbose_option(),
-):
+) -> None:
     """Display internal data storage status and statistics.
 
     Shows information about the current data storage including:

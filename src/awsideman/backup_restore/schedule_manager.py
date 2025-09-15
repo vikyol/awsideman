@@ -131,7 +131,7 @@ class ScheduleInfo:
             logger.error(f"Failed to calculate next run for schedule {self.schedule_id}: {e}")
             self.next_run = None
 
-    def update_after_run(self, result: BackupResult):
+    def update_after_run(self, result: BackupResult) -> None:
         """Update schedule info after a backup run."""
         self.last_run = datetime.now()
         self.last_result = result
@@ -358,7 +358,7 @@ class ScheduleManager(ScheduleManagerInterface):
                 else:
                     break
 
-    def _validate_schedule_config(self, config: ScheduleConfig):
+    def _validate_schedule_config(self, config: ScheduleConfig) -> None:
         """Validate schedule configuration."""
         if not config.name:
             raise ValueError("Schedule name is required")
@@ -380,7 +380,9 @@ class ScheduleManager(ScheduleManagerInterface):
         if config.retention_policy.keep_daily < 0:
             raise ValueError("Retention policy values must be non-negative")
 
-    async def _send_backup_notification(self, schedule_info: ScheduleInfo, result: BackupResult):
+    async def _send_backup_notification(
+        self, schedule_info: ScheduleInfo, result: BackupResult
+    ) -> None:
         """Send notification about backup result."""
         if not schedule_info.config.notification_settings.enabled:
             return
@@ -418,7 +420,7 @@ class ScheduleManager(ScheduleManagerInterface):
 
     async def _send_email_notification(
         self, email_addresses: List[str], message: str, result: BackupResult
-    ):
+    ) -> None:
         """Send email notification about backup result."""
         # This is a simplified implementation
         # In a real implementation, you would integrate with the existing notification system
@@ -426,7 +428,7 @@ class ScheduleManager(ScheduleManagerInterface):
 
     async def _send_webhook_notifications(
         self, webhook_urls: List[str], message: str, result: BackupResult
-    ):
+    ) -> None:
         """Send webhook notifications about backup result."""
         import aiohttp
 

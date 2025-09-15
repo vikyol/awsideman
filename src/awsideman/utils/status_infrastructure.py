@@ -94,7 +94,7 @@ class BaseStatusChecker(ABC):
     error handling, retry logic, and result standardization.
     """
 
-    def __init__(self, idc_client, config: Optional[StatusCheckConfig] = None):
+    def __init__(self, idc_client: Any, config: Optional[StatusCheckConfig] = None):
         """
         Initialize the status checker.
 
@@ -242,7 +242,7 @@ class StatusOrchestrator:
     a comprehensive status report.
     """
 
-    def __init__(self, idc_client, config: Optional[StatusCheckConfig] = None):
+    def __init__(self, idc_client: Any, config: Optional[StatusCheckConfig] = None):
         """
         Initialize the status orchestrator.
 
@@ -372,12 +372,17 @@ class StatusOrchestrator:
         return await checker.check_status_with_retry()
 
     async def _run_parallel_checks(
-        self, health_status, provisioning_status, orphaned_status, sync_status, summary_stats
+        self,
+        health_status: Any,
+        provisioning_status: Any,
+        orphaned_status: Any,
+        sync_status: Any,
+        summary_stats: Any,
     ) -> None:
         """Run status checks in parallel with concurrency limits."""
         semaphore = asyncio.Semaphore(self.config.max_concurrent_checks)
 
-        async def run_check(checker_name: str, result_container: List):
+        async def run_check(checker_name: str, result_container: List) -> None:
             async with semaphore:
                 checker = self.get_checker(checker_name)
                 if checker:
@@ -409,7 +414,12 @@ class StatusOrchestrator:
         )
 
     async def _run_sequential_checks(
-        self, health_status, provisioning_status, orphaned_status, sync_status, summary_stats
+        self,
+        health_status: Any,
+        provisioning_status: Any,
+        orphaned_status: Any,
+        sync_status: Any,
+        summary_stats: Any,
     ) -> None:
         """Run status checks sequentially."""
         # Run each check type sequentially
@@ -433,11 +443,11 @@ class StatusOrchestrator:
     def _update_status_from_results(
         self,
         results: Dict,
-        health_status,
-        provisioning_status,
-        orphaned_status,
-        sync_status,
-        summary_stats,
+        health_status: Any,
+        provisioning_status: Any,
+        orphaned_status: Any,
+        sync_status: Any,
+        summary_stats: Any,
     ) -> None:
         """Update status objects from parallel check results."""
         # This method would contain specific logic to update each status object

@@ -151,7 +151,7 @@ class PerformanceOptimizer:
         }
 
     def apply_optimizations(
-        self, processor, account_count: int, operation_type: str = "assign"
+        self, processor: Any, account_count: int, operation_type: str = "assign"
     ) -> None:
         """
         Apply performance optimizations to a batch processor.
@@ -266,8 +266,8 @@ class ParallelAccountProcessor:
 
 
 def create_performance_optimized_processor(
-    aws_client_manager, account_count: int, operation_type: str = "assign"
-):
+    aws_client_manager: Any, account_count: int, operation_type: str = "assign"
+) -> Any:
     """
     Factory function to create a performance-optimized batch processor.
 
@@ -296,7 +296,9 @@ def create_performance_optimized_processor(
     return processor, config
 
 
-def display_performance_recommendations(account_count: int, current_time: Optional[float] = None):
+def display_performance_recommendations(
+    account_count: int, current_time: Optional[float] = None
+) -> None:
     """
     Display performance recommendations for multi-account operations.
 

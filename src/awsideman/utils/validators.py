@@ -344,5 +344,39 @@ def validate_sso_instance(profile_data: dict, profile_name: str = None) -> tuple
     console.print(
         "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance."
     )
-    console.print("You can find available SSO instances with 'awsideman sso list'.")
+    console.print("Alternatively, use 'awsideman config auto' for automatic configuration.")
+    raise typer.Exit(1)
+
+
+def validate_sso_instance_no_auto(profile_data: dict, profile_name: str = None) -> tuple[str, str]:
+    """
+    Validate the SSO instance configuration and return instance ARN and identity store ID.
+
+    This function checks if the specified profile has an SSO instance configured.
+    Unlike validate_sso_instance, this function does NOT attempt auto-detection.
+
+    Args:
+        profile_data: Profile data dictionary containing configuration
+        profile_name: Profile name for error messages (optional)
+
+    Returns:
+        Tuple of (instance_arn, identity_store_id)
+
+    Raises:
+        typer.Exit: If SSO instance validation fails with a clear error message and guidance
+    """
+    # Get the SSO instance ARN and identity store ID from the profile data
+    instance_arn = profile_data.get("sso_instance_arn")
+    identity_store_id = profile_data.get("identity_store_id")
+
+    # If both are configured, return them immediately
+    if instance_arn and identity_store_id:
+        return instance_arn, identity_store_id
+
+    # If not configured, show manual configuration message
+    console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+    console.print(
+        "Use 'awsideman sso set <instance_arn> <identity_store_id>' to configure an SSO instance."
+    )
+    console.print("Alternatively, use 'awsideman config auto' for automatic configuration.")
     raise typer.Exit(1)

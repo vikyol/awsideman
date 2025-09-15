@@ -65,7 +65,7 @@ def _list_groups_internal(
         identity_store = aws_client.get_identity_store_client()
 
         # Prepare the list_groups API call parameters
-        list_groups_params = {"IdentityStoreId": identity_store_id}
+        list_groups_params: Dict[str, Any] = {"IdentityStoreId": identity_store_id}
 
         # Add optional parameters if provided
         if filter:
@@ -208,7 +208,7 @@ def list_groups(
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """List all groups in the Identity Store.
 
     Displays a table of groups with their IDs, names, and descriptions.
@@ -220,6 +220,4 @@ def list_groups(
     # Show cache information if verbose
     show_cache_info(verbose)
 
-    return _list_groups_internal(
-        filter, limit, next_token, profile, region, enable_caching, verbose
-    )
+    _list_groups_internal(filter, limit, next_token, profile, region, enable_caching, verbose)

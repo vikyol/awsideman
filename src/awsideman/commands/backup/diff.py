@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Dict, Optional
 
 import typer
 from botocore.exceptions import NoCredentialsError, TokenRetrievalError
@@ -52,7 +52,7 @@ def diff_backups(
         help="Storage path (directory for filesystem, bucket/prefix for s3)",
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Compare two backups and show differences."""
     try:
         # Validate profile and get configuration
@@ -219,7 +219,12 @@ def display_diff_results(diff_result):
 
 def create_name_mappings(diff_result):
     """Create mappings from IDs to names for better display."""
-    mappings = {"users": {}, "groups": {}, "permission_sets": {}, "accounts": {}}
+    mappings: Dict[str, Dict[str, str]] = {
+        "users": {},
+        "groups": {},
+        "permission_sets": {},
+        "accounts": {},
+    }
 
     # Extract user mappings from changes
     for change in (

@@ -36,7 +36,7 @@ class StatusOrchestrator:
     and graceful degradation.
     """
 
-    def __init__(self, idc_client, config: Optional[StatusCheckConfig] = None):
+    def __init__(self, idc_client: Any, config: Optional[StatusCheckConfig] = None):
         """
         Initialize the status orchestrator.
 
@@ -73,7 +73,7 @@ class StatusOrchestrator:
         """Set progress callback for orphaned assignment detector."""
         self.orphaned_detector._progress_callback = callback
 
-    def enable_quick_scan(self, max_orphaned_to_find: int = 5):
+    def enable_quick_scan(self, max_orphaned_to_find: int = 5) -> None:
         """Enable quick scan mode for orphaned assignment detection."""
         self.orphaned_detector._quick_scan = True
         self.orphaned_detector._max_orphaned_to_find = max_orphaned_to_find

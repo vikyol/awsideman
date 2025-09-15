@@ -78,7 +78,7 @@ class NotificationSystem:
 
     async def send_alert(
         self, status_report: StatusReport, threshold_level: ThresholdLevel, message: str
-    ):
+    ) -> None:
         """Send alert notifications based on configuration."""
         if not self.monitoring_config.enabled:
             return
@@ -180,7 +180,7 @@ class NotificationSystem:
             },
         }
 
-    async def _send_email_notification(self, notification_data: Dict[str, Any]):
+    async def _send_email_notification(self, notification_data: Dict[str, Any]) -> None:
         """Send email notification."""
         try:
             email_config = self.monitoring_config.email_notifications
@@ -219,7 +219,9 @@ class NotificationSystem:
             logger.error(f"Failed to send email notification: {e}")
             raise EmailNotificationError(f"Email notification failed: {e}")
 
-    async def _send_email_smtp(self, email_config: EmailNotificationConfig, msg: MIMEMultipart):
+    async def _send_email_smtp(
+        self, email_config: EmailNotificationConfig, msg: MIMEMultipart
+    ) -> None:
         """Send email using SMTP."""
 
         def send_email():
@@ -316,7 +318,7 @@ class NotificationSystem:
 
         return html_body
 
-    async def _send_webhook_notification(self, notification_data: Dict[str, Any]):
+    async def _send_webhook_notification(self, notification_data: Dict[str, Any]) -> None:
         """Send webhook notification."""
         try:
             webhook_config = self.monitoring_config.webhook_notifications
@@ -357,7 +359,7 @@ class NotificationSystem:
 
     async def _send_webhook_with_retry(
         self, webhook_config: WebhookNotificationConfig, payload: Dict[str, Any]
-    ):
+    ) -> None:
         """Send webhook with retry logic."""
         last_exception = None
 
@@ -393,7 +395,7 @@ class NotificationSystem:
         if last_exception:
             raise last_exception
 
-    async def _send_log_notification(self, notification_data: Dict[str, Any]):
+    async def _send_log_notification(self, notification_data: Dict[str, Any]) -> None:
         """Send log notification."""
         try:
             log_config = self.monitoring_config.log_notifications

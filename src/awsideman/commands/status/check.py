@@ -1,7 +1,7 @@
 """Status check command implementation."""
 
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -58,7 +58,7 @@ def check_status(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-):
+) -> None:
     """Check AWS Identity Center status and health.
 
     Performs comprehensive status monitoring including:
@@ -106,7 +106,7 @@ def check_status(
         # Create status check configuration optimized for large organizations
         # Use more conservative settings to avoid rate limiting
         status_config = StatusCheckConfig(
-            timeout_seconds=timeout,
+            timeout_seconds=timeout or 30,
             enable_parallel_checks=parallel,
             max_concurrent_checks=2 if parallel else 1,  # Reduced concurrency
             retry_attempts=3,
@@ -130,7 +130,7 @@ def check_status(
             # Use live progress display for orphaned assignment detection
             progress_text = Text("Detecting orphaned assignments...", style="blue")
 
-            def update_progress(message: str):
+            def update_progress(message: str) -> None:
                 """Update the progress display with new message."""
                 progress_text.plain = message
 
@@ -179,10 +179,11 @@ def check_status(
         raise typer.Exit(1)
 
 
-def _display_comprehensive_status_report(status_report, output_fmt: OutputFormat) -> None:
+def _display_comprehensive_status_report(status_report: Any, output_fmt: OutputFormat) -> None:
     """Display comprehensive status report in the specified format."""
     try:
         # Select appropriate formatter
+        formatter: JSONFormatter | CSVFormatter | TableFormatter
         if output_fmt == OutputFormat.JSON:
             formatter = JSONFormatter()
         elif output_fmt == OutputFormat.CSV:
@@ -208,7 +209,7 @@ def _display_comprehensive_status_report(status_report, output_fmt: OutputFormat
         raise typer.Exit(1)
 
 
-def _display_specific_status_result(result, output_fmt: OutputFormat, check_type: str) -> None:
+def _display_specific_status_result(result: Any, output_fmt: OutputFormat, check_type: str) -> None:
     """Display specific status check result."""
     if output_fmt == OutputFormat.JSON:
         # Convert result to JSON
@@ -238,7 +239,7 @@ def _display_specific_status_result(result, output_fmt: OutputFormat, check_type
         _display_specific_status_table(result, check_type)
 
 
-def _display_specific_status_table(result, check_type: str) -> None:
+def _display_specific_status_table(result: Any, check_type: str) -> None:
     """Display specific status result as a table."""
     # Create status indicator
     status_indicators = {

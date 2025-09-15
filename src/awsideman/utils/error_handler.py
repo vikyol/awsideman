@@ -625,7 +625,7 @@ def get_error_handler() -> StatusErrorHandler:
 
 
 def handle_status_error(
-    exception: Exception, component: str, operation: str, **context_kwargs
+    exception: Exception, component: str, operation: str, **context_kwargs: Any
 ) -> StatusError:
     """
     Convenience function to handle errors with minimal setup.
@@ -711,7 +711,7 @@ def handle_network_error(exception: Exception, operation: str = "NetworkOperatio
     logger.error(f"Network Error in {operation}: {status_error.get_technical_details()}")
 
 
-def with_retry(max_retries: int = 3, delay: float = 1.0, backoff: float = 2.0):
+def with_retry(max_retries: int = 3, delay: float = 1.0, backoff: float = 2.0) -> Callable:
     """
     Decorator for retrying operations with exponential backoff.
 

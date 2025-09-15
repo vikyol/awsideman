@@ -149,7 +149,7 @@ class OperationState:
     completed: bool = False
     success: bool = False
 
-    def add_checkpoint(self, name: str, data: Dict[str, Any]):
+    def add_checkpoint(self, name: str, data: Dict[str, Any]) -> None:
         """Add a checkpoint for rollback purposes."""
         checkpoint = {"name": name, "timestamp": datetime.now(), "data": data}
         self.checkpoints.append(checkpoint)
@@ -161,7 +161,7 @@ class OperationState:
         action: str,
         old_value: Any = None,
         new_value: Any = None,
-    ):
+    ) -> None:
         """Record a change that was applied."""
         change = {
             "timestamp": datetime.now(),
@@ -173,7 +173,7 @@ class OperationState:
         }
         self.applied_changes.append(change)
 
-    def add_rollback_action(self, action: Callable):
+    def add_rollback_action(self, action: Callable) -> None:
         """Add a rollback action to be executed if needed."""
         self.rollback_actions.append(action)
 
@@ -213,7 +213,7 @@ class ErrorAnalyzer:
 
         return error_info
 
-    def _analyze_client_error(self, error_info: ErrorInfo, exception: ClientError):
+    def _analyze_client_error(self, error_info: ErrorInfo, exception: ClientError) -> None:
         """Analyze AWS ClientError exceptions."""
         error_code = exception.response.get("Error", {}).get("Code", "")
         error_message = exception.response.get("Error", {}).get("Message", "")
@@ -250,7 +250,7 @@ class ErrorAnalyzer:
             error_info.category = ErrorCategory.UNKNOWN
             error_info.severity = ErrorSeverity.MEDIUM
 
-    def _analyze_botocore_error(self, error_info: ErrorInfo, exception: BotoCoreError):
+    def _analyze_botocore_error(self, error_info: ErrorInfo, exception: BotoCoreError) -> None:
         """Analyze BotoCoreError exceptions."""
         if "timeout" in str(exception).lower():
             error_info.category = ErrorCategory.NETWORK
@@ -264,7 +264,7 @@ class ErrorAnalyzer:
             error_info.category = ErrorCategory.UNKNOWN
             error_info.severity = ErrorSeverity.MEDIUM
 
-    def _analyze_generic_error(self, error_info: ErrorInfo, exception: Exception):
+    def _analyze_generic_error(self, error_info: ErrorInfo, exception: Exception) -> None:
         """Analyze generic exceptions."""
         exception_type = type(exception).__name__
 
@@ -284,7 +284,7 @@ class ErrorAnalyzer:
             error_info.category = ErrorCategory.UNKNOWN
             error_info.severity = ErrorSeverity.MEDIUM
 
-    def _add_remediation_suggestions(self, error_info: ErrorInfo):
+    def _add_remediation_suggestions(self, error_info: ErrorInfo) -> None:
         """Add remediation suggestions based on error analysis."""
         if error_info.category == ErrorCategory.RATE_LIMITING:
             error_info.suggested_actions = [
@@ -387,7 +387,7 @@ class RetryHandler:
         self.error_analyzer = ErrorAnalyzer()
 
     async def execute_with_retry(
-        self, operation: Callable, *args, context: Dict[str, Any] = None, **kwargs
+        self, operation: Callable, *args: Any, context: Dict[str, Any] = None, **kwargs: Any
     ) -> Any:
         """
         Execute an operation with retry logic.

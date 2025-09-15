@@ -1,7 +1,7 @@
 """Shared utilities for group management commands."""
 
 import sys
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import typer
 from botocore.exceptions import ClientError
@@ -258,7 +258,7 @@ def validate_non_empty(value: str, field_name: str) -> bool:
     return True
 
 
-def _find_user_id(identity_store_client, identity_store_id: str, user_identifier: str) -> str:
+def _find_user_id(identity_store_client: Any, identity_store_id: str, user_identifier: str) -> str:
     """
     Find a user ID by username, email, or user ID.
 
@@ -340,7 +340,11 @@ def _find_user_id(identity_store_client, identity_store_id: str, user_identifier
                     f"[yellow]Warning: Multiple users found matching '{user_identifier}'. Using the first match.[/yellow]"
                 )
 
-            return users[0].get("UserId")
+            user_id = users[0].get("UserId")
+            if user_id is None:
+                console.print("[red]Error: User ID not found in user data.[/red]")
+                raise typer.Exit(1)
+            return user_id
 
         except ClientError as e:
             console.print(

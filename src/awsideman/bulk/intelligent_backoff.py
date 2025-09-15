@@ -58,7 +58,7 @@ class BackoffContext:
     last_success_time: Optional[float] = None
     error_history: List[str] = field(default_factory=list)
 
-    def add_error(self, error_type: str):
+    def add_error(self, error_type: str) -> None:
         """Add an error to the history."""
         self.error_history.append(error_type)
         # Keep only last 10 errors for memory efficiency
@@ -522,17 +522,17 @@ class ServiceRateLimitTracker:
 
         return self.service_limits[service_type].can_make_request()
 
-    def record_request(self, service_type: ServiceType):
+    def record_request(self, service_type: ServiceType) -> None:
         """Record a request being made for the given service."""
         if service_type in self.service_limits:
             self.service_limits[service_type].record_request()
 
-    def record_throttle(self, service_type: ServiceType):
+    def record_throttle(self, service_type: ServiceType) -> None:
         """Record a throttling event for the given service."""
         if service_type in self.service_limits:
             self.service_limits[service_type].record_throttle()
 
-    def record_success(self, service_type: ServiceType):
+    def record_success(self, service_type: ServiceType) -> None:
         """Record a successful request for the given service."""
         if service_type in self.service_limits:
             self.service_limits[service_type].record_success()
@@ -756,8 +756,8 @@ class IntelligentBackoffManager:
         context_key: str,
         service_type: ServiceType,
         max_retries: int = 3,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> Any:
         """Execute a function with intelligent backoff and retry logic.
 
@@ -1012,7 +1012,7 @@ class IntelligentBackoffManager:
             "avg_consecutive_failures": total_consecutive_failures / max(1, total_contexts),
         }
 
-    def reset_context(self, context_key: str):
+    def reset_context(self, context_key: str) -> None:
         """Reset a specific context."""
         if context_key in self.contexts:
             del self.contexts[context_key]

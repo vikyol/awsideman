@@ -38,7 +38,7 @@ def clone_permission_set(
         False, "--dry-run", help="Show what would be done without making changes"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """Clone a permission set with all its policies and settings."""
     try:
         # Get configuration

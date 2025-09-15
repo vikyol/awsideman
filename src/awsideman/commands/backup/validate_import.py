@@ -14,7 +14,7 @@ def validate_import_data(
         "auto", "--format", "-f", help="Import format: auto, json, yaml, csv"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Validate import data format and structure.
 
     Validates the format and structure of backup data before import to

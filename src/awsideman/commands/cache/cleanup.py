@@ -17,7 +17,7 @@ def cleanup_expired(
     no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
     force: bool = typer.Option(False, "--force", "-f", help="Force cleanup without confirmation"),
-):
+) -> None:
     """Clean up expired cache files from the filesystem.
 
     This command removes expired cache files to free up disk space and improve
@@ -120,7 +120,7 @@ def cleanup_all(
     no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
     force: bool = typer.Option(False, "--force", "-f", help="Force cleanup without confirmation"),
-):
+) -> None:
     """Clean up all cache files (both expired and valid).
 
     WARNING: This will remove ALL cache files, including valid ones.

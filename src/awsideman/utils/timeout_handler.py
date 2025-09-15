@@ -95,8 +95,8 @@ class TimeoutHandler:
         operation_name: str,
         timeout_seconds: Optional[float] = None,
         context: Optional[Dict[str, Any]] = None,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> TimeoutResult:
         """
         Execute an async operation with comprehensive timeout handling.
@@ -204,8 +204,8 @@ class TimeoutHandler:
         operation_name: str,
         timeout_seconds: Optional[float] = None,
         context: Optional[Dict[str, Any]] = None,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> TimeoutResult:
         """
         Execute a synchronous operation with timeout handling.
@@ -299,8 +299,8 @@ class TimeoutHandler:
         operation: Callable[..., Awaitable[Any]],
         operation_id: str,
         timeout_seconds: float,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> TimeoutResult:
         """Execute operation with fail-fast timeout strategy."""
         try:
@@ -350,8 +350,8 @@ class TimeoutHandler:
         operation: Callable[..., Awaitable[Any]],
         operation_id: str,
         timeout_seconds: float,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> TimeoutResult:
         """Execute operation with retry and backoff strategy."""
         last_error = None
@@ -451,7 +451,12 @@ class TimeoutHandler:
         )
 
     async def _execute_with_degradation(
-        self, operation: Callable, operation_id: str, timeout_seconds: float, *args, **kwargs
+        self,
+        operation: Callable,
+        operation_id: str,
+        timeout_seconds: float,
+        *args: Any,
+        **kwargs: Any,
     ) -> TimeoutResult:
         """Execute operation with graceful degradation strategy."""
         # This strategy would need to be implemented based on the specific operation
@@ -461,7 +466,12 @@ class TimeoutHandler:
         )
 
     async def _execute_with_extension(
-        self, operation: Callable, operation_id: str, timeout_seconds: float, *args, **kwargs
+        self,
+        operation: Callable,
+        operation_id: str,
+        timeout_seconds: float,
+        *args: Any,
+        **kwargs: Any,
     ) -> TimeoutResult:
         """Execute operation with dynamic timeout extension strategy."""
         current_timeout = timeout_seconds
@@ -539,7 +549,12 @@ class TimeoutHandler:
         )
 
     def _execute_sync_with_signal_timeout(
-        self, operation: Callable, operation_name: str, timeout_seconds: float, *args, **kwargs
+        self,
+        operation: Callable,
+        operation_name: str,
+        timeout_seconds: float,
+        *args: Any,
+        **kwargs: Any,
     ) -> Any:
         """Execute synchronous operation with signal-based timeout."""
 
@@ -714,7 +729,7 @@ def with_timeout(
     timeout_seconds: Optional[float] = None,
     operation_name: Optional[str] = None,
     strategy: Optional[TimeoutStrategy] = None,
-):
+) -> Callable:
     """
     Decorator for adding timeout handling to async functions.
 
@@ -729,7 +744,7 @@ def with_timeout(
 
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[TimeoutResult]]:
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs) -> TimeoutResult:
+        async def wrapper(*args: Any, **kwargs: Any) -> TimeoutResult:
             handler = get_timeout_handler()
             op_name = operation_name or func.__name__
 

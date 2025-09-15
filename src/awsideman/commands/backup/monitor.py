@@ -11,7 +11,7 @@ console = Console()
 def monitor_backups(
     watch: bool = typer.Option(False, "--watch", "-w", help="Watch mode for real-time monitoring"),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Monitor backup operations and system health.
 
     Provides real-time monitoring of backup operations, system health,

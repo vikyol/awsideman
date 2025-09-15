@@ -33,7 +33,7 @@ Examples:
 """
 
 import json
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
@@ -304,7 +304,7 @@ def list_operations(
         False, "--copy-id", "-c", help="Copy operation ID to clipboard for easy use"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """List historical permission set operations with filtering options.
 
     Displays a list of recent operations that can be rolled back, including assignments
@@ -603,7 +603,7 @@ def apply_rollback(
         10, "--batch-size", help="Number of assignments to process in parallel (1-50, default: 10)"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Apply rollback for a specific operation.
 
     Rolls back a previously executed operation by performing the inverse actions.
@@ -1102,7 +1102,7 @@ def apply_rollback(
     console.print("\n[blue]Rollback operation completed![/blue]")
 
 
-def _create_operation_details_panel(operation) -> Panel:
+def _create_operation_details_panel(operation: Any) -> Panel:
     """Create a panel displaying operation details."""
     details_content = []
 
@@ -1298,7 +1298,7 @@ def _create_operation_details_panel(operation) -> Panel:
 def rollback_operation(
     operation_id: str = typer.Argument(..., help="Operation ID to rollback"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """Rollback a copy or clone operation by operation ID."""
     try:
         # Try to determine operation type and delegate to appropriate rollback handler
@@ -1377,7 +1377,7 @@ def rollback_operation(
 @app.command("status")
 def show_status(
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Show rollback system status and statistics.
 
     Displays information about the rollback system including operation history,

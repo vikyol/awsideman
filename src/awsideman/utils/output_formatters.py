@@ -33,7 +33,7 @@ class BaseFormatter:
     """Base class for all output formatters."""
 
     def __init__(self):
-        self.format_type = None
+        self.format_type: Optional[OutputFormat] = None
 
     def format(self, status_report: StatusReport) -> FormattedOutput:
         """Format a status report. Must be implemented by subclasses."""
@@ -73,6 +73,8 @@ class JSONFormatter(BaseFormatter):
                 "structure_version": "1.0",
             }
 
+            if self.format_type is None:
+                raise OutputFormatError("Format type not set")
             return FormattedOutput(format_type=self.format_type, content=content, metadata=metadata)
 
         except Exception as e:
@@ -338,6 +340,8 @@ class CSVFormatter(BaseFormatter):
                 "sections": self._get_csv_sections(status_report),
             }
 
+            if self.format_type is None:
+                raise OutputFormatError("Format type not set")
             return FormattedOutput(format_type=self.format_type, content=content, metadata=metadata)
 
         except Exception as e:
@@ -588,6 +592,8 @@ class TableFormatter(BaseFormatter):
                 "sections": self._get_table_sections(status_report),
             }
 
+            if self.format_type is None:
+                raise OutputFormatError("Format type not set")
             return FormattedOutput(format_type=self.format_type, content=content, metadata=metadata)
 
         except Exception as e:

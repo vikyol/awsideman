@@ -3,7 +3,7 @@
 import asyncio
 import json
 from dataclasses import asdict
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
@@ -274,10 +274,11 @@ def validate_aws_credentials(aws_client: AWSClientManager) -> None:
         raise typer.Exit(1)
 
 
-def display_comprehensive_status_report(status_report, output_fmt: OutputFormat) -> None:
+def display_comprehensive_status_report(status_report: Any, output_fmt: OutputFormat) -> None:
     """Display comprehensive status report in the specified format."""
     try:
         # Select appropriate formatter
+        formatter: JSONFormatter | CSVFormatter | TableFormatter
         if output_fmt == OutputFormat.JSON:
             formatter = JSONFormatter()
         elif output_fmt == OutputFormat.CSV:
@@ -303,7 +304,7 @@ def display_comprehensive_status_report(status_report, output_fmt: OutputFormat)
         raise typer.Exit(1)
 
 
-def display_specific_status_result(result, output_fmt: OutputFormat, check_type: str) -> None:
+def display_specific_status_result(result: Any, output_fmt: OutputFormat, check_type: str) -> None:
     """Display specific status check result."""
     if output_fmt == OutputFormat.JSON:
         # Convert result to JSON
@@ -330,7 +331,7 @@ def display_specific_status_result(result, output_fmt: OutputFormat, check_type:
         display_specific_status_table(result, check_type)
 
 
-def display_specific_status_table(result, check_type: str) -> None:
+def display_specific_status_table(result: Any, check_type: str) -> None:
     """Display specific status result as a table."""
     # Create status indicator
     status_indicators = {
@@ -372,7 +373,7 @@ def display_specific_status_table(result, check_type: str) -> None:
 
 
 def display_resource_inspection_result(
-    result, output_fmt: OutputFormat, resource_type: str, resource_id: str
+    result: Any, output_fmt: OutputFormat, resource_type: str, resource_id: str
 ) -> None:
     """Display resource inspection result."""
     if output_fmt == OutputFormat.JSON:
@@ -397,7 +398,7 @@ def display_resource_inspection_result(
         display_resource_inspection_table(result, resource_type, resource_id)
 
 
-def display_resource_inspection_table(result, resource_type: str, resource_id: str) -> None:
+def display_resource_inspection_table(result: Any, resource_type: str, resource_id: str) -> None:
     """Display resource inspection result as a table."""
     # Create status indicator
     status_indicators = {
@@ -441,7 +442,7 @@ def display_resource_inspection_table(result, resource_type: str, resource_id: s
     console.print(panel)
 
 
-def show_monitoring_config(monitoring_config: MonitoringConfig):
+def show_monitoring_config(monitoring_config: MonitoringConfig) -> None:
     """Display current monitoring configuration."""
     # Main status
     status_color = "green" if monitoring_config.enabled else "red"
@@ -525,7 +526,7 @@ def enable_monitoring(
     config_manager: MonitoringConfigManager,
     monitoring_config: MonitoringConfig,
     profile: Optional[str],
-):
+) -> None:
     """Enable monitoring with default or specified configuration."""
     if monitoring_config.enabled:
         console.print("[yellow]Monitoring is already enabled.[/yellow]")
@@ -557,7 +558,7 @@ def enable_monitoring(
 
 def disable_monitoring(
     config_manager: MonitoringConfigManager, monitoring_config: MonitoringConfig
-):
+) -> None:
     """Disable monitoring."""
     if not monitoring_config.enabled:
         console.print("[yellow]Monitoring is already disabled.[/yellow]")
@@ -576,7 +577,7 @@ def disable_monitoring(
     console.print("[green]✅ Monitoring disabled successfully.[/green]")
 
 
-def test_notifications(monitoring_config: MonitoringConfig):
+def test_notifications(monitoring_config: MonitoringConfig) -> None:
     """Test notification systems."""
     if not monitoring_config.enabled:
         console.print("[red]Error: Monitoring is disabled. Enable monitoring first.[/red]")
@@ -633,7 +634,7 @@ def test_notifications(monitoring_config: MonitoringConfig):
         console.print("\n[yellow]Some notification tests failed. Check logs for details.[/yellow]")
 
 
-def show_scheduler_status(monitoring_config: MonitoringConfig):
+def show_scheduler_status(monitoring_config: MonitoringConfig) -> None:
     """Show scheduler status."""
     if not monitoring_config.enabled:
         console.print("[red]Monitoring is disabled.[/red]")

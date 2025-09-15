@@ -94,7 +94,7 @@ class BulkOperationResults:
             return 0.0
         return (self.success_count / self.total_processed) * 100
 
-    def add_result(self, result: AssignmentResult):
+    def add_result(self, result: AssignmentResult) -> None:
         """Add a result to the appropriate category."""
         if result.status == "success":
             self.successful.append(result)
@@ -196,7 +196,7 @@ class RetryHandler:
         delay = self.base_delay * (2**attempt)
         return min(delay, self.max_delay)
 
-    async def execute_with_retry(self, func: Callable, *args, **kwargs) -> Any:
+    async def execute_with_retry(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
         """Execute a function with retry logic.
 
         Args:
@@ -246,7 +246,7 @@ class ProgressTracker:
         self.total_items: int = 0
         self.completed_items: int = 0
 
-    def start_progress(self, total: int, description: str = "Processing assignments"):
+    def start_progress(self, total: int, description: str = "Processing assignments") -> None:
         """Start progress tracking.
 
         Args:
@@ -271,7 +271,7 @@ class ProgressTracker:
         self.task_id = self.progress.add_task(description, total=total, eta="calculating...")
         self.start_time = time.time()
 
-    def update_progress(self, completed: int = 1, description: Optional[str] = None):
+    def update_progress(self, completed: int = 1, description: Optional[str] = None) -> None:
         """Update progress counter.
 
         Args:
@@ -286,7 +286,7 @@ class ProgressTracker:
             if description:
                 self.progress.update(self.task_id, description=description)
 
-    def set_progress(self, completed: int, description: Optional[str] = None):
+    def set_progress(self, completed: int, description: Optional[str] = None) -> None:
         """Set absolute progress value.
 
         Args:

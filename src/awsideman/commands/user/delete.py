@@ -25,7 +25,7 @@ def delete_user(
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """Delete a user from AWS Identity Center.
 
     Permanently removes a user from the Identity Store.
@@ -155,12 +155,6 @@ def delete_user(
 
         # Get the user details for confirmation
         username = current_user.get("UserName", "Unknown")
-        display_name = current_user.get("DisplayName", "Unknown")
-        email = (
-            current_user.get("Emails", [{}])[0].get("Value", "N/A")
-            if current_user.get("Emails")
-            else "N/A"
-        )
 
         # Format the user data for display (stored for potential future use)
         _ = format_user_for_display(current_user)
@@ -229,14 +223,6 @@ def delete_user(
             # Display success message with checkmark emoji
             console.print(f"[green]✓ User '{username}' deleted successfully.[/green]")
             console.print(f"[green]User ID: {user_id}[/green]")
-
-            return {
-                "UserId": user_id,
-                "UserName": username,
-                "DisplayName": display_name,
-                "Email": email,
-                "Status": "Deleted",
-            }
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")

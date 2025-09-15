@@ -25,7 +25,7 @@ console = Console()
 config = Config()
 
 # Rate limiting for permission set describe operations
-_last_permission_set_call = 0
+_last_permission_set_call: float = 0.0
 _permission_set_call_delay = 0.1  # 100ms delay between calls
 
 
@@ -49,7 +49,7 @@ def validate_profile(profile_name: Optional[str] = None) -> tuple[str, dict]:
     return profile_name, profiles[profile_name]
 
 
-def validate_sso_instance(profile_data: dict, profile_name: str = None) -> tuple[str, str]:
+def validate_sso_instance(profile_data: dict, profile_name: str | None = None) -> tuple[str, str]:
     """
     Validate the SSO instance configuration and return instance ARN and identity store ID.
 
@@ -174,7 +174,7 @@ def export_account(
         help="Filter accounts by scope: 'tag:env=dev' or 'tags:env=dev', 'ou:development', 'accounts:111111111111,222222222222'",
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Export all permissions for a specific account or all accounts.
 
     Use '*' as account_id to export permissions across all accounts in the organization.
@@ -256,7 +256,7 @@ def export_account(
                 console.print(f"[blue]Found {len(target_accounts)} accounts matching filter[/blue]")
 
                 # Get assignments for filtered accounts
-                assignments = []
+                assignments: List[Dict[str, Any]] = []
                 total_accounts = len(target_accounts)
                 for idx, account in enumerate(target_accounts, start=1):
                     account_id = account["Id"]
@@ -382,7 +382,7 @@ def export_principal(
         False, "--include-inactive", help="Include inactive assignments"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Export all permissions for a specific principal (user or group)."""
     try:
         # Validate profile and SSO instance
@@ -410,7 +410,7 @@ def export_principal(
         if account_id:
             # If account ID is specified, only check that account
             assignments = _get_principal_assignments_for_account(
-                sso_admin_client, instance_arn, principal_id, resolved_type, account_id
+                sso_admin_client, instance_arn, principal_id, resolved_type, str(account_id)
             )
 
             # For users, also get inherited assignments from group memberships for this account
@@ -435,7 +435,7 @@ def export_principal(
                 identitystore_client,
                 instance_arn,
                 identity_store_id,
-                principal_id,
+                str(principal_id),
                 resolved_type,
                 client_manager,
             )
@@ -547,7 +547,7 @@ def export_permission_set(
         False, "--include-inactive", help="Include inactive assignments"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Export all assignments for a specific permission set."""
     try:
         # Validate profile and SSO instance
@@ -632,10 +632,10 @@ def export_permission_set(
 
 
 def _get_account_assignments(
-    sso_admin_client, instance_arn: str, account_id: str
+    sso_admin_client: Any, instance_arn: str, account_id: str
 ) -> List[Dict[str, Any]]:
     """Get all assignments for a specific account."""
-    assignments = []
+    assignments: List[Dict[str, Any]] = []
 
     try:
         # First, get all permission sets in the instance
@@ -671,10 +671,10 @@ def _get_account_assignments(
 
 
 def _get_all_account_assignments(
-    sso_admin_client, instance_arn: str, client_manager: AWSClientManager
+    sso_admin_client: Any, instance_arn: str, client_manager: AWSClientManager
 ) -> List[Dict[str, Any]]:
     """Get all assignments across all accounts."""
-    assignments = []
+    assignments: List[Dict[str, Any]] = []
 
     try:
         # Get all accounts first
@@ -743,10 +743,14 @@ def _get_all_account_assignments(
 
 
 def _get_principal_assignments_for_account(
-    sso_admin_client, instance_arn: str, principal_id: str, principal_type: str, account_id: str
+    sso_admin_client: Any,
+    instance_arn: str,
+    principal_id: str,
+    principal_type: str,
+    account_id: str,
 ) -> List[Dict[str, Any]]:
     """Get all assignments for a specific principal in a specific account."""
-    assignments = []
+    assignments: List[Dict[str, Any]] = []
 
     try:
         # Get all permission sets first
@@ -783,14 +787,14 @@ def _get_principal_assignments_for_account(
 
 
 def _get_principal_assignments(
-    sso_admin_client,
+    sso_admin_client: Any,
     instance_arn: str,
     principal_id: str,
     principal_type: str,
     client_manager: AWSClientManager,
 ) -> List[Dict[str, Any]]:
     """Get all assignments for a specific principal across all accounts."""
-    assignments = []
+    assignments: List[Dict[str, Any]] = []
 
     # Get all accounts first
     try:
@@ -847,10 +851,10 @@ def _get_principal_assignments(
 
 
 def _get_permission_set_assignments_for_account(
-    sso_admin_client, instance_arn: str, permission_set_arn: str, account_id: str
+    sso_admin_client: Any, instance_arn: str, permission_set_arn: str, account_id: str
 ) -> List[Dict[str, Any]]:
     """Get all assignments for a specific permission set in a specific account."""
-    assignments = []
+    assignments: List[Dict[str, Any]] = []
 
     try:
         response = sso_admin_client.list_account_assignments(
@@ -866,10 +870,13 @@ def _get_permission_set_assignments_for_account(
 
 
 def _get_permission_set_assignments(
-    sso_admin_client, instance_arn: str, permission_set_arn: str, client_manager: AWSClientManager
+    sso_admin_client: Any,
+    instance_arn: str,
+    permission_set_arn: str,
+    client_manager: AWSClientManager,
 ) -> List[Dict[str, Any]]:
     """Get all assignments for a specific permission set across all accounts."""
-    assignments = []
+    assignments: List[Dict[str, Any]] = []
 
     # Get all accounts first
     try:
@@ -907,7 +914,10 @@ def _get_permission_set_assignments(
 
 
 def _resolve_principal(
-    identitystore_client, identity_store_id: str, principal_name: str, principal_type: Optional[str]
+    identitystore_client: Any,
+    identity_store_id: str,
+    principal_name: str,
+    principal_type: Optional[str],
 ) -> tuple[Optional[str], Optional[str]]:
     """Resolve principal name to ID and determine type."""
     # Try to find as user first
@@ -938,7 +948,7 @@ def _resolve_principal(
 
 
 def _resolve_permission_set(
-    sso_admin_client, instance_arn: str, permission_set_name: str
+    sso_admin_client: Any, instance_arn: str, permission_set_name: str
 ) -> Optional[str]:
     """Resolve permission set name to ARN."""
     try:
@@ -949,7 +959,7 @@ def _resolve_permission_set(
                     InstanceArn=instance_arn, PermissionSetArn=ps_arn
                 )
                 if response["PermissionSet"]["Name"] == permission_set_name:
-                    return ps_arn
+                    return str(ps_arn)
     except Exception:
         pass
 
@@ -957,7 +967,7 @@ def _resolve_permission_set(
 
 
 def _get_user_group_memberships(
-    identitystore_client, identity_store_id: str, user_id: str
+    identitystore_client: Any, identity_store_id: str, user_id: str
 ) -> List[Dict[str, Any]]:
     """Get all groups that a user is a member of."""
     groups = []
@@ -997,8 +1007,8 @@ def _get_user_group_memberships(
 
 
 def _get_user_inherited_assignments(
-    sso_admin_client,
-    identitystore_client,
+    sso_admin_client: Any,
+    identitystore_client: Any,
     instance_arn: str,
     identity_store_id: str,
     user_id: str,
@@ -1073,8 +1083,8 @@ def _resolve_account_names(
 
 
 def _enrich_assignment(
-    sso_admin_client,
-    identitystore_client,
+    sso_admin_client: Any,
+    identitystore_client: Any,
     instance_arn: str,
     identity_store_id: str,
     assignment: Dict[str, Any],
@@ -1139,7 +1149,7 @@ def _enrich_assignment(
         return None
 
 
-def _output_json(data: Dict[str, Any], output_file: Optional[str]):
+def _output_json(data: Dict[str, Any], output_file: Optional[str]) -> None:
     """Output data as JSON."""
     json_str = json.dumps(data, indent=2, default=str)
 
@@ -1152,7 +1162,7 @@ def _output_json(data: Dict[str, Any], output_file: Optional[str]):
 
 def _output_csv(
     assignments: List[Dict[str, Any]], output_file: Optional[str], default_filename: str
-):
+) -> None:
     """Output assignments as CSV."""
     if not assignments:
         console.print("[yellow]No assignments to export[/yellow]")
@@ -1220,7 +1230,7 @@ def _output_csv(
     console.print(f"[green]CSV output written to: {filename}[/green]")
 
 
-def _output_table(assignments: List[Dict[str, Any]], title: str):
+def _output_table(assignments: List[Dict[str, Any]], title: str) -> None:
     """Output assignments as formatted table."""
     if not assignments:
         console.print("[yellow]No assignments found[/yellow]")
@@ -1277,8 +1287,8 @@ def _output_table(assignments: List[Dict[str, Any]], title: str):
 
 
 def _get_consolidated_principal_assignments(
-    sso_admin_client,
-    identitystore_client,
+    sso_admin_client: Any,
+    identitystore_client: Any,
     instance_arn: str,
     identity_store_id: str,
     principal_id: str,
@@ -1428,7 +1438,7 @@ def summarize_access(
         False, "--include-inactive", help="Include inactive assignments"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Summarize access patterns across accounts, OUs, or tags.
 
     Provides aggregated statistics about users, groups, and permission sets
@@ -1775,14 +1785,14 @@ def _get_accounts_by_ou(client_manager: AWSClientManager, ou_name: str) -> List[
         return []
 
 
-def _find_ou_by_name(org_client, parent_ou_id: str, ou_name: str) -> Optional[str]:
+def _find_ou_by_name(org_client: Any, parent_ou_id: str, ou_name: str) -> Optional[str]:
     """Recursively find OU by name."""
     try:
         ou_paginator = org_client.get_paginator("list_organizational_units_for_parent")
         for page in ou_paginator.paginate(ParentId=parent_ou_id):
             for ou in page.get("OrganizationalUnits", []):
                 if ou["Name"].lower() == ou_name.lower():
-                    return ou["Id"]
+                    return str(ou["Id"])
                 # Recursively search child OUs
                 child_result = _find_ou_by_name(org_client, ou["Id"], ou_name)
                 if child_result:
@@ -1792,7 +1802,7 @@ def _find_ou_by_name(org_client, parent_ou_id: str, ou_name: str) -> Optional[st
     return None
 
 
-def _get_accounts_recursively(org_client, ou_id: str) -> List[Dict[str, Any]]:
+def _get_accounts_recursively(org_client: Any, ou_id: str) -> List[Dict[str, Any]]:
     """Recursively get all accounts in an OU and its children."""
     accounts = []
 
@@ -1817,7 +1827,7 @@ def _calculate_summary_metrics(
     assignments: List[Dict[str, Any]], metric: str, scope: str
 ) -> Dict[str, Any]:
     """Calculate summary metrics from assignments."""
-    summary = {}
+    summary: Dict[str, Any] = {}
 
     if metric == "unique-users":
         # Count unique users

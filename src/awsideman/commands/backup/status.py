@@ -10,7 +10,7 @@ console = Console()
 
 def show_backup_status(
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Show backup system status.
 
     Displays the current status of the backup system including storage

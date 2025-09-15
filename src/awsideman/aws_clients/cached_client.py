@@ -351,7 +351,7 @@ class CachedOrganizationsClient:
             lambda: self._organizations_client.list_parents(child_id),
         )
 
-    def get_paginator(self, operation_name: str):
+    def get_paginator(self, operation_name: str) -> Any:
         """
         Get a paginator for the specified operation.
 

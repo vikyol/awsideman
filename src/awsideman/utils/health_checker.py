@@ -509,7 +509,7 @@ class HealthChecker(BaseStatusChecker):
             "message": "Identity Center is healthy and fully operational",
         }
 
-    def _create_health_error_result(self, error, timestamp: datetime) -> HealthStatus:
+    def _create_health_error_result(self, error: Any, timestamp: datetime) -> HealthStatus:
         """
         Create a health status result for error conditions.
 

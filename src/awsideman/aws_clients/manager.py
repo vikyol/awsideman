@@ -455,7 +455,7 @@ class OrganizationsClientWrapper:
             return {"Accounts": []}
 
     @with_retry(max_retries=3)
-    def describe_account(self, account_id: str, **kwargs) -> Dict[str, Any]:
+    def describe_account(self, account_id: str, **kwargs: Any) -> Dict[str, Any]:
         """
         Get detailed information about an account.
 

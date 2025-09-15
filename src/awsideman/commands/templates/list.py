@@ -17,7 +17,7 @@ def list_templates(
         False, "--verbose", "-v", help="Show detailed template information"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """List all available templates.
 
     Shows a list of all templates stored in the template directory with basic metadata.

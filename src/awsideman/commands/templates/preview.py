@@ -26,7 +26,7 @@ def preview_template(
         "table", "--format", "-f", help="Output format: table, json, or summary"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Preview what a template would do without executing it.
 
     Shows a detailed preview of what would happen if the template were applied,

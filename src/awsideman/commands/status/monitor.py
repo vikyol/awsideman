@@ -20,7 +20,7 @@ def monitor_config(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-):
+) -> None:
     """Configure and manage automated monitoring.
 
     Actions:
@@ -69,7 +69,7 @@ def monitor_config(
         raise typer.Exit(1)
 
 
-def _show_monitoring_config(monitoring_config: MonitoringConfig):
+def _show_monitoring_config(monitoring_config: MonitoringConfig) -> None:
     """Display current monitoring configuration."""
     # Main status
     status_color = "green" if monitoring_config.enabled else "red"
@@ -153,7 +153,7 @@ def _enable_monitoring(
     config_manager: MonitoringConfigManager,
     monitoring_config: MonitoringConfig,
     profile: Optional[str],
-):
+) -> None:
     """Enable monitoring with default or specified configuration."""
     if monitoring_config.enabled:
         console.print("[yellow]Monitoring is already enabled.[/yellow]")
@@ -185,7 +185,7 @@ def _enable_monitoring(
 
 def _disable_monitoring(
     config_manager: MonitoringConfigManager, monitoring_config: MonitoringConfig
-):
+) -> None:
     """Disable monitoring."""
     if not monitoring_config.enabled:
         console.print("[yellow]Monitoring is already disabled.[/yellow]")
@@ -204,7 +204,7 @@ def _disable_monitoring(
     console.print("[green]✅ Monitoring disabled successfully.[/green]")
 
 
-def _test_notifications(monitoring_config: MonitoringConfig):
+def _test_notifications(monitoring_config: MonitoringConfig) -> None:
     """Test notification systems."""
     if not monitoring_config.enabled:
         console.print("[red]Error: Monitoring is disabled. Enable monitoring first.[/red]")
@@ -261,7 +261,7 @@ def _test_notifications(monitoring_config: MonitoringConfig):
         console.print("\n[yellow]Some notification tests failed. Check logs for details.[/yellow]")
 
 
-def _show_scheduler_status(monitoring_config: MonitoringConfig):
+def _show_scheduler_status(monitoring_config: MonitoringConfig) -> None:
     """Show scheduler status."""
     if not monitoring_config.enabled:
         console.print("[red]Monitoring is disabled.[/red]")

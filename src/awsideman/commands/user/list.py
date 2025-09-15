@@ -1,7 +1,7 @@
 """List users command for awsideman."""
 
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import typer
 from rich.table import Table
@@ -32,7 +32,7 @@ def list_users(
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """List all users in the Identity Store.
 
     Displays a table of users with their IDs, usernames, emails, and names.
@@ -75,7 +75,7 @@ def list_users(
         identity_store = aws_client.get_identity_store_client()
 
         # Prepare the list_users API call parameters
-        list_users_params = {"IdentityStoreId": identity_store_id}
+        list_users_params: Dict[str, Any] = {"IdentityStoreId": identity_store_id}
 
         # Add optional parameters if provided
         if filter:
@@ -89,7 +89,7 @@ def list_users(
             ]
 
         if limit:
-            list_users_params["MaxResults"] = limit
+            list_users_params["MaxResults"] = int(limit)
 
         if next_token:
             list_users_params["NextToken"] = next_token
@@ -104,7 +104,7 @@ def list_users(
         # Display the results using a Rich table
         if not users:
             console.print("[yellow]No users found.[/yellow]")
-            return [], next_token
+            return
 
         # Display pagination status
         page_info = ""
@@ -181,8 +181,7 @@ def list_users(
             except KeyboardInterrupt:
                 console.print("\n[yellow]Pagination stopped by user.[/yellow]")
 
-        # Return the users and next token for further processing
-        return users, next_token
+        # Users have been displayed
 
     except ValueError as e:
         # Handle filter format errors

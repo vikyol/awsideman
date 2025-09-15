@@ -29,7 +29,7 @@ def create_template(
         None, "--output", "-o", help="Output file path (default: auto-generated)"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Create a new template file.
 
     Creates a new template file with the specified name and optional metadata.

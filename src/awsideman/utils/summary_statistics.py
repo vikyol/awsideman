@@ -471,7 +471,7 @@ class SummaryStatisticsCollector(BaseStatusChecker):
                 "SummaryStatisticsCollector",
             ) from e
 
-    async def _get_all_accounts(self, organizations_client) -> List[Dict[str, Any]]:
+    async def _get_all_accounts(self, organizations_client: Any) -> List[Dict[str, Any]]:
         """
         Get all accounts in the organization.
 
@@ -500,7 +500,7 @@ class SummaryStatisticsCollector(BaseStatusChecker):
             # Return empty list to continue with other statistics
             return []
 
-    async def _get_all_permission_sets(self, sso_admin_client, instance_arn: str) -> List[str]:
+    async def _get_all_permission_sets(self, sso_admin_client: Any, instance_arn: str) -> List[str]:
         """
         Get all permission set ARNs.
 

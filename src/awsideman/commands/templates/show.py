@@ -18,7 +18,7 @@ def show_template(
     template_name: str = typer.Argument(..., help="Name of the template to show"),
     format: str = typer.Option("yaml", "--format", "-f", help="Output format: yaml, json, or raw"),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Show the full contents of a template.
 
     Displays the complete template content including metadata, assignments, and all configuration.

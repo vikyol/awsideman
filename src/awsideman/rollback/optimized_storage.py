@@ -477,8 +477,12 @@ class MemoryOptimizedOperationStore:
         }
 
         if self.compression_enabled:
-            stats["operations_compression_ratio"] = self.operations_storage.get_compression_ratio()
-            stats["rollbacks_compression_ratio"] = self.rollbacks_storage.get_compression_ratio()
+            stats["operations_compression_ratio"] = int(
+                self.operations_storage.get_compression_ratio()
+            )
+            stats["rollbacks_compression_ratio"] = int(
+                self.rollbacks_storage.get_compression_ratio()
+            )
 
         # Calculate memory usage estimate
         index_memory = len(json.dumps(self._operation_index).encode("utf-8"))

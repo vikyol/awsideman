@@ -499,7 +499,7 @@ class ResourceResolver:
         self._account_name_to_id_cache.clear()
         self._account_id_to_name_cache.clear()
 
-    def invalidate_principal(self, principal_name: str, principal_type: str):
+    def invalidate_principal(self, principal_name: str, principal_type: str) -> None:
         """Invalidate a specific principal from cache.
 
         Args:
@@ -509,7 +509,7 @@ class ResourceResolver:
         cache_key = f"{principal_type}:{principal_name}"
         self._principal_cache.pop(cache_key, None)
 
-    def invalidate_permission_set(self, permission_set_name: str):
+    def invalidate_permission_set(self, permission_set_name: str) -> None:
         """Invalidate a specific permission set from cache.
 
         Args:
@@ -517,7 +517,7 @@ class ResourceResolver:
         """
         self._permission_set_cache.pop(permission_set_name, None)
 
-    def invalidate_account(self, account_name: str):
+    def invalidate_account(self, account_name: str) -> None:
         """Invalidate a specific account from cache.
 
         Args:
@@ -558,7 +558,7 @@ class ResourceResolver:
             "account_mappings_cached": stats["account_mappings"],
         }
 
-    def warm_cache_for_assignments(self, assignments: List[Dict[str, Any]]):
+    def warm_cache_for_assignments(self, assignments: List[Dict[str, Any]]) -> None:
         """Pre-warm caches for a list of assignments to optimize batch processing.
 
         Args:

@@ -61,7 +61,7 @@ def preview_restore(
         "table", "--format", "-f", help="Output format: table or json"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Preview restore changes without applying them.
 
     Shows what changes would be made during a restore operation without
@@ -133,6 +133,7 @@ def preview_restore(
             raise typer.Exit(1)
 
         # Initialize storage backend
+        storage_backend_obj: FileSystemStorageBackend | S3StorageBackend
         if storage_backend.lower() == "filesystem":
             storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
             storage_backend_obj = FileSystemStorageBackend(

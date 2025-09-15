@@ -55,7 +55,7 @@ def copy_assignments(
         False, "--dry-run", help="Show what would be done without making changes"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """Copy permission assignments from source entity to target entity."""
     try:
         # Initialize AWS client manager
@@ -65,8 +65,8 @@ def copy_assignments(
         copy_filters = None
         if account_filter or permission_set_filter:
             copy_filters = CopyFilters(
-                account_ids=account_filter.split(",") if account_filter else None,
-                permission_set_names=(
+                include_accounts=account_filter.split(",") if account_filter else None,
+                exclude_permission_sets=(
                     permission_set_filter.split(",") if permission_set_filter else None
                 ),
             )
@@ -193,7 +193,7 @@ def clone_permission_set(
         False, "--dry-run", help="Show what would be done without making changes"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """Clone a permission set with all its policies and settings."""
     try:
         # Initialize AWS client manager
@@ -307,7 +307,7 @@ def clone_permission_set(
 def rollback_assignment_copy(
     operation_id: str = typer.Option(..., "--operation-id", help="Operation ID to rollback"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """Rollback an assignment copy operation."""
     try:
         # Initialize AWS client manager and rollback processor
@@ -351,7 +351,7 @@ def rollback_assignment_copy(
 def rollback_permission_set_clone(
     operation_id: str = typer.Option(..., "--operation-id", help="Operation ID to rollback"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """Rollback a permission set clone operation."""
     try:
         # Initialize AWS client manager and rollback processor
@@ -397,7 +397,7 @@ def list_rollbackable_operations(
         None, "--days", help="Filter by operations within last N days"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """List operations that can be rolled back."""
     try:
         # Initialize AWS client manager and rollback processor

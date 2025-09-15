@@ -41,7 +41,7 @@ def add_profile(
     name: str = typer.Argument(...),
     region: str = typer.Option(..., "--region", "-r", help="AWS region"),
     set_default: bool = typer.Option(False, "--default", "-d", help="Set as default profile"),
-):
+) -> None:
     """Add a new AWS profile."""
     profiles = config.get("profiles", {})
 
@@ -69,7 +69,7 @@ def update_profile(
     name: str = typer.Argument(...),
     region: Optional[str] = typer.Option(None, "--region", "-r", help="AWS region"),
     set_default: bool = typer.Option(False, "--default", "-d", help="Set as default profile"),
-):
+) -> None:
     """Update an existing AWS profile."""
     profiles = config.get("profiles", {})
 
@@ -95,7 +95,7 @@ def update_profile(
 def remove_profile(
     name: str = typer.Argument(...),
     force: bool = typer.Option(False, "--force", "-f", help="Force removal without confirmation"),
-):
+) -> None:
     """Remove an AWS profile."""
     profiles = config.get("profiles", {})
 
@@ -127,7 +127,7 @@ def remove_profile(
 @app.command("set-default")
 def set_default_profile(
     name: str = typer.Argument(...),
-):
+) -> None:
     """Set the default AWS profile."""
     profiles = config.get("profiles", {})
 

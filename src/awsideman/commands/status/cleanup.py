@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -29,12 +29,12 @@ def _get_cache_file_path(profile_name: str) -> str:
     return os.path.join(cache_dir, f"{profile_name}_orphaned_assignments.json")
 
 
-def _save_detection_results(profile_name: str, result) -> str:
+def _save_detection_results(profile_name: str, result: Any) -> str:
     """Save detection results to cache file."""
     cache_file = _get_cache_file_path(profile_name)
 
     # Convert result to serializable format
-    cache_data = {
+    cache_data: Dict[str, Any] = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "profile": profile_name,
         "orphaned_assignments": [],
@@ -68,7 +68,7 @@ def _save_detection_results(profile_name: str, result) -> str:
     return cache_file
 
 
-def _load_detection_results(profile_name: str):
+def _load_detection_results(profile_name: str) -> Any:
     """Load detection results from cache file."""
     cache_file = _get_cache_file_path(profile_name)
 
@@ -108,7 +108,7 @@ def _load_detection_results(profile_name: str):
                 created_date=(
                     datetime.fromisoformat(assignment_data["created_date"].replace("Z", "+00:00"))
                     if assignment_data["created_date"]
-                    else None
+                    else datetime.now(timezone.utc)
                 ),
                 last_accessed=(
                     datetime.fromisoformat(assignment_data["last_accessed"].replace("Z", "+00:00"))
@@ -134,7 +134,7 @@ def _load_detection_results(profile_name: str):
         return None
 
 
-def _clear_cache(profile_name: str):
+def _clear_cache(profile_name: str) -> None:
     """Clear the cache file."""
     cache_file = _get_cache_file_path(profile_name)
     if os.path.exists(cache_file):
@@ -154,7 +154,7 @@ def cleanup_orphaned(
     no_cache: bool = typer.Option(
         False, "--no-cache", help="Force fresh detection, ignore cached results"
     ),
-):
+) -> None:
     """Clean up orphaned permission set assignments.
 
     Identifies and optionally removes permission set assignments for principals
@@ -208,7 +208,7 @@ def cleanup_orphaned(
             # Show progress indicator with live updates
             progress_text = Text("Detecting orphaned assignments...", style="blue")
 
-            def update_progress(message: str):
+            def update_progress(message: str) -> None:
                 """Update the progress display with new message."""
                 progress_text.plain = message
 
@@ -290,7 +290,9 @@ def cleanup_orphaned(
         ) as progress:
             task = progress.add_task("Cleaning up orphaned assignments...", total=orphaned_count)
 
-            def progress_callback(current: int, total: int, status: str, assignment_name: str):
+            def progress_callback(
+                current: int, total: int, status: str, assignment_name: str
+            ) -> None:
                 """Update progress bar with cleanup progress."""
                 if status == "success":
                     progress.update(

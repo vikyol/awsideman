@@ -211,7 +211,7 @@ class MultiAccountProgressTracker(ProgressTracker):
         operation_type: str = "assign",
         show_live_results: bool = True,
         batch_size: int = 10,
-    ):
+    ) -> None:
         """Start multi-account progress tracking.
 
         Args:
@@ -274,7 +274,7 @@ class MultiAccountProgressTracker(ProgressTracker):
         # Save initial progress
         self._save_progress_if_enabled()
 
-    def update_current_account(self, account_name: str, account_id: str):
+    def update_current_account(self, account_name: str, account_id: str) -> None:
         """Update the currently processing account.
 
         Args:
@@ -301,7 +301,7 @@ class MultiAccountProgressTracker(ProgressTracker):
         error: Optional[str] = None,
         processing_time: float = 0.0,
         retry_count: int = 0,
-    ):
+    ) -> None:
         """Record the result of processing an account.
 
         Args:
@@ -379,7 +379,7 @@ class MultiAccountProgressTracker(ProgressTracker):
 
         self.console.print(panel)
 
-    def display_final_summary(self, results: MultiAccountResults):
+    def display_final_summary(self, results: MultiAccountResults) -> None:
         """Display final summary of multi-account operation results.
 
         Args:
@@ -481,7 +481,7 @@ class MultiAccountProgressTracker(ProgressTracker):
         if self.enable_persistence and self.progress_persistence:
             self.progress_persistence.delete_progress(self.operation_id)
 
-    def _display_milestone_summary(self, completed_milestones: Dict[str, Any]):
+    def _display_milestone_summary(self, completed_milestones: Dict[str, Any]) -> None:
         """Display milestone completion summary.
 
         Args:
@@ -574,7 +574,7 @@ class MultiAccountProgressTracker(ProgressTracker):
         # Update live display
         self.live_display.update(self.results_table)
 
-    def _display_account_result(self, result: AccountResult):
+    def _display_account_result(self, result: AccountResult) -> None:
         """Display immediate result for a completed account.
 
         Args:
@@ -600,7 +600,7 @@ class MultiAccountProgressTracker(ProgressTracker):
 
         self.console.print(message, style=style)
 
-    def _display_failed_accounts(self, failed_accounts: List[AccountResult]):
+    def _display_failed_accounts(self, failed_accounts: List[AccountResult]) -> None:
         """Display detailed information about failed accounts.
 
         Args:
@@ -875,7 +875,7 @@ class MultiAccountProgressTracker(ProgressTracker):
             self.progress_persistence.save_progress(snapshot)
             self.last_persistence_update = current_time
 
-    def _restore_from_snapshot(self, snapshot: ProgressSnapshot):
+    def _restore_from_snapshot(self, snapshot: ProgressSnapshot) -> None:
         """Restore progress from a saved snapshot.
 
         Args:

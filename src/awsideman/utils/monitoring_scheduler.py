@@ -140,7 +140,9 @@ class MonitoringScheduler:
 
         return due_checks
 
-    async def _execute_scheduled_check(self, check: ScheduledCheck, semaphore: asyncio.Semaphore):
+    async def _execute_scheduled_check(
+        self, check: ScheduledCheck, semaphore: asyncio.Semaphore
+    ) -> None:
         """Execute a scheduled monitoring check."""
         async with semaphore:
             try:
@@ -209,7 +211,7 @@ class MonitoringScheduler:
             finally:
                 self._schedule_next_run(check)
 
-    def _handle_check_failure(self, check: ScheduledCheck, error_message: str):
+    def _handle_check_failure(self, check: ScheduledCheck, error_message: str) -> None:
         """Handle failure of a scheduled check."""
         check.consecutive_failures += 1
 
@@ -227,7 +229,7 @@ class MonitoringScheduler:
         ):
             asyncio.create_task(self._send_failure_notification(check.profile_name, error_message))
 
-    async def _send_failure_notification(self, profile_name: str, error_message: str):
+    async def _send_failure_notification(self, profile_name: str, error_message: str) -> None:
         """Send notification about check failure."""
         try:
             # Create minimal status report for failure notification
@@ -259,7 +261,7 @@ class MonitoringScheduler:
         except Exception as e:
             logger.error(f"Failed to send failure notification: {e}")
 
-    def _schedule_next_run(self, check: ScheduledCheck):
+    def _schedule_next_run(self, check: ScheduledCheck) -> None:
         """Schedule the next run for a check."""
         if not check.enabled:
             return
@@ -275,7 +277,7 @@ class MonitoringScheduler:
 
         logger.debug(f"Next run for profile {check.profile_name} scheduled at {check.next_run}")
 
-    async def _evaluate_and_alert(self, status_report: StatusReport, profile_name: str):
+    async def _evaluate_and_alert(self, status_report: StatusReport, profile_name: str) -> None:
         """Evaluate status report against thresholds and send alerts."""
         try:
             alerts_sent = []

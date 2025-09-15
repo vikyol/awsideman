@@ -110,7 +110,7 @@ def bulk_assign(
     profile: Optional[str] = typer.Option(
         None, "--profile", help="AWS profile to use (uses default if not specified)"
     ),
-):
+) -> None:
     """Bulk assign permission sets from input file using human-readable names.
 
     Processes an input file (CSV or JSON) containing assignment data with human-readable names
@@ -446,7 +446,7 @@ def bulk_revoke(
     profile: Optional[str] = typer.Option(
         None, "--profile", help="AWS profile to use (uses default if not specified)"
     ),
-):
+) -> None:
     """Bulk revoke permission sets from input file using human-readable names.
 
     Processes an input file (CSV or JSON) containing assignment data with human-readable names

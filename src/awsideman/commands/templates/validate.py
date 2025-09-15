@@ -23,7 +23,7 @@ def validate_template(
         False, "--verbose", "-v", help="Show detailed validation information"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Validate a template file.
 
     Validates the structure, entities, permission sets, and accounts in a template file.
@@ -165,27 +165,46 @@ def validate_template(
                 )
                 user_feedback.show_info(f"Identity Store ID: {identity_store_id}", "Identity Store")
 
-            # Initialize validator
-            validator = TemplateValidator(
-                client_manager=aws_client,
-                instance_arn=instance_arn,
-                identity_store_id=identity_store_id,
-            )
+            # Initialize validator only if SSO instance is configured
+            validator = None
+            if instance_arn and identity_store_id:
+                validator = TemplateValidator(
+                    client_manager=aws_client,
+                    instance_arn=instance_arn,
+                    identity_store_id=identity_store_id,
+                )
 
             # Perform comprehensive validation
-            user_feedback.show_info(
-                "Validating entities and permission sets...", "Entity Validation"
-            )
+            if validator is not None:
+                user_feedback.show_info(
+                    "Validating entities and permission sets...", "Entity Validation"
+                )
 
-            total_validation_steps = 3  # entities, permission sets, accounts
-            with progress_bar.create_progress(
-                "Validating template...", total_validation_steps
-            ) as task:
-                # Update progress for each validation step
-                progress_bar.update_progress(task, 1, "Validating entities...")
-                validation_result = validator.validate_template(template)
-                progress_bar.update_progress(task, 2, "Validating permission sets...")
-                progress_bar.update_progress(task, 3, "Validation complete")
+                total_validation_steps = 3  # entities, permission sets, accounts
+                with progress_bar.create_progress(
+                    "Validating template...", total_validation_steps
+                ) as progress:
+                    task = progress.add_task("Validating template...", total=total_validation_steps)
+                    # Update progress for each validation step
+                    progress.update(task, advance=1, description="Validating entities...")
+                    validation_result = validator.validate_template(template)
+                    progress.update(task, advance=1, description="Validating permission sets...")
+                    progress.update(task, advance=1, description="Validation complete")
+            else:
+                # Limited validation when SSO instance is not configured
+                user_feedback.show_warning(
+                    "Skipping entity validation - no SSO instance configured", "Limited Validation"
+                )
+                # Create a basic validation result
+                from ...templates.validator import ValidationResult
+
+                validation_result = ValidationResult(
+                    is_valid=True,
+                    errors=[],
+                    warnings=[],
+                    resolved_entities={},
+                    resolved_accounts=[],
+                )
 
             # Display validation results
             if validation_result.is_valid:

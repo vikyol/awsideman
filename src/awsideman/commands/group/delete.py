@@ -16,7 +16,7 @@ def delete_group(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-):
+) -> None:
     """Delete a group from AWS Identity Center.
 
     Permanently removes a group from the Identity Store.
@@ -171,8 +171,6 @@ def delete_group(
 
             # Display success message
             console.print(f"[green]Group '{display_name}' deleted successfully.[/green]")
-
-            return True
 
         except ClientError as delete_error:
             error_code = delete_error.response.get("Error", {}).get("Code", "Unknown")

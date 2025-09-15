@@ -74,7 +74,7 @@ def _resolve_account_identifier_for_assignment(
             account_id = matching_accounts[0]["Id"]
             account_name = matching_accounts[0]["Name"]
             console.print(f"[green]Found account: {account_name} ({account_id})[/green]")
-            return account_id
+            return str(account_id)
 
         # Multiple matches - show options and let user choose
         console.print(f"[yellow]Multiple accounts found matching '{account_identifier}':[/yellow]")
@@ -930,7 +930,7 @@ def assign_multi_account_explicit(
     batch_size: int = 10,
     continue_on_error: bool = True,
     profile: Optional[str] = None,
-):
+) -> None:
     """Assign a permission set to a principal across explicit list of AWS accounts.
 
     Args:
@@ -1241,7 +1241,7 @@ def assign_multi_account_advanced(
     batch_size: int = 10,
     continue_on_error: bool = True,
     profile: Optional[str] = None,
-):
+) -> None:
     """Assign a permission set to a principal using advanced filtering options.
 
     Args:

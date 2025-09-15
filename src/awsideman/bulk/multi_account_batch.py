@@ -63,7 +63,7 @@ class MultiAccountBatchProcessor(BatchProcessor):
         # Multi-account results tracking
         self.multi_account_results: Optional[MultiAccountResults] = None
 
-    def set_resource_resolver(self, instance_arn: str, identity_store_id: str):
+    def set_resource_resolver(self, instance_arn: str, identity_store_id: str) -> None:
         """Set up the resource resolver for name resolution.
 
         Args:
@@ -297,7 +297,7 @@ class MultiAccountBatchProcessor(BatchProcessor):
             # Ensure progress tracking is stopped
             self.progress_tracker.stop_live_display()
 
-    async def _resolve_names(self, multi_assignment: MultiAccountAssignment):
+    async def _resolve_names(self, multi_assignment: MultiAccountAssignment) -> None:
         """Resolve permission set and principal names to ARNs/IDs.
 
         Args:
@@ -842,7 +842,7 @@ class MultiAccountBatchProcessor(BatchProcessor):
 
     def _display_dry_run_summary(
         self, results: MultiAccountResults, multi_assignment: MultiAccountAssignment
-    ):
+    ) -> None:
         """Display comprehensive dry-run summary with resolved information.
 
         Args:
@@ -968,7 +968,7 @@ class MultiAccountBatchProcessor(BatchProcessor):
             "  • Use [blue]--continue-on-error[/blue] to proceed despite individual account failures"
         )
 
-    def configure_rate_limiting(self, delay: float, max_concurrent: int):
+    def configure_rate_limiting(self, delay: float, max_concurrent: int) -> None:
         """Configure rate limiting parameters.
 
         Args:

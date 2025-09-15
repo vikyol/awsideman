@@ -37,7 +37,7 @@ def import_backup(
         False, "--overwrite", help="Overwrite existing backup if it exists"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Import backup data from external sources.
 
     Imports backup data from various formats and sources for restoration

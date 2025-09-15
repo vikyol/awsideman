@@ -18,7 +18,7 @@ def export_backup(
         None, "--output-path", "-o", help="Output path for exported data"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Export backup data to various formats.
 
     Exports backup data in different formats for integration with external

@@ -43,7 +43,7 @@ def validate_restore(
         "table", "--format", "-f", help="Output format: table or json"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Validate backup compatibility with target environment.
 
     Performs comprehensive validation of backup compatibility before restore
@@ -82,6 +82,7 @@ def validate_restore(
             )
 
         # Initialize storage backend
+        storage_backend_obj: FileSystemStorageBackend | S3StorageBackend
         if storage_backend.lower() == "filesystem":
             storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
             storage_backend_obj = FileSystemStorageBackend(base_path=storage_path)

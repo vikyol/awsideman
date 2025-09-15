@@ -76,7 +76,7 @@ def tree(
     region: Optional[str] = region_option(),
     no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """Display the full AWS Organization hierarchy including roots, OUs, and accounts.
 
     Shows organizational units, their relationships, and accounts under each OU.
@@ -139,7 +139,7 @@ def account(
     region: Optional[str] = region_option(),
     no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """Display detailed information about a specific AWS account.
 
     Shows comprehensive metadata including account name, ID, email, status,
@@ -210,7 +210,7 @@ def search(
     region: Optional[str] = region_option(),
     no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """Search for accounts by name or substring.
 
     Performs case-insensitive partial string matching on account names.
@@ -290,7 +290,7 @@ def trace_policies(
     region: Optional[str] = region_option(),
     no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """Trace all SCPs and RCPs affecting a given account.
 
     Resolves the full OU path and collects all attached policies from each level.
@@ -379,7 +379,7 @@ def _output_tree_flat(organization_tree: List[OrgNode]) -> None:
     table.add_column("Name", style="green")
     table.add_column("Path", style="blue")
 
-    def add_node_to_table(node: OrgNode, path: List[str] = None) -> None:
+    def add_node_to_table(node: OrgNode, path: List[str] | None = None) -> None:
         """Recursively add nodes to the flat table."""
         if path is None:
             path = []
@@ -413,8 +413,6 @@ def _output_tree_visual(organization_tree: List[OrgNode]) -> None:
             node_display = f"[bold yellow]OU:[/bold yellow] {node.name} ({node.id})"
         elif node.type == NodeType.ACCOUNT:
             node_display = f"[bold green]Account:[/bold green] {node.name} ({node.id})"
-        else:
-            node_display = f"{node.name} ({node.id})"
 
         # Add this node to the tree
         branch = rich_tree.add(node_display)
@@ -451,7 +449,7 @@ def _is_valid_account_id(account_id: str) -> bool:
 
 
 def _search_accounts_by_name_optimized(
-    organizations_client, account_name: str
+    organizations_client: Any, account_name: str
 ) -> List[Dict[str, Any]]:
     """
     Optimized search for accounts by name using direct list_accounts API with pagination.
@@ -498,7 +496,7 @@ def _search_accounts_by_name_optimized(
         raise
 
 
-def _get_all_accounts_with_pagination(organizations_client) -> List[Dict[str, Any]]:
+def _get_all_accounts_with_pagination(organizations_client: Any) -> List[Dict[str, Any]]:
     """
     Get all accounts using list_accounts API with proper pagination handling.
 
@@ -517,7 +515,7 @@ def _get_all_accounts_with_pagination(organizations_client) -> List[Dict[str, An
     try:
         while True:
             # Prepare parameters for the API call
-            params = {}
+            params: Dict[str, Any] = {}
             if next_token:
                 params["NextToken"] = next_token
 
@@ -546,7 +544,7 @@ def _get_all_accounts_with_pagination(organizations_client) -> List[Dict[str, An
 
 
 def _resolve_account_identifier(
-    organizations_client, account_identifier: str, json_output: bool = False
+    organizations_client: Any, account_identifier: str, json_output: bool = False
 ) -> str:
     """
     Resolve account identifier to account ID.
@@ -610,7 +608,7 @@ def _resolve_account_identifier(
         raise typer.Exit(1)
 
 
-def _output_account_json(account_details) -> None:
+def _output_account_json(account_details: Any) -> None:
     """Output account details in JSON format."""
     account_dict = {
         "id": account_details.id,
@@ -628,7 +626,7 @@ def _output_account_json(account_details) -> None:
     console.print(json.dumps(account_dict, indent=2))
 
 
-def _output_account_table(account_details) -> None:
+def _output_account_table(account_details: Any) -> None:
     """Output account details in table format."""
     table = Table(title=f"Account Details: {account_details.name} ({account_details.id})")
     table.add_column("Property", style="cyan", width=20)

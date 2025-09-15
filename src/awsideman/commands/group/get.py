@@ -72,7 +72,7 @@ def get_group(
                     console.print(
                         "[yellow]You can list available groups with 'awsideman group list'.[/yellow]"
                     )
-                    return  # Exit cleanly for "not found" scenario
+                    return {}  # Exit cleanly for "not found" scenario
                 elif len(groups) > 1:
                     console.print(
                         f"[yellow]Warning: Multiple groups found matching '{identifier}'. Showing the first match.[/yellow]"
@@ -91,14 +91,14 @@ def get_group(
                 IdentityStoreId=identity_store_id, GroupId=group_id
             )
 
-            return group_details
+            return dict(group_details)
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
             if error_code == "ResourceNotFoundException":
                 console.print(f"[red]Error: Group '{group_id}' not found.[/red]")
                 console.print("[yellow]Please check the group ID or name and try again.[/yellow]")
-                return  # Exit cleanly for "not found" scenario
+                return {}  # Exit cleanly for "not found" scenario
             else:
                 handle_aws_error(e, operation="DescribeGroup")
                 raise typer.Exit(1)

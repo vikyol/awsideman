@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 from rich.console import Console
 from rich.progress import (
@@ -398,7 +398,9 @@ class ProgressTracker:
         self._lock = threading.Lock()
 
     @contextmanager
-    def track_operation(self, description: str, total: int):
+    def track_operation(
+        self, description: str, total: int
+    ) -> Generator["ProgressTracker", None, None]:
         """Context manager for tracking operation progress.
 
         Args:
@@ -459,7 +461,7 @@ def measure_time(
     name: str,
     tracker: Optional[PerformanceTracker] = None,
     rollback_operation_id: Optional[str] = None,
-):
+) -> Generator[None, None, None]:
     """Context manager for measuring execution time.
 
     Args:

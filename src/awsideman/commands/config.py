@@ -1,13 +1,15 @@
 """Configuration management commands for awsideman."""
 
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
 
+from ..aws_clients.manager import AWSClientManager
 from ..utils.config import Config
+from ..utils.validators import validate_profile
 
 app = typer.Typer(
     help="Manage awsideman configuration settings including profiles, data storage, backup, rollback, and templates."
@@ -27,7 +29,7 @@ def show_config(
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Show cache configuration for specific profile"
     ),
-):
+) -> None:
     """Show current configuration.
 
     For cache configuration, shows effective settings by merging defaults with profile-specific overrides.
@@ -112,7 +114,7 @@ def set_config(
     profile: Optional[str] = typer.Option(
         None, "--profile", help="AWS profile to set configuration for (for cache settings)"
     ),
-):
+) -> None:
     """Set a configuration value using key=value format.
 
     Examples:
@@ -148,6 +150,9 @@ def set_config(
 
         # Handle profile-specific cache configuration
         if key.startswith("cache."):
+            if profile is None:
+                console.print("[red]Error: Profile must be specified for cache configuration[/red]")
+                raise typer.Exit(1)
             _set_profile_cache_config(config, profile, key, parsed_value)
 
             # Show the effective cache configuration after setting the value
@@ -289,7 +294,282 @@ def validate_config():
         console.print("[green]Configuration is valid with no warnings.[/green]")
 
 
-def _display_config_table(config_data: dict, full_config_data: dict):
+@app.command("auto")
+def auto_configure(
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="AWS profile to auto-configure"
+    ),
+    backend: str = typer.Option(
+        "file", "--backend", "-b", help="Storage backend to configure (file, s3)"
+    ),
+    region: Optional[str] = typer.Option(
+        None, "--region", "-r", help="AWS region to use (defaults to profile region)"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force reconfiguration even if already configured"
+    ),
+) -> None:
+    """Automatically configure AWS Identity Center settings and storage backend.
+
+    This command will:
+    1. Detect and configure the AWS Identity Center instance ARN and Identity Store ID
+    2. Set up the specified storage backend with sensible defaults
+    3. Configure cache settings for optimal performance
+    4. Set up backup configuration if needed
+
+    Examples:
+    - awsideman config auto --profile production --backend file
+    - awsideman config auto --profile dev --backend s3 --region us-west-2
+    - awsideman config auto --force  # Reconfigure current profile
+    """
+    try:
+        # Validate profile
+        profile_name, profile_data = validate_profile(profile)
+        console.print(f"[blue]Auto-configuring profile: {profile_name}[/blue]")
+
+        # Check if already configured (unless force)
+        if not force:
+            instance_arn = profile_data.get("sso_instance_arn")
+            identity_store_id = profile_data.get("identity_store_id")
+            if instance_arn and identity_store_id:
+                console.print("[yellow]Profile already has SSO instance configured.[/yellow]")
+                console.print(f"Instance ARN: {instance_arn}")
+                console.print(f"Identity Store ID: {identity_store_id}")
+                console.print("[dim]Use --force to reconfigure[/dim]")
+                return
+
+        # Step 1: Auto-detect and configure SSO instance
+        console.print("\n[bold blue]Step 1: Configuring AWS Identity Center[/bold blue]")
+        _auto_configure_sso_instance(profile_name, profile_data, region)
+
+        # Step 2: Configure storage backend
+        console.print(f"\n[bold blue]Step 2: Configuring {backend} storage backend[/bold blue]")
+        _auto_configure_storage_backend(profile_name, backend, region)
+
+        # Step 3: Configure cache settings
+        console.print("\n[bold blue]Step 3: Configuring cache settings[/bold blue]")
+        _auto_configure_cache_settings(profile_name)
+
+        # Step 4: Configure backup settings
+        console.print("\n[bold blue]Step 4: Configuring backup settings[/bold blue]")
+        _auto_configure_backup_settings(profile_name, backend)
+
+        console.print(
+            f"\n[green]✓ Auto-configuration completed for profile '{profile_name}'[/green]"
+        )
+        console.print("\n[blue]Next steps:[/blue]")
+        console.print(f"• Test configuration: [cyan]awsideman info --profile {profile_name}[/cyan]")
+        console.print(f"• List users: [cyan]awsideman user list --profile {profile_name}[/cyan]")
+        console.print(
+            f"• Check status: [cyan]awsideman status check --profile {profile_name}[/cyan]"
+        )
+
+    except Exception as e:
+        console.print(f"[red]Error during auto-configuration: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+def _auto_configure_sso_instance(
+    profile_name: str, profile_data: dict, region: Optional[str]
+) -> None:
+    """Auto-configure SSO instance ARN and Identity Store ID."""
+    try:
+        # Use provided region or profile region
+        aws_region = region or profile_data.get("region")
+        if not aws_region:
+            console.print(
+                "[red]Error: No region specified. Use --region or configure profile region.[/red]"
+            )
+            raise typer.Exit(1)
+
+        console.print(f"[blue]Using region: {aws_region}[/blue]")
+
+        # Create AWS client manager to discover SSO instances
+        aws_client = AWSClientManager(profile=profile_name, region=aws_region)
+
+        # List available SSO instances
+        sso_client = aws_client.get_identity_center_client()
+        response = sso_client.list_instances()
+        instances = response.get("Instances", [])
+
+        if not instances:
+            console.print("[red]Error: No SSO instances found in AWS account.[/red]")
+            console.print(
+                "[yellow]Make sure your AWS profile has access to AWS Identity Center.[/yellow]"
+            )
+            raise typer.Exit(1)
+
+        if len(instances) == 1:
+            # Auto-configure the single instance
+            instance = instances[0]
+            auto_instance_arn = instance["InstanceArn"]
+            auto_identity_store_id = instance["IdentityStoreId"]
+
+            console.print(
+                f"[green]✓ Auto-detected single SSO instance: {auto_instance_arn}[/green]"
+            )
+            console.print(f"[green]✓ Identity Store ID: {auto_identity_store_id}[/green]")
+
+            # Save the configuration
+            config = Config()
+            profiles = config.get("profiles", {})
+            if profile_name in profiles:
+                profiles[profile_name]["sso_instance_arn"] = auto_instance_arn
+                profiles[profile_name]["identity_store_id"] = auto_identity_store_id
+                config.set("profiles", profiles)
+                console.print(
+                    f"[green]✓ SSO instance configured for profile '{profile_name}'[/green]"
+                )
+            else:
+                console.print(
+                    f"[red]Error: Profile '{profile_name}' not found in configuration[/red]"
+                )
+                raise typer.Exit(1)
+
+        else:
+            # Multiple instances found - show options
+            console.print(
+                f"[red]Error: Found {len(instances)} SSO instances. Auto-detection not possible.[/red]"
+            )
+            console.print("[yellow]Available instances:[/yellow]")
+            for i, instance in enumerate(instances, 1):
+                instance_id = instance["InstanceArn"].split("/")[-1]
+                console.print(f"[yellow]  {i}. Instance ID: {instance_id}[/yellow]")
+            console.print(
+                "\n[yellow]Please use 'awsideman sso set <instance_arn> <identity_store_id>' to configure one.[/yellow]"
+            )
+            console.print("[yellow]You can find full ARNs with 'awsideman sso list'.[/yellow]")
+            raise typer.Exit(1)
+
+    except Exception as e:
+        console.print(f"[red]Error during SSO instance auto-detection: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+
+def _auto_configure_storage_backend(profile_name: str, backend: str, region: Optional[str]) -> None:
+    """Auto-configure storage backend with sensible defaults."""
+    config = Config()
+    config_data = config.get_all()
+
+    # Ensure storage section exists
+    if "storage" not in config_data:
+        config_data["storage"] = {}
+
+    storage_config = config_data["storage"]
+
+    if backend == "file":
+        # Configure filesystem backend
+        storage_config["default_backend"] = "filesystem"
+        storage_config["filesystem"] = {"path": "~/.awsideman/storage", "create_directories": True}
+        console.print("[green]✓ Configured filesystem storage backend[/green]")
+        console.print("  Path: ~/.awsideman/storage")
+
+    elif backend == "s3":
+        # Configure S3 backend
+        storage_config["default_backend"] = "s3"
+        storage_config["s3"] = {
+            "bucket": f"awsideman-{profile_name}-storage",
+            "prefix": "data",
+            "region": region or "us-east-1",
+            "create_bucket": True,
+        }
+        console.print("[green]✓ Configured S3 storage backend[/green]")
+        console.print(f"  Bucket: awsideman-{profile_name}-storage")
+        console.print("  Prefix: data")
+        console.print(f"  Region: {region or 'us-east-1'}")
+
+    else:
+        console.print(f"[red]Error: Unsupported backend '{backend}'. Use 'file' or 's3'.[/red]")
+        raise typer.Exit(1)
+
+    # Save configuration
+    config.set("storage", storage_config)
+
+
+def _auto_configure_cache_settings(profile_name: str) -> None:
+    """Auto-configure cache settings for optimal performance."""
+    config = Config()
+    config_data = config.get_all()
+
+    # Ensure cache section exists
+    if "cache" not in config_data:
+        config_data["cache"] = {}
+
+    cache_config = config_data["cache"]
+
+    # Set optimal cache settings
+    cache_config.update(
+        {
+            "enabled": True,
+            "backend_type": "file",
+            "default_ttl": 3600,  # 1 hour
+            "max_size_mb": 100,
+            "cleanup_interval": 300,  # 5 minutes
+            "operation_ttls": {
+                "list_users": 1800,  # 30 minutes
+                "list_groups": 1800,  # 30 minutes
+                "list_permission_sets": 3600,  # 1 hour
+                "list_accounts": 7200,  # 2 hours
+                "list_assignments": 900,  # 15 minutes
+            },
+        }
+    )
+
+    console.print("[green]✓ Configured cache settings[/green]")
+    console.print("  Backend: file")
+    console.print("  Default TTL: 1 hour")
+    console.print("  Max size: 100 MB")
+    console.print("  Cleanup interval: 5 minutes")
+
+    # Save configuration
+    config.set("cache", cache_config)
+
+
+def _auto_configure_backup_settings(profile_name: str, backend: str) -> None:
+    """Auto-configure backup settings."""
+    config = Config()
+    config_data = config.get_all()
+
+    # Ensure backup section exists
+    if "backup" not in config_data:
+        config_data["backup"] = {}
+
+    backup_config = config_data["backup"]
+
+    # Set backup configuration
+    backup_config.update(
+        {
+            "storage": {
+                "default_backend": "filesystem",
+                "filesystem": {"path": "~/.awsideman/backups", "create_directories": True},
+            },
+            "encryption": {"enabled": True, "type": "aes256"},
+            "compression": {"enabled": True, "type": "gzip"},
+            "defaults": {
+                "backup_type": "full",
+                "include_inactive_users": False,
+                "resource_types": "all",
+            },
+            "retention": {
+                "keep_daily": 7,
+                "keep_weekly": 4,
+                "keep_monthly": 12,
+                "auto_cleanup": True,
+            },
+        }
+    )
+
+    console.print("[green]✓ Configured backup settings[/green]")
+    console.print("  Storage: filesystem (~/.awsideman/backups)")
+    console.print("  Encryption: AES-256")
+    console.print("  Compression: gzip")
+    console.print("  Retention: 7 days, 4 weeks, 12 months")
+
+    # Save configuration
+    config.set("backup", backup_config)
+
+
+def _display_config_table(config_data: dict, full_config_data: dict) -> None:
     """Display configuration data in table format."""
     for section_name, section_data in config_data.items():
         console.print(f"\n[bold blue]{section_name.title()} Configuration[/bold blue]")
@@ -356,7 +636,7 @@ def _display_config_table(config_data: dict, full_config_data: dict):
                 console.print(f"  {section_data}")
 
 
-def _display_effective_cache_config(config_data: dict, cache_section: dict):
+def _display_effective_cache_config(config_data: dict, cache_section: dict) -> None:
     """Display effective cache configuration by merging defaults with profile-specific settings."""
     from ..utils.config import DEFAULT_CACHE_CONFIG
 
@@ -373,7 +653,8 @@ def _display_effective_cache_config(config_data: dict, cache_section: dict):
     for key, value in cache_section.items():
         if key != "profiles" and value is not None:
             if key == "operation_ttls" and isinstance(value, dict):
-                effective_config["operation_ttls"].update(value)
+                if isinstance(effective_config["operation_ttls"], dict):
+                    effective_config["operation_ttls"].update(value)
             else:
                 effective_config[key] = value
 
@@ -381,7 +662,8 @@ def _display_effective_cache_config(config_data: dict, cache_section: dict):
     for key, value in profile_cache_config.items():
         if value is not None:
             if key == "operation_ttls" and isinstance(value, dict):
-                effective_config["operation_ttls"].update(value)
+                if isinstance(effective_config["operation_ttls"], dict):
+                    effective_config["operation_ttls"].update(value)
             else:
                 effective_config[key] = value
 
@@ -418,25 +700,30 @@ def _display_effective_cache_config(config_data: dict, cache_section: dict):
         ttl_table.add_column("TTL (seconds)", style="green")
         ttl_table.add_column("Source", style="yellow")
 
-        for operation, ttl in effective_config["operation_ttls"].items():
-            # Determine source for each TTL
-            if (
-                current_profile in cache_section.get("profiles", {})
-                and "operation_ttls" in cache_section["profiles"][current_profile]
-                and operation in cache_section["profiles"][current_profile]["operation_ttls"]
-            ):
-                source = f"profile:{current_profile}"
-            elif "operation_ttls" in cache_section and operation in cache_section["operation_ttls"]:
-                source = "global"
-            else:
-                source = "default"
+        operation_ttls = effective_config["operation_ttls"]
+        if isinstance(operation_ttls, dict):
+            for operation, ttl in operation_ttls.items():
+                # Determine source for each TTL
+                if (
+                    current_profile in cache_section.get("profiles", {})
+                    and "operation_ttls" in cache_section["profiles"][current_profile]
+                    and operation in cache_section["profiles"][current_profile]["operation_ttls"]
+                ):
+                    source = f"profile:{current_profile}"
+                elif (
+                    "operation_ttls" in cache_section
+                    and operation in cache_section["operation_ttls"]
+                ):
+                    source = "global"
+                else:
+                    source = "default"
 
-            ttl_table.add_row(operation, str(ttl), source)
+                ttl_table.add_row(operation, str(ttl), source)
 
         console.print(ttl_table)
 
 
-def _parse_config_value(value: str):
+def _parse_config_value(value: str) -> Any:
     """Parse configuration value string into appropriate Python type."""
     value = value.strip().lower()
 
@@ -460,7 +747,7 @@ def _parse_config_value(value: str):
     return value
 
 
-def _set_config_value(config: Config, key: str, value):
+def _set_config_value(config: Config, key: str, value: Any) -> None:
     """Set a configuration value using dot notation."""
     config_data = config.get_all()
 
@@ -484,7 +771,7 @@ def _set_config_value(config: Config, key: str, value):
     config.save_config()
 
 
-def _show_single_config_value(config: Config, key: str):
+def _show_single_config_value(config: Config, key: str) -> None:
     """Show a single configuration value."""
     config_data = config.get_all()
 
@@ -517,7 +804,7 @@ def _show_single_config_value(config: Config, key: str):
         console.print(f"[red]Error displaying configuration: {e}[/red]")
 
 
-def _set_profile_cache_config(config: Config, profile_name: str, key: str, value):
+def _set_profile_cache_config(config: Config, profile_name: str, key: str, value: Any) -> None:
     """Set profile-specific cache configuration."""
     config_data = config.get_all()
 
@@ -553,7 +840,7 @@ def _set_profile_cache_config(config: Config, profile_name: str, key: str, value
     )
 
 
-def _show_profile_cache_config(config: Config, profile_name: str, key: str):
+def _show_profile_cache_config(config: Config, profile_name: str, key: str) -> None:
     """Show profile-specific cache configuration."""
     config_data = config.get_all()
 
@@ -594,7 +881,7 @@ def _show_profile_cache_config(config: Config, profile_name: str, key: str):
         console.print(f"[red]Error displaying profile cache configuration: {e}[/red]")
 
 
-def _show_profile_cache_section(config_data: dict, profile_name: str):
+def _show_profile_cache_section(config_data: dict, profile_name: str) -> None:
     """Show profile-specific cache configuration section."""
     console.print(f"\n[bold blue]Cache Configuration for Profile: {profile_name}[/bold blue]")
     console.print("=" * 60)
@@ -645,7 +932,7 @@ def _show_profile_cache_section(config_data: dict, profile_name: str):
         console.print("[dim]All settings are profile-specific (no inheritance)[/dim]")
 
 
-def _display_cache_config_table(cache_config: dict, title: str):
+def _display_cache_config_table(cache_config: dict, title: str) -> None:
     """Display cache configuration in table format."""
     console.print(f"\n[bold blue]{title}[/bold blue]")
     console.print("-" * 40)
@@ -676,7 +963,7 @@ def _display_cache_config_table(cache_config: dict, title: str):
         console.print(ttl_table)
 
 
-def _display_backup_config_table(backup_config: dict):
+def _display_backup_config_table(backup_config: dict) -> None:
     """Display backup configuration in table format."""
     console.print("\n[bold blue]Backup Configuration[/bold blue]")
     console.print("-" * 40)
@@ -798,7 +1085,7 @@ def _get_current_profile(config_data: dict) -> str:
 
     # Fall back to default profile from config
     default_profile = config_data.get("default_profile")
-    if default_profile:
+    if default_profile and isinstance(default_profile, str):
         return default_profile
 
     # Final fallback

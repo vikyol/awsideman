@@ -104,7 +104,7 @@ def update_group(
 
             # Cache invalidation is now handled automatically by the cached client
 
-            return updated_details
+            return dict(updated_details)
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")

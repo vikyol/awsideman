@@ -180,8 +180,8 @@ class TemplateProgressBar:
             TimeElapsedColumn(),
             console=self.console,
         ) as progress:
-            task = progress.add_task(description, total=total)
-            yield task
+            progress.add_task(description, total=total)
+            yield progress
 
     @contextmanager
     def create_spinner(self, description: str) -> Generator[Progress, None, None]:

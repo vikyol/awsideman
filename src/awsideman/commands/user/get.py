@@ -1,7 +1,7 @@
 """Get user command for awsideman."""
 
 import re
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -13,7 +13,7 @@ from .helpers import console, validate_profile, validate_sso_instance
 
 
 def _get_user_group_memberships(
-    identity_store, identity_store_id: str, user_id: str
+    identity_store: Any, identity_store_id: str, user_id: str
 ) -> list[dict[str, str]]:
     """
     Get all groups that a user is a member of.
@@ -333,8 +333,7 @@ def get_user(
                 f"[yellow]Warning: Could not retrieve group memberships: {str(e)}[/yellow]"
             )
 
-        # Return the user data for further processing if needed
-        return user
+        # User data has been displayed, no need to return anything
 
     except ClientError as e:
         # Handle AWS API errors

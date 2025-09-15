@@ -228,7 +228,7 @@ def format_permission_set_for_display(permission_set: Dict[str, Any]) -> Dict[st
 
 
 def resolve_permission_set_identifier(
-    sso_admin_client, instance_arn: str, identifier: str, identity_store_id: str
+    sso_admin_client: Any, instance_arn: str, identifier: str, identity_store_id: str
 ) -> str:
     """
     Resolve a permission set identifier to its ARN.
@@ -276,7 +276,7 @@ def resolve_permission_set_identifier(
                 )
 
                 if ps_response["PermissionSet"]["Name"] == identifier:
-                    return permission_set_arn
+                    return str(permission_set_arn)
             except Exception:
                 continue
 

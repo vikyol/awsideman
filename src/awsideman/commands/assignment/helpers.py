@@ -111,7 +111,7 @@ def resolve_permission_set_info(
         # Handle AWS API errors with centralized error handling
         handle_aws_error(e, "DescribePermissionSet")
         # This line is unreachable as handle_aws_error raises an exception
-        return {}  # type: ignore[unreachable]
+        return {}
     except Exception as e:
         # Handle other unexpected errors
         console.print(f"[red]Error: {str(e)}[/red]")

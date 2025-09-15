@@ -27,7 +27,8 @@ def _extract_email(user: dict) -> str:
     try:
         emails = user.get("Emails", [])
         if emails and len(emails) > 0 and isinstance(emails[0], dict):
-            return emails[0].get("Value", "")
+            value = emails[0].get("Value", "")
+            return str(value) if value is not None else ""
         return ""
     except (IndexError, TypeError, AttributeError):
         return ""
@@ -140,7 +141,10 @@ def _list_members_internal(
 
         # Get group memberships
         try:
-            list_params = {"IdentityStoreId": identity_store_id, "GroupId": group_id}
+            list_params: Dict[str, Any] = {
+                "IdentityStoreId": identity_store_id,
+                "GroupId": group_id,
+            }
 
             if limit:
                 list_params["MaxResults"] = limit
@@ -294,7 +298,7 @@ def list_members(
     debug: bool = typer.Option(
         False, "--debug", "-d", help="Enable debug mode for troubleshooting user detail retrieval"
     ),
-):
+) -> None:
     """List all members of a group.
 
     Displays a table of users who are members of the specified group.
@@ -330,7 +334,7 @@ def list_members(
         # Get AWS clients to enrich the data
         from ..common import validate_profile_with_cache
 
-        profile, region, enable_caching = validate_profile_with_cache(profile, None)
+        profile, region, enable_caching = validate_profile_with_cache(profile, True)
 
         from ...aws_clients.manager import AWSClientManager
 
@@ -338,7 +342,10 @@ def list_members(
         identitystore_client = client_manager.get_identity_store_client()
 
         # Get SSO instance info
-        instance_arn, identity_store_id = validate_sso_instance(profile)
+        from ..common import validate_profile
+
+        _, profile_data = validate_profile(profile)
+        instance_arn, identity_store_id = validate_sso_instance(profile_data)
 
         # Process each membership to get user details
         processed_memberships = []
@@ -387,7 +394,7 @@ def list_members(
     elif output_format == "csv":
         if not processed_memberships:
             console.print("[yellow]No members to export.[/yellow]")
-            return memberships, next_token_result, group_identifier
+            return
 
         # Define CSV columns
         fieldnames = ["membership_id", "user_id", "user_name", "display_name"]
@@ -410,8 +417,7 @@ def list_members(
         # Table format (default behavior)
         pass  # The existing table display logic is already in _list_members_internal
 
-    # Return the expected tuple format for tests
-    return memberships, next_token_result, group_identifier
+    # Export completed
 
 
 def add_member(
@@ -422,7 +428,7 @@ def add_member(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-):
+) -> None:
     """Add a user to a group.
 
     Adds the specified user to the specified group.
@@ -511,18 +517,15 @@ def add_member(
 
         # Add the user to the group
         try:
-            response = identity_store.create_group_membership(
+            identity_store.create_group_membership(
                 IdentityStoreId=identity_store_id, GroupId=group_id, MemberId={"UserId": user_id}
             )
 
-            membership_id = response.get("MembershipId")
             console.print(
                 f"[green]Successfully added user '{username}' to group '{group_name}'.[/green]"
             )
 
             # Cache invalidation is now handled automatically by the cached client
-
-            return membership_id
 
         except ClientError as e:
             # Handle the specific case where user is already a member
@@ -562,7 +565,7 @@ def remove_member(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-):
+) -> None:
     """Remove a user from a group.
 
     Removes the specified user from the specified group.
@@ -682,8 +685,6 @@ def remove_member(
 
             # Cache invalidation is now handled automatically by the cached client
 
-            return True
-
         except ClientError as e:
             handle_aws_error(e, operation="DeleteGroupMembership")
             raise typer.Exit(1)
@@ -715,7 +716,7 @@ def export_members(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     try:
         return _export_members_impl(output_format, output_file, group_filter, profile, verbose)
     except Exception as e:
@@ -733,7 +734,7 @@ def _export_members_impl(
     group_filter: Optional[str],
     profile: Optional[str],
     verbose: bool,
-):
+) -> None:
     """Export all group memberships across all groups.
 
     Exports a comprehensive list of all users and their group memberships.
@@ -754,7 +755,7 @@ def _export_members_impl(
         # Validate profile and get AWS client with cache integration
         from ..common import validate_profile_with_cache
 
-        profile, region_data, enable_caching = validate_profile_with_cache(profile, None)
+        profile, region_data, enable_caching = validate_profile_with_cache(profile, True)
 
         # Extract region string from the region data
         if isinstance(region_data, dict):
@@ -794,7 +795,7 @@ def _export_members_impl(
                 next_token=None,
                 profile=profile,
                 region=region,
-                enable_caching=enable_caching,
+                enable_caching=True,
                 verbose=verbose,
                 interactive=False,
                 suppress_display=True,

@@ -12,6 +12,8 @@ from rich.console import Console
 from rich.table import Table
 
 from ...backup_restore.backends import FileSystemStorageBackend, S3StorageBackend
+from ...backup_restore.collector import IdentityCenterCollector
+from ...backup_restore.manager import BackupManager
 from ...backup_restore.models import (
     BackupType,
     NotificationSettings,
@@ -69,7 +71,7 @@ def create_schedule(
         True, "--enabled/--disabled", help="Enable or disable the schedule"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Create a new backup schedule.
 
     Creates a new backup schedule with configurable intervals, retention policies,
@@ -132,7 +134,9 @@ def create_schedule(
             storage_backend, storage_path, profile_name, profile_data
         )
         storage_engine = StorageEngine(backend=storage_backend_obj)
-        schedule_manager = ScheduleManager(storage_engine=storage_engine)
+        collector = IdentityCenterCollector()
+        backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
+        schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
         # Create schedule configuration
         schedule_config = ScheduleConfig(
@@ -141,9 +145,6 @@ def create_schedule(
             backup_type=(
                 BackupType.FULL if backup_type.lower() == "full" else BackupType.INCREMENTAL
             ),
-            resource_types=resource_types if resource_types else None,
-            storage_backend=storage_backend,
-            storage_path=storage_path,
             retention_policy=RetentionPolicy(
                 keep_daily=keep_daily,
                 keep_weekly=keep_weekly,
@@ -177,7 +178,7 @@ def update_schedule(
         None, "--enabled/--disabled", help="Enable or disable the schedule"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Update an existing backup schedule.
 
     Updates the configuration of an existing backup schedule. Only specified
@@ -198,14 +199,19 @@ def update_schedule(
         profile_name, profile_data = validate_profile(profile)
 
         # Initialize components
-        storage_engine = StorageEngine()
-        schedule_manager = ScheduleManager(storage_engine=storage_engine)
+        storage_backend_obj = _initialize_storage_backend(
+            "filesystem", None, profile_name, profile_data
+        )
+        storage_engine = StorageEngine(backend=storage_backend_obj)
+        collector = IdentityCenterCollector()
+        backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
+        schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
         # Get current schedule
         console.print(f"[blue]Updating schedule: {schedule_id}[/blue]")
 
         try:
-            current_schedule = asyncio.run(schedule_manager.get_schedule(schedule_id))
+            current_schedule = asyncio.run(schedule_manager.get_schedule_status(schedule_id))
         except Exception as e:
             console.print(f"[red]Error: Schedule '{schedule_id}' not found.[/red]")
             console.print(f"[yellow]Details: {e}[/yellow]")
@@ -213,14 +219,24 @@ def update_schedule(
 
         # Update configuration
         if name:
-            current_schedule.name = name
+            current_schedule["name"] = name
         if interval:
-            current_schedule.interval = interval
+            current_schedule["interval"] = interval
         if enabled is not None:
-            current_schedule.enabled = enabled
+            current_schedule["enabled"] = enabled
+
+        # Create ScheduleConfig from updated dict
+        schedule_config = ScheduleConfig(
+            name=current_schedule["name"],
+            interval=current_schedule["interval"],
+            backup_type=BackupType(current_schedule["backup_type"]),
+            retention_policy=RetentionPolicy(**current_schedule["retention_policy"]),
+            notification_settings=NotificationSettings(**current_schedule["notification_settings"]),
+            enabled=current_schedule["enabled"],
+        )
 
         # Apply updates
-        success = asyncio.run(schedule_manager.update_schedule(schedule_id, current_schedule))
+        success = asyncio.run(schedule_manager.update_schedule(schedule_id, schedule_config))
 
         if success:
             console.print(f"[green]✓ Schedule '{schedule_id}' updated successfully![/green]")
@@ -237,7 +253,7 @@ def delete_schedule(
     schedule_id: str = typer.Argument(..., help="Schedule ID to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Delete a backup schedule.
 
     Removes a backup schedule and stops all future executions. This operation
@@ -255,8 +271,13 @@ def delete_schedule(
         profile_name, profile_data = validate_profile(profile)
 
         # Initialize components
-        storage_engine = StorageEngine()
-        schedule_manager = ScheduleManager(storage_engine=storage_engine)
+        storage_backend_obj = _initialize_storage_backend(
+            "filesystem", None, profile_name, profile_data
+        )
+        storage_engine = StorageEngine(backend=storage_backend_obj)
+        collector = IdentityCenterCollector()
+        backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
+        schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
         # Get schedule details
         console.print(f"[blue]Deleting schedule: {schedule_id}[/blue]")
@@ -302,7 +323,7 @@ def list_schedules(
         "table", "--format", "-f", help="Output format: table or json"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """List all backup schedules.
 
     Displays all configured backup schedules with their current status and
@@ -320,8 +341,13 @@ def list_schedules(
         profile_name, profile_data = validate_profile(profile)
 
         # Initialize components
-        storage_engine = StorageEngine()
-        schedule_manager = ScheduleManager(storage_engine=storage_engine)
+        storage_backend_obj = _initialize_storage_backend(
+            "filesystem", None, profile_name, profile_data
+        )
+        storage_engine = StorageEngine(backend=storage_backend_obj)
+        collector = IdentityCenterCollector()
+        backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
+        schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
         # Get schedules
         console.print("[blue]Retrieving backup schedules...[/blue]")
@@ -334,7 +360,7 @@ def list_schedules(
         # Display results
         if output_format.lower() == "json":
 
-            schedule_data = [schedule.to_dict() for schedule in schedules]
+            schedule_data = schedules
             console.print_json(data=schedule_data)
         else:
             display_schedule_list(schedules)
@@ -349,7 +375,7 @@ def list_schedules(
 def run_schedule(
     schedule_id: str = typer.Argument(..., help="Schedule ID to run"),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Manually run a scheduled backup.
 
     Executes a backup according to the specified schedule configuration.
@@ -365,8 +391,13 @@ def run_schedule(
         profile_name, profile_data = validate_profile(profile)
 
         # Initialize components
-        storage_engine = StorageEngine()
-        schedule_manager = ScheduleManager(storage_engine=storage_engine)
+        storage_backend_obj = _initialize_storage_backend(
+            "filesystem", None, profile_name, profile_data
+        )
+        storage_engine = StorageEngine(backend=storage_backend_obj)
+        collector = IdentityCenterCollector()
+        backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
+        schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
         # Run the schedule
         console.print(f"[blue]Running scheduled backup: {schedule_id}[/blue]")
@@ -387,7 +418,7 @@ def run_schedule(
 def get_schedule_status(
     schedule_id: str = typer.Argument(..., help="Schedule ID to check"),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Get detailed status of a specific schedule.
 
     Displays detailed information about a backup schedule including its
@@ -402,8 +433,13 @@ def get_schedule_status(
         profile_name, profile_data = validate_profile(profile)
 
         # Initialize components
-        storage_engine = StorageEngine()
-        schedule_manager = ScheduleManager(storage_engine=storage_engine)
+        storage_backend_obj = _initialize_storage_backend(
+            "filesystem", None, profile_name, profile_data
+        )
+        storage_engine = StorageEngine(backend=storage_backend_obj)
+        collector = IdentityCenterCollector()
+        backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
+        schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
         # Get schedule status
         console.print(f"[blue]Getting schedule status: {schedule_id}[/blue]")
@@ -425,7 +461,7 @@ def _initialize_storage_backend(
     storage_path: Optional[str],
     profile_name: Optional[str] = None,
     profile_data: Optional[Dict] = None,
-):
+) -> FileSystemStorageBackend | S3StorageBackend:
     """Initialize storage backend based on configuration."""
     if storage_backend.lower() == "filesystem":
         storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
@@ -451,7 +487,13 @@ def _initialize_storage_backend(
         if profile_data and "region" in profile_data:
             s3_config["region_name"] = profile_data["region"]
 
-        return S3StorageBackend(**s3_config)
+        bucket_name = s3_config.pop("bucket_name")
+        if bucket_name is None:
+            console.print("[red]Error: bucket_name is required for S3 storage.[/red]")
+            raise typer.Exit(1)
+        # At this point, bucket_name is guaranteed to be str
+        assert bucket_name is not None
+        return S3StorageBackend(bucket_name, **s3_config)
     else:
         console.print(f"[red]Error: Unsupported storage backend '{storage_backend}'.[/red]")
         console.print("[yellow]Supported backends: filesystem, s3[/yellow]")

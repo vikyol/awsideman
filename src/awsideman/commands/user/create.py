@@ -1,6 +1,6 @@
 """Create user command for awsideman."""
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -37,7 +37,7 @@ def create_user(
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """Create a new user in AWS Identity Center.
 
     Creates a new user in the Identity Store with the specified attributes.
@@ -89,7 +89,7 @@ def create_user(
         console.print(f"[blue]Creating user '{username}'...[/blue]")
 
         # Prepare the create_user API call parameters
-        create_user_params = {
+        create_user_params: Dict[str, Any] = {
             "IdentityStoreId": identity_store_id,
             "UserName": username,
             "DisplayName": display_name,
@@ -184,12 +184,7 @@ def create_user(
                     "[yellow]Warning: Could not retrieve full user details after creation.[/yellow]"
                 )
 
-            return {
-                "UserId": user_id,
-                "UserName": username,
-                "DisplayName": display_name,
-                "Email": email,
-            }
+            # User created successfully
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")

@@ -97,11 +97,14 @@ def version():
 @app.command()
 def info(
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
-    """Display comprehensive information about the current AWS Identity Center configuration."""
+) -> None:
+    """Display comprehensive information about the current AWS Identity Center configuration.
+
+    Note: This command no longer performs automatic configuration. Use 'awsideman config auto'
+    to automatically configure AWS Identity Center settings and storage backends."""
     try:
         from .aws_clients.manager import AWSClientManager
-        from .utils.validators import validate_profile, validate_sso_instance
+        from .utils.validators import validate_profile, validate_sso_instance_no_auto
 
         console.print("[bold blue]AWS Identity Center Information[/bold blue]\n")
 
@@ -118,9 +121,11 @@ def info(
             console.print(f"[red]✗[/red] Profile Configuration: {str(e)}")
             return
 
-        # Validate SSO instance (with auto-detection)
+        # Validate SSO instance (no auto-detection)
         try:
-            instance_arn, identity_store_id = validate_sso_instance(profile_data, profile_name)
+            instance_arn, identity_store_id = validate_sso_instance_no_auto(
+                profile_data, profile_name
+            )
             console.print("[green]✓[/green] SSO Instance: Configured")
             console.print(f"    Instance ARN: {instance_arn}")
             console.print(f"    Identity Store ID: {identity_store_id}")
@@ -281,7 +286,7 @@ def status_command(
     action: Optional[str] = typer.Argument(
         None, help="Action for monitor: show, enable, disable, test, schedule"
     ),
-):
+) -> None:
     """Check AWS Identity Center status and health.
 
     This is the main status command. If no subcommand is specified, it defaults to 'check'.

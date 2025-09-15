@@ -15,7 +15,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from botocore.exceptions import ClientError
@@ -383,7 +383,7 @@ class BatchProcessor:
         self,
         assignments: List[PermissionAssignment],
         target_entity: EntityReference,
-        operation_func,
+        operation_func: Callable[[PermissionAssignment, EntityReference], Any],
         metrics: PerformanceMetrics,
     ) -> Tuple[List[PermissionAssignment], List[str]]:
         """
@@ -432,7 +432,7 @@ class BatchProcessor:
     def resolve_entities_parallel(
         self,
         entity_references: List[Tuple[EntityType, str]],
-        resolver_func,
+        resolver_func: Callable[[EntityType, str], Optional[EntityReference]],
         metrics: PerformanceMetrics,
     ) -> Dict[str, Optional[EntityReference]]:
         """
@@ -480,7 +480,7 @@ class BatchProcessor:
         self,
         assignments: List[PermissionAssignment],
         target_entity: EntityReference,
-        operation_func,
+        operation_func: Callable[[PermissionAssignment, EntityReference], Any],
         metrics: PerformanceMetrics,
     ) -> Tuple[List[PermissionAssignment], List[str]]:
         """Process a batch of assignments."""
@@ -522,7 +522,7 @@ class BatchProcessor:
     def _resolve_entity_batch(
         self,
         entity_references: List[Tuple[EntityType, str]],
-        resolver_func,
+        resolver_func: Callable[[EntityType, str], Optional[EntityReference]],
         metrics: PerformanceMetrics,
     ) -> Dict[str, Optional[EntityReference]]:
         """Resolve a batch of entities."""
@@ -561,7 +561,7 @@ class BatchProcessor:
 
     def _execute_with_retry(
         self,
-        operation_func,
+        operation_func: Callable[[PermissionAssignment, EntityReference], Any],
         target_entity: EntityReference,
         assignment: PermissionAssignment,
         metrics: PerformanceMetrics,
@@ -637,9 +637,9 @@ class StreamProcessor:
         self,
         assignments: List[PermissionAssignment],
         target_entity: EntityReference,
-        operation_func,
+        operation_func: Callable[[PermissionAssignment, EntityReference], Any],
         metrics: PerformanceMetrics,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Tuple[List[PermissionAssignment], List[str]]:
         """
         Process large assignment lists using streaming approach.

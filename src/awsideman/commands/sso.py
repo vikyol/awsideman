@@ -17,7 +17,7 @@ config = Config()
 @app.command("list")
 def list_instances(
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """List AWS SSO instances for the specified profile."""
     profile_name = profile or config.get("default_profile")
 
@@ -97,7 +97,7 @@ def set_instance(
         None, "--name", "-n", help="Display name for the SSO instance"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Set the SSO instance to use for operations."""
     profile_name = profile or config.get("default_profile")
 
@@ -129,7 +129,7 @@ def set_instance(
 def set_instance_name(
     name: str = typer.Argument(...),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Set a display name for the SSO instance."""
     profile_name = profile or config.get("default_profile")
 
@@ -165,7 +165,7 @@ def set_instance_name(
 @app.command("info")
 def instance_info(
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="AWS profile to use"),
-):
+) -> None:
     """Show information about the configured SSO instance."""
     profile_name = profile or config.get("default_profile")
 

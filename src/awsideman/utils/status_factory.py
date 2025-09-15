@@ -27,7 +27,7 @@ class StatusFactory:
     orchestrators, and related components with proper dependency injection.
     """
 
-    def __init__(self, idc_client, config: Optional[StatusCheckConfig] = None):
+    def __init__(self, idc_client: Any, config: Optional[StatusCheckConfig] = None):
         """
         Initialize the status factory.
 
@@ -60,7 +60,7 @@ class StatusFactory:
         self,
         status: StatusLevel = StatusLevel.HEALTHY,
         message: str = "Health check not performed",
-        **kwargs,
+        **kwargs: Any,
     ) -> HealthStatus:
         """
         Create a health status instance with default values.
@@ -87,7 +87,7 @@ class StatusFactory:
         self,
         status: StatusLevel = StatusLevel.HEALTHY,
         message: str = "Provisioning check not performed",
-        **kwargs,
+        **kwargs: Any,
     ) -> ProvisioningStatus:
         """
         Create a provisioning status instance with default values.
@@ -115,7 +115,7 @@ class StatusFactory:
         self,
         status: StatusLevel = StatusLevel.HEALTHY,
         message: str = "Orphaned assignment check not performed",
-        **kwargs,
+        **kwargs: Any,
     ) -> OrphanedAssignmentStatus:
         """
         Create an orphaned assignment status instance with default values.
@@ -142,7 +142,7 @@ class StatusFactory:
         self,
         status: StatusLevel = StatusLevel.HEALTHY,
         message: str = "Sync monitor check not performed",
-        **kwargs,
+        **kwargs: Any,
     ) -> SyncMonitorStatus:
         """
         Create a sync monitor status instance with default values.
@@ -165,7 +165,7 @@ class StatusFactory:
             providers_with_errors=kwargs.get("providers_with_errors", 0),
         )
 
-    def create_summary_statistics(self, **kwargs) -> SummaryStatistics:
+    def create_summary_statistics(self, **kwargs: Any) -> SummaryStatistics:
         """
         Create a summary statistics instance with default values.
 
@@ -194,7 +194,7 @@ class StatusFactory:
         orphaned_assignment_status: Optional[OrphanedAssignmentStatus] = None,
         sync_status: Optional[SyncMonitorStatus] = None,
         summary_statistics: Optional[SummaryStatistics] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> StatusReport:
         """
         Create a comprehensive status report with default components.
@@ -361,7 +361,7 @@ class StatusConfigBuilder:
         return self._config
 
 
-def create_default_status_factory(idc_client) -> StatusFactory:
+def create_default_status_factory(idc_client: Any) -> StatusFactory:
     """
     Create a status factory with default configuration.
 
@@ -385,7 +385,7 @@ def create_default_status_factory(idc_client) -> StatusFactory:
     return StatusFactory(idc_client, config)
 
 
-def create_fast_status_factory(idc_client) -> StatusFactory:
+def create_fast_status_factory(idc_client: Any) -> StatusFactory:
     """
     Create a status factory optimized for fast checks.
 
@@ -409,7 +409,7 @@ def create_fast_status_factory(idc_client) -> StatusFactory:
     return StatusFactory(idc_client, config)
 
 
-def create_robust_status_factory(idc_client) -> StatusFactory:
+def create_robust_status_factory(idc_client: Any) -> StatusFactory:
     """
     Create a status factory optimized for reliability.
 

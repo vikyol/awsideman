@@ -397,7 +397,7 @@ class OptimizedAssignmentCopier:
         # Create operation function
         def create_assignment_operation(
             target_entity: EntityReference, assignment: PermissionAssignment
-        ):
+        ) -> None:
             if target_entity.entity_type == EntityType.USER:
                 self._create_user_assignment(
                     target_entity.entity_id, assignment.permission_set_arn, assignment.account_id

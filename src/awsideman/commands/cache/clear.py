@@ -17,7 +17,7 @@ def clear_cache(
         "--profile",
         help="AWS profile to clear cache for (only works with --accounts-only). Use '*' to clear all profiles.",
     ),
-):
+) -> None:
     """Clear internal data storage.
 
     Removes stored AWS Identity Center data to refresh information from AWS.

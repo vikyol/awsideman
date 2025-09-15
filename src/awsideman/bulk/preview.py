@@ -112,7 +112,7 @@ class PreviewGenerator:
             unique_accounts=unique_accounts,
         )
 
-    def _display_header(self, operation_type: str, summary: PreviewSummary):
+    def _display_header(self, operation_type: str, summary: PreviewSummary) -> None:
         """Display the preview header.
 
         Args:
@@ -139,7 +139,7 @@ class PreviewGenerator:
         self.console.print(panel)
         self.console.print()
 
-    def _display_summary_stats(self, summary: PreviewSummary):
+    def _display_summary_stats(self, summary: PreviewSummary) -> None:
         """Display summary statistics table.
 
         Args:
@@ -168,7 +168,9 @@ class PreviewGenerator:
         self.console.print(stats_table)
         self.console.print()
 
-    def _display_assignment_table(self, assignments: List[Dict[str, Any]], operation_type: str):
+    def _display_assignment_table(
+        self, assignments: List[Dict[str, Any]], operation_type: str
+    ) -> None:
         """Display detailed assignment table.
 
         Args:
@@ -236,7 +238,7 @@ class PreviewGenerator:
         self.console.print(table)
         self.console.print()
 
-    def _display_resolution_errors(self, assignments: List[Dict[str, Any]]):
+    def _display_resolution_errors(self, assignments: List[Dict[str, Any]]) -> None:
         """Display resolution errors if any exist.
 
         Args:
@@ -329,7 +331,7 @@ class PreviewGenerator:
             self.console.print("\n[yellow]Operation cancelled by user[/yellow]")
             return False
 
-    def display_cancellation_message(self, operation_type: str):
+    def display_cancellation_message(self, operation_type: str) -> None:
         """Display cancellation message when user chooses not to proceed.
 
         Args:
@@ -344,7 +346,7 @@ class PreviewGenerator:
         self.console.print()
         self.console.print(cancellation_panel)
 
-    def display_dry_run_message(self, operation_type: str, summary: PreviewSummary):
+    def display_dry_run_message(self, operation_type: str, summary: PreviewSummary) -> None:
         """Display dry-run completion message.
 
         Args:
@@ -441,7 +443,7 @@ class PreviewGenerator:
         total_requested: int,
         valid_assignments: int,
         skipped_assignments: int,
-    ):
+    ) -> None:
         """Display summary of what will be processed.
 
         Args:

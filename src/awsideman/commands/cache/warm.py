@@ -21,7 +21,7 @@ def warm_cache(
     region: Optional[str] = region_option(),
     no_cache: bool = advanced_cache_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """Pre-load data by executing a command.
 
     Executes the specified command to populate internal data storage, improving response times

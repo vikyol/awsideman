@@ -465,7 +465,7 @@ class MultiAccountErrorHandler:
         else:
             return MultiAccountErrorType.UNKNOWN
 
-    def _display_name_resolution_error(self, error: NameResolutionError):
+    def _display_name_resolution_error(self, error: NameResolutionError) -> None:
         """Display name resolution error with guidance."""
         self.console.print("\n[red]❌ Name Resolution Failed[/red]")
         self.console.print(f"[red]{error.get_display_message()}[/red]")
@@ -482,7 +482,7 @@ class MultiAccountErrorHandler:
         if context:
             self.console.print(f"\n[dim]Context: {context}[/dim]")
 
-    def _display_account_filter_error(self, error: AccountFilterError):
+    def _display_account_filter_error(self, error: AccountFilterError) -> None:
         """Display account filter error with guidance."""
         self.console.print("\n[red]❌ Account Filter Failed[/red]")
         self.console.print(f"[red]{error.get_display_message()}[/red]")
@@ -886,7 +886,7 @@ class MultiAccountErrorSummary:
         summary_stats: Dict[str, Any],
         error_categories: Dict[str, List[AccountResult]],
         show_detailed_errors: bool = True,
-    ):
+    ) -> None:
         """Display comprehensive error summary."""
         self.console.print("\n[red]❌ Multi-Account Operation Error Summary[/red]")
 
@@ -957,7 +957,7 @@ class MultiAccountErrorSummary:
 
     def _display_error_recommendations(
         self, error_categories: Dict[str, List[AccountResult]], summary_stats: Dict[str, Any]
-    ):
+    ) -> None:
         """Display recommendations based on error patterns."""
         self.console.print("\n[bold cyan]💡 Recommendations:[/bold cyan]")
 

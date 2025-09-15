@@ -21,7 +21,7 @@ def delete_backup(
     backup_id: str = typer.Argument(..., help="Backup ID to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Delete a backup with confirmation.
 
     Removes a backup from storage after confirmation. This operation cannot

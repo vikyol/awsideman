@@ -10,7 +10,7 @@ console = Console()
 
 def check_backup_health(
     profile: Optional[str] = typer.Option(None, "--profile", help="AWS profile to use"),
-):
+) -> None:
     """Check backup system health.
 
     Performs health checks on the backup system including storage connectivity,

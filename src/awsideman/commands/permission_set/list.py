@@ -66,7 +66,7 @@ def _list_permission_sets_internal(
         sso_admin_client = aws_client.get_identity_center_client()
 
         # Prepare the list_permission_sets API call parameters
-        list_permission_sets_params = {"InstanceArn": instance_arn}
+        list_permission_sets_params: Dict[str, Any] = {"InstanceArn": instance_arn}
 
         # Add optional parameters if provided
         if limit:
@@ -270,7 +270,7 @@ def list_permission_sets(
     profile: Optional[str] = profile_option(),
     region: Optional[str] = region_option(),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-):
+) -> None:
     """List all permission sets in the Identity Center.
 
     Displays a table of permission sets with their names, ARNs, descriptions, and session durations.
@@ -298,6 +298,6 @@ def list_permission_sets(
     # Show cache information if verbose
     show_cache_info(verbose)
 
-    return _list_permission_sets_internal(
+    _list_permission_sets_internal(
         filter, limit, next_token, profile, region, enable_caching, verbose
     )

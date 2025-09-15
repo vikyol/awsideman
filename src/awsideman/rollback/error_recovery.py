@@ -526,7 +526,7 @@ def with_rollback_retry(
     initial_delay: float = 1.0,
     max_delay: float = 60.0,
     backoff_multiplier: float = 2.0,
-):
+) -> Callable:
     """Decorator for adding retry logic to rollback operations.
 
     Args:
