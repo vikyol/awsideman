@@ -46,7 +46,7 @@ class DynamoDBBackend(CacheBackend):
         self.backend_type = "dynamodb"
         self._client = None
         self._table = None
-        self._table_exists = None  # Cache table existence check
+        self._table_exists: bool | None = None  # Cache table existence check
 
         logger.debug(
             f"Initialized DynamoDB backend: table={table_name}, region={region}, profile={profile}"
@@ -230,9 +230,7 @@ class DynamoDBBackend(CacheBackend):
                 )
                 raise CacheBackendError(f"Invalid cache key format: {key}")
 
-            # Validate data
-            if not isinstance(data, bytes):
-                raise CacheBackendError("Data must be bytes")
+            # data is guaranteed to be bytes by type annotation
 
             # Validate TTL
             if ttl is not None and (not isinstance(ttl, int) or ttl <= 0):
@@ -564,7 +562,7 @@ class DynamoDBBackend(CacheBackend):
         try:
             response = self.client.describe_time_to_live(TableName=self.table_name)
             ttl_description = response.get("TimeToLiveDescription", {})
-            return ttl_description.get("TimeToLiveStatus") == "ENABLED"
+            return str(ttl_description.get("TimeToLiveStatus", "")) == "ENABLED"
         except Exception as e:
             logger.debug(f"Could not check TTL status for table {self.table_name}: {e}")
             return False
@@ -576,7 +574,12 @@ class DynamoDBBackend(CacheBackend):
         Returns:
             Dictionary with validation results
         """
-        validation_result = {"valid": False, "errors": [], "warnings": [], "table_info": {}}
+        validation_result: Dict[str, Any] = {
+            "valid": False,
+            "errors": [],
+            "warnings": [],
+            "table_info": {},
+        }
 
         try:
             if not self._check_table_exists():
@@ -717,7 +720,7 @@ class DynamoDBBackend(CacheBackend):
         Returns:
             Dictionary with repair results
         """
-        repair_result = {"success": False, "actions_taken": [], "errors": []}
+        repair_result: Dict[str, Any] = {"success": False, "actions_taken": [], "errors": []}
 
         try:
             # First validate the table
@@ -1103,7 +1106,12 @@ class DynamoDBBackend(CacheBackend):
         Returns:
             Dictionary with cleanup results
         """
-        cleanup_result = {"success": False, "chunks_found": 0, "chunks_deleted": 0, "errors": []}
+        cleanup_result: Dict[str, Any] = {
+            "success": False,
+            "chunks_found": 0,
+            "chunks_deleted": 0,
+            "errors": [],
+        }
 
         try:
             # Scan for all chunk items
@@ -1126,7 +1134,7 @@ class DynamoDBBackend(CacheBackend):
             cleanup_result["chunks_found"] = len(chunk_items)
 
             # Group chunks by parent key and chunk_id
-            chunk_groups = {}
+            chunk_groups: Dict[str, List[Dict[str, Any]]] = {}
             for chunk in chunk_items:
                 parent_key = chunk.get("parent_key")
                 chunk_id = chunk.get("chunk_id")

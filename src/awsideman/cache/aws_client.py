@@ -131,11 +131,11 @@ class CachedAWSClient:
 
         # If it's not callable, return as-is (properties, etc.)
         if not callable(original_method):
-            return original_method
+            return original_method  # type: ignore
 
         # Special handling for get_paginator - always pass through without caching
         if name == "get_paginator":
-            return original_method
+            return original_method  # type: ignore
 
         # Determine if this is a read or write operation
         is_read_operation = self._is_read_operation(name)
@@ -148,7 +148,7 @@ class CachedAWSClient:
         else:
             # For operations we don't recognize, just pass through
             logger.debug(f"Unknown operation type for {name}, passing through without caching")
-            return original_method
+            return original_method  # type: ignore
 
     def _is_read_operation(self, operation_name: str) -> bool:
         """
@@ -427,12 +427,9 @@ class CachedAWSClient:
                 additional_context["principal_id"] = kwargs["PrincipalId"]
 
         # Use the cache manager's invalidation method
-        return self.cache_manager.invalidate_for_operation(
-            operation_type=operation_type,
-            resource_type=self.resource_type,
-            resource_id=resource_id,
-            additional_context=additional_context,
-        )
+        # Create a pattern based on the operation and resource
+        pattern = f"{operation_type}:{self.resource_type}:{resource_id}"
+        return self.cache_manager.invalidate(pattern)
 
 
 class CachedIdentityCenterClient(CachedAWSClient):
@@ -612,12 +609,9 @@ class CachedIdentityCenterClient(CachedAWSClient):
                 resource_id = kwargs["InstanceArn"]
 
         # Use the cache manager's invalidation method
-        return self.cache_manager.invalidate_for_operation(
-            operation_type=operation_type,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            additional_context=additional_context,
-        )
+        # Create a pattern based on the operation and resource
+        pattern = f"{operation_type}:{resource_type}:{resource_id}"
+        return self.cache_manager.invalidate(pattern)
 
 
 class CachedIdentityStoreClient(CachedAWSClient):
@@ -812,22 +806,17 @@ class CachedIdentityStoreClient(CachedAWSClient):
                     additional_context["member_id"] = kwargs["MemberId"]
 
         # Use the cache manager's invalidation method
-        total_invalidated = self.cache_manager.invalidate_for_operation(
-            operation_type=operation_type,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            additional_context=additional_context,
-        )
+        # Create a pattern based on the operation and resource
+        pattern = f"{operation_type}:{resource_type}:{resource_id}"
+        total_invalidated = self.cache_manager.invalidate(pattern)
 
         # For group membership operations, also invalidate user-related cache
         if additional_context.get("affects_users"):
-            user_invalidated = self.cache_manager.invalidate_for_operation(
-                operation_type=operation_type,
-                resource_type="user",
-                resource_id=additional_context.get("member_id"),
-                additional_context={"group_membership_changed": True},
-            )
-            total_invalidated += user_invalidated
+            member_id = additional_context.get("member_id")
+            if member_id:
+                user_pattern = f"{operation_type}:user:{member_id}"
+                user_invalidated = self.cache_manager.invalidate(user_pattern)
+                total_invalidated += user_invalidated
 
         return total_invalidated
 

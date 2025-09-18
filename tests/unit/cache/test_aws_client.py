@@ -269,22 +269,23 @@ class TestCachedAWSClient:
         self.mock_aws_client.create_user = Mock(return_value=api_result)
 
         # Set up cache invalidation
-        self.mock_cache_manager.invalidate_for_operation.return_value = 5
+        self.mock_cache_manager.invalidate.return_value = 5
 
         # Call the method
-        result = self.cached_client.create_user(UserName="testuser")
+        result = self.cached_client.create_user(UserName="testuser", UserId="user-123")
 
         # Should return API result
         assert result == api_result
 
         # Should call AWS API
-        self.mock_aws_client.create_user.assert_called_once_with(UserName="testuser")
+        self.mock_aws_client.create_user.assert_called_once_with(
+            UserName="testuser", UserId="user-123"
+        )
 
         # Should call cache invalidation
-        self.mock_cache_manager.invalidate_for_operation.assert_called_once()
-        call_args = self.mock_cache_manager.invalidate_for_operation.call_args
-        assert call_args[1]["operation_type"] == "create"
-        assert call_args[1]["resource_type"] == "user"
+        self.mock_cache_manager.invalidate.assert_called_once()
+        call_args = self.mock_cache_manager.invalidate.call_args
+        assert call_args[0][0] == "create:user:user-123"
 
     def test_write_operation_invalidation_error(self):
         """Test write operation with cache invalidation error."""
@@ -354,12 +355,7 @@ class TestCachedAWSClient:
         )
 
         # Should call cache manager invalidation
-        self.mock_cache_manager.invalidate_for_operation.assert_called_once_with(
-            operation_type="update",
-            resource_type="user",
-            resource_id="user-123",
-            additional_context={},
-        )
+        self.mock_cache_manager.invalidate.assert_called_once_with("update:user:user-123")
 
     def test_invalidate_for_operation_assignment_resource(self):
         """Test cache invalidation for assignment resource operations."""
@@ -380,17 +376,8 @@ class TestCachedAWSClient:
             },
         )
 
-        # Should call cache manager invalidation with additional context
-        self.mock_cache_manager.invalidate_for_operation.assert_called_once_with(
-            operation_type="create",
-            resource_type="assignment",
-            resource_id=None,
-            additional_context={
-                "account_id": "123456789012",
-                "permission_set_arn": "arn:aws:sso:::permissionSet/ssoins-123/ps-456",
-                "principal_id": "user-123",
-            },
-        )
+        # Should call cache manager invalidation with pattern
+        self.mock_cache_manager.invalidate.assert_called_once_with("create:assignment:None")
 
 
 class TestCachedIdentityCenterClient:

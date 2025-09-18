@@ -319,8 +319,8 @@ def cache_status(
                 from ...utils.config import Config
 
                 # Get current profile from config
-                config = Config()
-                config_data = config.get_all()
+                global_config = Config()
+                config_data = global_config.get_all()
                 current_profile = config_data.get("default_profile")
 
                 if current_profile:
@@ -349,8 +349,8 @@ def cache_status(
                 from ...cache.utilities import get_profile_cache_config
                 from ...utils.config import Config
 
-                config = Config()
-                config_data = config.get_all()
+                global_config = Config()
+                config_data = global_config.get_all()
                 current_profile = config_data.get("default_profile")
 
                 if current_profile:

@@ -285,8 +285,7 @@ class InputValidator:
         Returns:
             True if valid, False otherwise
         """
-        if not isinstance(key, str):
-            return False
+        # key is guaranteed to be str by type annotation
 
         if not key or len(key) > 255:
             return False
@@ -309,8 +308,7 @@ class InputValidator:
         Returns:
             Sanitized cache key
         """
-        if not isinstance(key, str):
-            raise ValueError("Cache key must be a string")
+        # key is guaranteed to be str by type annotation
 
         # Remove dangerous characters
         sanitized = re.sub(r"[^\w\-\./:]+", "_", key)
@@ -343,8 +341,7 @@ class InputValidator:
         Returns:
             True if valid, False otherwise
         """
-        if not isinstance(arn, str):
-            return False
+        # arn is guaranteed to be str by type annotation
 
         return bool(cls.AWS_ARN_PATTERN.match(arn))
 
@@ -359,8 +356,7 @@ class InputValidator:
         Returns:
             True if valid, False otherwise
         """
-        if not isinstance(account_id, str):
-            return False
+        # account_id is guaranteed to be str by type annotation
 
         return bool(cls.AWS_ACCOUNT_ID_PATTERN.match(account_id))
 
@@ -375,8 +371,7 @@ class InputValidator:
         Returns:
             True if valid, False otherwise
         """
-        if not isinstance(uuid_str, str):
-            return False
+        # uuid_str is guaranteed to be str by type annotation
 
         return bool(cls.UUID_PATTERN.match(uuid_str))
 
@@ -391,8 +386,7 @@ class InputValidator:
         Returns:
             True if valid, False otherwise
         """
-        if not isinstance(email, str):
-            return False
+        # email is guaranteed to be str by type annotation
 
         return bool(cls.EMAIL_PATTERN.match(email))
 
@@ -408,8 +402,7 @@ class InputValidator:
         Returns:
             True if valid, False otherwise
         """
-        if not isinstance(path, str):
-            return False
+        # path is guaranteed to be str by type annotation
 
         try:
             # Resolve path to prevent traversal

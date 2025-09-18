@@ -39,8 +39,8 @@ class HybridBackend(CacheBackend):
         self.backend_type = "hybrid"
 
         # Access tracking for promotion/demotion decisions
-        self._access_counts = {}
-        self._last_access_times = {}
+        self._access_counts: Dict[str, int] = {}
+        self._last_access_times: Dict[str, float] = {}
 
         logger.debug(f"Initialized hybrid backend with local_ttl: {local_ttl}s")
 
@@ -255,7 +255,7 @@ class HybridBackend(CacheBackend):
             CacheBackendError: If stats collection fails
         """
         try:
-            stats = {
+            stats: Dict[str, Any] = {
                 "backend_type": self.backend_type,
                 "local_ttl": self.local_ttl,
                 "access_tracking": {
@@ -571,7 +571,12 @@ class HybridBackend(CacheBackend):
         Returns:
             Dictionary with synchronization results
         """
-        sync_result = {"success": False, "local_to_remote": 0, "remote_to_local": 0, "errors": []}
+        sync_result: Dict[str, Any] = {
+            "success": False,
+            "local_to_remote": 0,
+            "remote_to_local": 0,
+            "errors": [],
+        }
 
         try:
             logger.info("Starting backend synchronization")

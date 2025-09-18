@@ -444,7 +444,7 @@ class Config:
         """
         self._ensure_config_loaded()
         # Start with default cache config
-        cache_config = DEFAULT_CACHE_CONFIG.copy()
+        cache_config: Dict[str, Any] = DEFAULT_CACHE_CONFIG.copy()
 
         # Override with config file values if they exist
         file_cache_config = self.config_data.get("cache", {})
@@ -483,7 +483,7 @@ class Config:
         """
         self._ensure_config_loaded()
         # Start with default rollback config
-        rollback_config = DEFAULT_ROLLBACK_CONFIG.copy()
+        rollback_config: Dict[str, Any] = DEFAULT_ROLLBACK_CONFIG.copy()
 
         # Override with config file values if they exist
         file_rollback_config = self.config_data.get("rollback", {})
@@ -527,7 +527,7 @@ class Config:
         """
         self._ensure_config_loaded()
         # Start with default template config
-        template_config = DEFAULT_TEMPLATE_CONFIG.copy()
+        template_config: Dict[str, Any] = DEFAULT_TEMPLATE_CONFIG.copy()
 
         # Override with config file values if they exist
         file_template_config = self.config_data.get("templates", {})

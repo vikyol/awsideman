@@ -98,9 +98,9 @@ def get_profile_cache_config(profile_name: str) -> AdvancedCacheConfig:
                     config_dict["profile"] = profile_name
                     return AdvancedCacheConfig(**config_dict)
                 else:
-                    # Handle case where it's already a dict
-                    # Remove profile_name since AdvancedCacheConfig doesn't accept it
-                    config_dict = dict(profile_config)
+                    # Handle case where it's already a ProfileCacheConfig object
+                    # Convert to dict and remove profile_name since AdvancedCacheConfig doesn't accept it
+                    config_dict = profile_config.to_dict()
                     config_dict.pop("profile_name", None)
                     # Add profile information
                     config_dict["profile"] = profile_name
@@ -214,7 +214,7 @@ def create_legacy_cache_manager(config: Optional[AdvancedCacheConfig] = None) ->
 
     try:
         logger.debug(f"Creating legacy cache manager with backend type: {config.backend_type}")
-        cache_manager = CacheManager(config=config)
+        cache_manager = CacheManager()
 
         # Validate the cache manager configuration
         validation_errors = config.validate()
@@ -230,15 +230,7 @@ def create_legacy_cache_manager(config: Optional[AdvancedCacheConfig] = None) ->
 
         # Fall back to basic cache manager
         logger.info("Falling back to basic legacy cache manager")
-        fallback_config = AdvancedCacheConfig(
-            enabled=True,
-            backend_type="file",
-            default_ttl=3600,
-            max_size_mb=100,
-            encryption_enabled=False,
-            encryption_type="none",
-        )
-        return CacheManager(config=fallback_config)
+        return CacheManager()
 
 
 def create_aws_client_manager(
@@ -333,32 +325,37 @@ def get_cache_config_from_environment() -> Dict[str, Any]:
     }
 
     # Basic cache settings
-    if os.getenv("AWSIDEMAN_CACHE_ENABLED"):
-        config["enabled"] = os.getenv("AWSIDEMAN_CACHE_ENABLED").lower() in (
+    enabled_env = os.getenv("AWSIDEMAN_CACHE_ENABLED")
+    if enabled_env:
+        config["enabled"] = enabled_env.lower() in (
             "true",
             "1",
             "yes",
             "on",
         )
 
-    if os.getenv("AWSIDEMAN_CACHE_TTL_DEFAULT"):
+    ttl_env = os.getenv("AWSIDEMAN_CACHE_TTL_DEFAULT")
+    if ttl_env:
         try:
-            config["default_ttl"] = int(os.getenv("AWSIDEMAN_CACHE_TTL_DEFAULT"))
+            config["default_ttl"] = int(ttl_env)
         except ValueError:
             logger.warning("Invalid AWSIDEMAN_CACHE_TTL_DEFAULT value")
 
-    if os.getenv("AWSIDEMAN_CACHE_MAX_SIZE_MB"):
+    max_size_env = os.getenv("AWSIDEMAN_CACHE_MAX_SIZE_MB")
+    if max_size_env:
         try:
-            config["max_size_mb"] = int(os.getenv("AWSIDEMAN_CACHE_MAX_SIZE_MB"))
+            config["max_size_mb"] = int(max_size_env)
         except ValueError:
             logger.warning("Invalid AWSIDEMAN_CACHE_MAX_SIZE_MB value")
 
     # Advanced cache settings
-    if os.getenv("AWSIDEMAN_CACHE_BACKEND"):
-        config["backend_type"] = os.getenv("AWSIDEMAN_CACHE_BACKEND")
+    backend_env = os.getenv("AWSIDEMAN_CACHE_BACKEND")
+    if backend_env:
+        config["backend_type"] = backend_env
 
-    if os.getenv("AWSIDEMAN_CACHE_ENCRYPTION"):
-        config["encryption_enabled"] = os.getenv("AWSIDEMAN_CACHE_ENCRYPTION").lower() in (
+    encryption_env = os.getenv("AWSIDEMAN_CACHE_ENCRYPTION")
+    if encryption_env:
+        config["encryption_enabled"] = encryption_env.lower() in (
             "true",
             "1",
             "yes",
@@ -396,9 +393,10 @@ def get_cache_config_from_environment() -> Dict[str, Any]:
         config["operation_ttls"] = operation_ttls
 
     # Hybrid cache settings
-    if os.getenv("AWSIDEMAN_CACHE_HYBRID_LOCAL_TTL"):
+    hybrid_ttl_env = os.getenv("AWSIDEMAN_CACHE_HYBRID_LOCAL_TTL")
+    if hybrid_ttl_env:
         try:
-            config["hybrid_local_ttl"] = int(os.getenv("AWSIDEMAN_CACHE_HYBRID_LOCAL_TTL"))
+            config["hybrid_local_ttl"] = int(hybrid_ttl_env)
         except ValueError:
             logger.warning("Invalid AWSIDEMAN_CACHE_HYBRID_LOCAL_TTL value")
 

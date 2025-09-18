@@ -61,6 +61,7 @@ def diff_backups(
         # Initialize storage backend
         default_backend = config.get("backup.storage.default_backend", "filesystem")
 
+        backend: FileSystemStorageBackend | S3StorageBackend
         if storage_backend == "s3" or (not storage_backend and default_backend == "s3"):
             # Use configured S3 settings if no storage_path provided
             if not storage_path:
@@ -91,6 +92,7 @@ def diff_backups(
                 base_path=storage_path or config.get("backup.storage.filesystem.path", "./backups"),
                 create_dirs=True,
             )
+            # backend is FileSystemStorageBackend here; safe to access base_path
             console.print(f"[blue]Using filesystem storage: {backend.base_path}[/blue]")
 
         # Initialize storage engine

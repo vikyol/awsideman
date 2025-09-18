@@ -134,7 +134,19 @@ def create_schedule(
             storage_backend, storage_path, profile_name, profile_data
         )
         storage_engine = StorageEngine(backend=storage_backend_obj)
-        collector = IdentityCenterCollector()
+
+        # Create AWS client manager for the collector
+        from ...aws_clients.manager import AWSClientManager
+
+        aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Get SSO instance information from profile configuration
+        instance_arn = profile_data.get("sso_instance_arn")
+        if not instance_arn:
+            console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+            raise typer.Exit(1)
+
+        collector = IdentityCenterCollector(client_manager=aws_client, instance_arn=instance_arn)
         backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
         schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
@@ -203,7 +215,18 @@ def update_schedule(
             "filesystem", None, profile_name, profile_data
         )
         storage_engine = StorageEngine(backend=storage_backend_obj)
-        collector = IdentityCenterCollector()
+        # Create AWS client manager for the collector
+        from ...aws_clients.manager import AWSClientManager
+
+        aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Get SSO instance information from profile configuration
+        instance_arn = profile_data.get("sso_instance_arn")
+        if not instance_arn:
+            console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+            raise typer.Exit(1)
+
+        collector = IdentityCenterCollector(client_manager=aws_client, instance_arn=instance_arn)
         backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
         schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
@@ -275,7 +298,18 @@ def delete_schedule(
             "filesystem", None, profile_name, profile_data
         )
         storage_engine = StorageEngine(backend=storage_backend_obj)
-        collector = IdentityCenterCollector()
+        # Create AWS client manager for the collector
+        from ...aws_clients.manager import AWSClientManager
+
+        aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Get SSO instance information from profile configuration
+        instance_arn = profile_data.get("sso_instance_arn")
+        if not instance_arn:
+            console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+            raise typer.Exit(1)
+
+        collector = IdentityCenterCollector(client_manager=aws_client, instance_arn=instance_arn)
         backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
         schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
@@ -283,7 +317,7 @@ def delete_schedule(
         console.print(f"[blue]Deleting schedule: {schedule_id}[/blue]")
 
         try:
-            schedule = asyncio.run(schedule_manager.get_schedule(schedule_id))
+            schedule = asyncio.run(schedule_manager.get_schedule_status(schedule_id))
         except Exception as e:
             console.print(f"[red]Error: Schedule '{schedule_id}' not found.[/red]")
             console.print(f"[yellow]Details: {e}[/yellow]")
@@ -291,10 +325,10 @@ def delete_schedule(
 
         # Display schedule information
         console.print("[blue]Found schedule:[/blue]")
-        console.print(f"  ID: {schedule.schedule_id}")
-        console.print(f"  Name: {schedule.name}")
-        console.print(f"  Interval: {schedule.interval}")
-        console.print(f"  Status: {'Enabled' if schedule.enabled else 'Disabled'}")
+        console.print(f"  ID: {schedule['schedule_id']}")
+        console.print(f"  Name: {schedule['name']}")
+        console.print(f"  Interval: {schedule['interval']}")
+        console.print(f"  Status: {'Enabled' if schedule['enabled'] else 'Disabled'}")
 
         # Confirmation prompt
         if not force:
@@ -345,7 +379,18 @@ def list_schedules(
             "filesystem", None, profile_name, profile_data
         )
         storage_engine = StorageEngine(backend=storage_backend_obj)
-        collector = IdentityCenterCollector()
+        # Create AWS client manager for the collector
+        from ...aws_clients.manager import AWSClientManager
+
+        aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Get SSO instance information from profile configuration
+        instance_arn = profile_data.get("sso_instance_arn")
+        if not instance_arn:
+            console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+            raise typer.Exit(1)
+
+        collector = IdentityCenterCollector(client_manager=aws_client, instance_arn=instance_arn)
         backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
         schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
@@ -395,7 +440,18 @@ def run_schedule(
             "filesystem", None, profile_name, profile_data
         )
         storage_engine = StorageEngine(backend=storage_backend_obj)
-        collector = IdentityCenterCollector()
+        # Create AWS client manager for the collector
+        from ...aws_clients.manager import AWSClientManager
+
+        aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Get SSO instance information from profile configuration
+        instance_arn = profile_data.get("sso_instance_arn")
+        if not instance_arn:
+            console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+            raise typer.Exit(1)
+
+        collector = IdentityCenterCollector(client_manager=aws_client, instance_arn=instance_arn)
         backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
         schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
@@ -437,7 +493,18 @@ def get_schedule_status(
             "filesystem", None, profile_name, profile_data
         )
         storage_engine = StorageEngine(backend=storage_backend_obj)
-        collector = IdentityCenterCollector()
+        # Create AWS client manager for the collector
+        from ...aws_clients.manager import AWSClientManager
+
+        aws_client = AWSClientManager(profile=profile_name, region=profile_data.get("region"))
+
+        # Get SSO instance information from profile configuration
+        instance_arn = profile_data.get("sso_instance_arn")
+        if not instance_arn:
+            console.print("[red]Error: No SSO instance configured for this profile.[/red]")
+            raise typer.Exit(1)
+
+        collector = IdentityCenterCollector(client_manager=aws_client, instance_arn=instance_arn)
         backup_manager = BackupManager(collector=collector, storage_engine=storage_engine)
         schedule_manager = ScheduleManager(backup_manager=backup_manager)
 
@@ -487,13 +554,15 @@ def _initialize_storage_backend(
         if profile_data and "region" in profile_data:
             s3_config["region_name"] = profile_data["region"]
 
-        bucket_name = s3_config.pop("bucket_name")
-        if bucket_name is None:
+        # Extract bucket_name and remove it from config
+        bucket_name_str = s3_config.pop("bucket_name")
+        if bucket_name_str is None:
             console.print("[red]Error: bucket_name is required for S3 storage.[/red]")
             raise typer.Exit(1)
-        # At this point, bucket_name is guaranteed to be str
-        assert bucket_name is not None
-        return S3StorageBackend(bucket_name, **s3_config)
+
+        # Filter out None values from s3_config
+        filtered_s3_config = {k: v for k, v in s3_config.items() if v is not None}
+        return S3StorageBackend(bucket_name_str, **filtered_s3_config)
     else:
         console.print(f"[red]Error: Unsupported storage backend '{storage_backend}'.[/red]")
         console.print("[yellow]Supported backends: filesystem, s3[/yellow]")

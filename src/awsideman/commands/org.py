@@ -587,7 +587,7 @@ def _resolve_account_identifier(
             account_name = matching_accounts[0]["Name"]
             if not json_output:
                 console.print(f"[green]Found account: {account_name} ({account_id})[/green]")
-            return account_id
+            return str(account_id)
 
         # Multiple matches - show options and let user choose
         console.print(f"[yellow]Multiple accounts found matching '{account_identifier}':[/yellow]")

@@ -223,7 +223,7 @@ class PreviewGenerator:
         logger.info(f"Generating bulk preview for {len(operations)} operations")
 
         try:
-            bulk_preview = {
+            bulk_preview: Dict[str, Any] = {
                 "operation_type": "bulk_preview",
                 "total_operations": len(operations),
                 "operation_summaries": [],

@@ -106,14 +106,19 @@ def select_operation_interactively(profile: Optional[str], dry_run: bool = False
             if hasattr(operation, "principal_name"):
                 principal_name = operation.principal_name
             elif hasattr(operation, "source_entity_name"):
-                if operation.operation_type.value == "copy_assignments":
+                if operation.operation_type.value == "copy_assignments" and hasattr(
+                    operation, "target_entity_name"
+                ):
                     principal_name = (
                         f"{operation.source_entity_name} → {operation.target_entity_name}"
                     )
                 else:
                     principal_name = operation.source_entity_name
             elif hasattr(operation, "source_permission_set_name"):
-                principal_name = f"{operation.source_permission_set_name} → {operation.target_permission_set_name}"
+                if hasattr(operation, "target_permission_set_name"):
+                    principal_name = f"{operation.source_permission_set_name} → {operation.target_permission_set_name}"
+                else:
+                    principal_name = operation.source_permission_set_name
             else:
                 principal_name = "Unknown"
 
@@ -465,7 +470,9 @@ def list_operations(
                 principal_name = operation.principal_name
             elif hasattr(operation, "source_entity_name"):
                 # For permission cloning operations, show source -> target
-                if operation.operation_type.value == "copy_assignments":
+                if operation.operation_type.value == "copy_assignments" and hasattr(
+                    operation, "target_entity_name"
+                ):
                     principal_name = (
                         f"{operation.source_entity_name} → {operation.target_entity_name}"
                     )
@@ -473,7 +480,10 @@ def list_operations(
                     principal_name = operation.source_entity_name
             elif hasattr(operation, "source_permission_set_name"):
                 # For permission set cloning operations, show source -> target
-                principal_name = f"{operation.source_permission_set_name} → {operation.target_permission_set_name}"
+                if hasattr(operation, "target_permission_set_name"):
+                    principal_name = f"{operation.source_permission_set_name} → {operation.target_permission_set_name}"
+                else:
+                    principal_name = operation.source_permission_set_name
             else:
                 principal_name = "Unknown"
 
@@ -772,9 +782,12 @@ def apply_rollback(
         successful_results = operation.assignments_copied
     elif hasattr(operation, "source_permission_set_name"):
         # For PermissionSetCloningOperationRecord, there's typically one permission set to delete
-        successful_results = (
-            [operation.target_permission_set_arn] if operation.target_permission_set_arn else []
-        )
+        if hasattr(operation, "target_permission_set_arn"):
+            successful_results = (
+                [operation.target_permission_set_arn] if operation.target_permission_set_arn else []
+            )
+        else:
+            successful_results = []
     else:
         successful_results = []
 
@@ -876,8 +889,8 @@ def apply_rollback(
     elif hasattr(operation, "permission_sets_involved") and operation.permission_sets_involved:
         # For PermissionCloningOperationRecord, use the first permission set
         permission_set_arn = operation.permission_sets_involved[0]
-        account_ids = operation.accounts_affected
-        principal_id = operation.source_entity_id
+        account_ids = operation.accounts_affected if hasattr(operation, "accounts_affected") else []
+        principal_id = operation.source_entity_id if hasattr(operation, "source_entity_id") else ""
     else:
         permission_set_arn = ""
         account_ids = []
@@ -992,7 +1005,9 @@ def apply_rollback(
                         principal_name = operation.principal_name
                     elif hasattr(operation, "source_entity_name"):
                         # For copy operations, show the target user (who will be affected by rollback)
-                        if operation.operation_type.value == "copy_assignments":
+                        if operation.operation_type.value == "copy_assignments" and hasattr(
+                            operation, "target_entity_name"
+                        ):
                             principal_name = operation.target_entity_name
                         else:
                             # For other operations, use source entity info
@@ -1063,7 +1078,9 @@ def apply_rollback(
                 )
 
                 # Add specific warning for copy operation rollbacks
-                if operation.operation_type.value == "copy_assignments":
+                if operation.operation_type.value == "copy_assignments" and hasattr(
+                    operation, "target_entity_name"
+                ):
                     console.print("\n[yellow]⚠️  Post-rollback warning:[/yellow]")
                     console.print(
                         f"[yellow]The target user '{operation.target_entity_name}' has had their copied assignments revoked.[/yellow]"

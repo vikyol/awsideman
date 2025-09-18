@@ -118,8 +118,9 @@ class InputValidator:
         Raises:
             OutputFormatError: If format is invalid
         """
-        if not output_format or not isinstance(output_format, str):
+        if not output_format:
             raise OutputFormatError("Output format must be a non-empty string")
+        # output_format is guaranteed to be str by type annotation
 
         normalized_format = output_format.lower().strip()
 
@@ -180,11 +181,13 @@ class InputValidator:
         Raises:
             InvalidDateSpecError: If specifications are invalid
         """
-        if not source_spec or not isinstance(source_spec, str) or not source_spec.strip():
+        if not source_spec or not source_spec.strip():
+            # source_spec is guaranteed to be str by type annotation
             raise InvalidDateSpecError("Source backup specification cannot be empty")
 
         if target_spec is not None:
-            if not isinstance(target_spec, str) or not target_spec.strip():
+            if not target_spec.strip():
+                # target_spec is guaranteed to be str when not None
                 raise InvalidDateSpecError("Target backup specification cannot be empty")
 
         # Additional validation can be added here for specific formats

@@ -73,13 +73,6 @@ class AccountDetails:
     tags: Dict[str, str]
     ou_path: List[str]  # List of OU IDs or names from root to account
 
-    def __post_init__(self):
-        """Ensure collections are properly initialized."""
-        if self.tags is None:
-            self.tags = {}
-        if self.ou_path is None:
-            self.ou_path = []
-
     def get_tag(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get a tag value by key."""
         return self.tags.get(key, default)

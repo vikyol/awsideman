@@ -612,28 +612,18 @@ def _display_config_table(config_data: dict, full_config_data: dict) -> None:
             console.print(table)
         else:
             # Default table display for other sections
-            if isinstance(section_data, dict):
-                table = Table()
-                table.add_column("Setting", style="cyan")
-                table.add_column("Value", style="green")
+            # section_data is guaranteed to be a dict at this point
+            table = Table()
+            table.add_column("Setting", style="cyan")
+            table.add_column("Value", style="green")
 
-                for key, value in section_data.items():
-                    if isinstance(value, dict):
-                        table.add_row(key, f"{len(value)} items configured")
-                    else:
-                        table.add_row(key, str(value))
+            for key, value in section_data.items():
+                if isinstance(value, dict):
+                    table.add_row(key, f"{len(value)} items configured")
+                else:
+                    table.add_row(key, str(value))
 
-                console.print(table)
-            elif isinstance(section_data, str):
-                # Handle string values (like default_profile)
-                table = Table()
-                table.add_column("Setting", style="cyan")
-                table.add_column("Value", style="green")
-                table.add_row(section_name, str(section_data))
-                console.print(table)
-            else:
-                # Handle other types
-                console.print(f"  {section_data}")
+            console.print(table)
 
 
 def _display_effective_cache_config(config_data: dict, cache_section: dict) -> None:
@@ -653,8 +643,10 @@ def _display_effective_cache_config(config_data: dict, cache_section: dict) -> N
     for key, value in cache_section.items():
         if key != "profiles" and value is not None:
             if key == "operation_ttls" and isinstance(value, dict):
-                if isinstance(effective_config["operation_ttls"], dict):
-                    effective_config["operation_ttls"].update(value)
+                # effective_config["operation_ttls"] is guaranteed to be a dict from DEFAULT_CACHE_CONFIG
+                operation_ttls = effective_config["operation_ttls"]
+                assert isinstance(operation_ttls, dict)
+                operation_ttls.update(value)
             else:
                 effective_config[key] = value
 
@@ -662,8 +654,10 @@ def _display_effective_cache_config(config_data: dict, cache_section: dict) -> N
     for key, value in profile_cache_config.items():
         if value is not None:
             if key == "operation_ttls" and isinstance(value, dict):
-                if isinstance(effective_config["operation_ttls"], dict):
-                    effective_config["operation_ttls"].update(value)
+                # effective_config["operation_ttls"] is guaranteed to be a dict from DEFAULT_CACHE_CONFIG
+                operation_ttls = effective_config["operation_ttls"]
+                assert isinstance(operation_ttls, dict)
+                operation_ttls.update(value)
             else:
                 effective_config[key] = value
 
@@ -701,24 +695,22 @@ def _display_effective_cache_config(config_data: dict, cache_section: dict) -> N
         ttl_table.add_column("Source", style="yellow")
 
         operation_ttls = effective_config["operation_ttls"]
-        if isinstance(operation_ttls, dict):
-            for operation, ttl in operation_ttls.items():
-                # Determine source for each TTL
-                if (
-                    current_profile in cache_section.get("profiles", {})
-                    and "operation_ttls" in cache_section["profiles"][current_profile]
-                    and operation in cache_section["profiles"][current_profile]["operation_ttls"]
-                ):
-                    source = f"profile:{current_profile}"
-                elif (
-                    "operation_ttls" in cache_section
-                    and operation in cache_section["operation_ttls"]
-                ):
-                    source = "global"
-                else:
-                    source = "default"
+        # operation_ttls is guaranteed to be a dict from DEFAULT_CACHE_CONFIG
+        assert isinstance(operation_ttls, dict)
+        for operation, ttl in operation_ttls.items():
+            # Determine source for each TTL
+            if (
+                current_profile in cache_section.get("profiles", {})
+                and "operation_ttls" in cache_section["profiles"][current_profile]
+                and operation in cache_section["profiles"][current_profile]["operation_ttls"]
+            ):
+                source = f"profile:{current_profile}"
+            elif "operation_ttls" in cache_section and operation in cache_section["operation_ttls"]:
+                source = "global"
+            else:
+                source = "default"
 
-                ttl_table.add_row(operation, str(ttl), source)
+            ttl_table.add_row(operation, str(ttl), source)
 
         console.print(ttl_table)
 
@@ -787,18 +779,14 @@ def _show_single_config_value(config: Config, key: str) -> None:
                 console.print(f"[yellow]Key '{key}' not found in configuration.[/yellow]")
                 return
 
-        # Display the value
-        if isinstance(current, dict):
-            console.print(f"[blue]Section '{key}':[/blue]")
-            table = Table()
-            table.add_column("Setting", style="cyan")
-            table.add_column("Value", style="green")
+        console.print(f"[blue]Section '{key}':[/blue]")
+        table = Table()
+        table.add_column("Setting", style="cyan")
+        table.add_column("Value", style="green")
 
-            for k, v in current.items():
-                table.add_row(k, str(v))
-            console.print(table)
-        else:
-            console.print(f"[blue]Value:[/blue] {current}")
+        for k, v in current.items():
+            table.add_row(k, str(v))
+        console.print(table)
 
     except Exception as e:
         console.print(f"[red]Error displaying configuration: {e}[/red]")
@@ -942,7 +930,7 @@ def _display_cache_config_table(cache_config: dict, title: str) -> None:
     table.add_column("Value", style="green")
 
     for key, value in cache_config.items():
-        if key == "operation_ttls" and isinstance(value, dict):
+        if key == "operation_ttls":
             # Show operation TTLs as a sub-table
             table.add_row(key, f"{len(value)} operations configured")
         else:
@@ -1086,7 +1074,7 @@ def _get_current_profile(config_data: dict) -> str:
     # Fall back to default profile from config
     default_profile = config_data.get("default_profile")
     if default_profile and isinstance(default_profile, str):
-        return default_profile
+        return str(default_profile)
 
     # Final fallback
     return "default"

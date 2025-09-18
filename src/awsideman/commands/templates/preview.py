@@ -121,9 +121,7 @@ def preview_template(
             # Display preview results
             if output_format == "json":
                 console.print("\n[bold]Preview Result (JSON):[/bold]")
-                console.print(
-                    Panel(str(preview_result.to_dict()), title="Preview Data", border_style="blue")
-                )
+                console.print(Panel(str(preview_result), title="Preview Data", border_style="blue"))
             elif output_format == "summary":
                 console.print("\n[bold]Preview Summary:[/bold]")
                 summary = preview_result.get_summary()
@@ -198,10 +196,11 @@ def preview_template(
                     assignment_table.add_column("Status")
 
                     for assignment in template.assignments:
-                        for entity in assignment.entities:
-                            for permission_set in assignment.permission_sets:
+                        for entity_item in assignment.entities:
+                            for permission_set_item in assignment.permission_sets:
+                                # Determine account display
                                 if assignment.targets.account_ids:
-                                    accounts = ", ".join(assignment.targets.account_ids)
+                                    accounts_text = ", ".join(assignment.targets.account_ids)
                                 elif assignment.targets.account_tags:
                                     tags = ", ".join(
                                         [
@@ -209,12 +208,15 @@ def preview_template(
                                             for k, v in assignment.targets.account_tags.items()
                                         ]
                                     )
-                                    accounts = f"Tag-based: {tags}"
+                                    accounts_text = f"Tag-based: {tags}"
                                 else:
-                                    accounts = "No targets"
+                                    accounts_text = "No targets"
 
                                 assignment_table.add_row(
-                                    entity, permission_set, accounts, "[blue]Would Create[/blue]"
+                                    str(entity_item),
+                                    str(permission_set_item),
+                                    accounts_text,
+                                    "[blue]Would Create[/blue]",
                                 )
 
                     console.print(assignment_table)

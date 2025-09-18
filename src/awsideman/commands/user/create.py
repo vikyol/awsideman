@@ -150,7 +150,11 @@ def create_user(
                         if key == "Emails" and value:
                             email_values = [email.get("Value", "N/A") for email in value]
                             details_table.add_row(key, ", ".join(email_values))
-                        elif key == "Name" and value:
+                        else:
+                            details_table.add_row(key, str(value))
+                    elif isinstance(value, dict):
+                        # Handle dict attributes like Name
+                        if key == "Name" and value:
                             name_values = [f"{k}: {v}" for k, v in value.items()]
                             details_table.add_row(key, ", ".join(name_values))
                         else:

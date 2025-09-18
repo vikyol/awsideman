@@ -217,6 +217,9 @@ def resolve_principal_info(
         # Handle other unexpected errors
         console.print(f"[red]Error: {str(e)}[/red]")
         raise typer.Exit(1)
+    # This point should not be reached because all branches return or exit.
+    # Return an empty dict to satisfy type checker in unexpected scenarios.
+    return {}
 
 
 def log_individual_operation(

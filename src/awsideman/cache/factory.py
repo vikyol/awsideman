@@ -1,10 +1,17 @@
 """Backend factory for creating cache backend instances."""
 
 import logging
+from typing import Any, Dict
 
 from .backends.base import CacheBackend, CacheBackendError
 from .backends.file import FileBackend
 from .config import AdvancedCacheConfig
+
+# Import DynamoDBBackend for type hints
+try:
+    from .backends.dynamodb import DynamoDBBackend
+except ImportError:
+    DynamoDBBackend = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +134,7 @@ class BackendFactory:
             )
 
     @staticmethod
-    def _create_dynamodb_backend(config: AdvancedCacheConfig) -> CacheBackend:
+    def _create_dynamodb_backend(config: AdvancedCacheConfig) -> "DynamoDBBackend":
         """
         Create a DynamoDB backend instance.
 
@@ -281,7 +288,7 @@ class BackendFactory:
             },
         }
 
-        info = backend_info.get(
+        info: Dict[str, Any] = backend_info.get(
             backend_type.lower(),
             {
                 "name": "Unknown Backend",

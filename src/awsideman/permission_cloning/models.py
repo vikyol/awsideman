@@ -66,8 +66,7 @@ class EntityReference:
         """Validate the entity reference."""
         errors = []
 
-        if not isinstance(self.entity_type, EntityType):
-            errors.append("Entity type must be a valid EntityType enum value")
+        # entity_type is guaranteed to be EntityType by type annotation
 
         if not self.entity_id or not self.entity_id.strip():
             errors.append("Entity ID cannot be empty")
@@ -168,15 +167,17 @@ class PermissionSetConfig:
                 warnings.append("Relay state URL should start with http:// or https://")
 
         # Validate AWS managed policies
-        for policy_arn in self.aws_managed_policies:
-            if not re.match(r"^arn:aws:iam::aws:policy/", policy_arn):
-                errors.append(f"Invalid AWS managed policy ARN: {policy_arn}")
+        if self.aws_managed_policies:
+            for policy_arn in self.aws_managed_policies:
+                if not re.match(r"^arn:aws:iam::aws:policy/", policy_arn):
+                    errors.append(f"Invalid AWS managed policy ARN: {policy_arn}")
 
         # Validate customer managed policies
-        for policy in self.customer_managed_policies:
-            policy_validation = policy.validate()
-            if policy_validation.result_type == ValidationResultType.ERROR:
-                errors.extend(policy_validation.messages)
+        if self.customer_managed_policies:
+            for policy in self.customer_managed_policies:
+                policy_validation = policy.validate()
+                if policy_validation.result_type == ValidationResultType.ERROR:
+                    errors.extend(policy_validation.messages)
 
         # Validate inline policy if provided
         if self.inline_policy:
@@ -267,10 +268,7 @@ class CopyResult:
 
     def __post_init__(self):
         """Initialize default values for optional fields."""
-        if self.assignments_copied is None:
-            self.assignments_copied = []
-        if self.assignments_skipped is None:
-            self.assignments_skipped = []
+        # assignments_copied and assignments_skipped are required fields, not Optional
 
     def validate(self) -> "ValidationResult":
         """Validate the copy result."""
@@ -366,8 +364,7 @@ class ValidationResult:
 
     def __post_init__(self):
         """Initialize default values for optional fields."""
-        if self.messages is None:
-            self.messages = []
+        # messages is a required field, not Optional
 
     @property
     def is_valid(self) -> bool:

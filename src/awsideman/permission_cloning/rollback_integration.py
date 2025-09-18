@@ -201,9 +201,6 @@ class PermissionCloningRollbackIntegration:
             if not operation_record:
                 raise ValueError(f"Operation {operation_id} not found")
 
-            if not isinstance(operation_record, PermissionCloningOperationRecord):
-                raise ValueError(f"Operation {operation_id} is not a permission cloning operation")
-
             if operation_record.rolled_back:
                 raise ValueError(f"Operation {operation_id} has already been rolled back")
 

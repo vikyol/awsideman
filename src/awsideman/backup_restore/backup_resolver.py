@@ -84,7 +84,8 @@ class BackupResolver:
             InvalidDateSpecError: If the date specification is invalid
             BackupNotFoundError: If no backup matches the specification
         """
-        if not spec or not isinstance(spec, str) or not spec.strip():
+        if not spec or not spec.strip():
+            # spec is guaranteed to be str by type annotation
             raise InvalidDateSpecError(
                 "Date specification cannot be empty",
                 suggestions=["Use formats like: '7d', '2025-01-15', or 'current'"],

@@ -9,7 +9,7 @@ cross-region operations.
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import boto3
 from botocore.exceptions import ClientError
@@ -261,9 +261,9 @@ class CrossAccountClientManager:
         Returns:
             ValidationResult with boundary validation status
         """
-        errors = []
-        warnings = []
-        details = {"validated_accounts": [], "boundary_checks": []}
+        errors: List[str] = []
+        warnings: List[str] = []
+        details: Dict[str, Any] = {"validated_accounts": [], "boundary_checks": []}
 
         try:
             # Get current account ID for validation
@@ -274,7 +274,7 @@ class CrossAccountClientManager:
             source_account_id = caller_identity["Account"]
 
             for config in configs:
-                account_validation = {
+                account_validation: Dict[str, Any] = {
                     "target_account": config.target_account_id,
                     "role_arn": config.role_arn,
                     "checks": [],
@@ -509,12 +509,12 @@ class CrossAccountPermissionValidator:
         Returns:
             ValidationResult with permission validation status
         """
-        errors = []
-        warnings = []
-        details = {"account_validations": []}
+        errors: List[str] = []
+        warnings: List[str] = []
+        details: Dict[str, Any] = {"account_validations": []}
 
         for config in configs:
-            account_result = {
+            account_result: Dict[str, Any] = {
                 "account_id": config.target_account_id,
                 "role_arn": config.role_arn,
                 "permissions": {},
@@ -583,9 +583,9 @@ class CrossAccountPermissionValidator:
         Returns:
             ValidationResult with permission validation status
         """
-        errors = []
-        warnings = []
-        details = {"permissions": {}}
+        errors: List[str] = []
+        warnings: List[str] = []
+        details: Dict[str, Any] = {"permissions": {}}
 
         try:
             # Get cross-account client manager

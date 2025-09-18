@@ -406,11 +406,17 @@ def export_principal(
             console.print(f"[red]Error: Principal '{principal_name}' not found[/red]")
             raise typer.Exit(1)
 
+        # At this point, principal_id is guaranteed to be not None
+        assert principal_id is not None
+        assert resolved_type is not None
+
         # Get all assignments for the principal
         if account_id:
             # If account ID is specified, only check that account
+            # Type assertion: account_id is not None here due to the if check
+            assert account_id is not None
             assignments = _get_principal_assignments_for_account(
-                sso_admin_client, instance_arn, principal_id, resolved_type, str(account_id)
+                sso_admin_client, instance_arn, principal_id, resolved_type, account_id
             )
 
             # For users, also get inherited assignments from group memberships for this account
@@ -430,12 +436,14 @@ def export_principal(
             console.print(
                 f"[blue]Searching {resolved_type} across the entire organization (optimized)...[/blue]"
             )
+            # Type assertion: principal_id is not None here due to the earlier check
+            assert principal_id is not None
             assignments, inherited_assignments = _get_consolidated_principal_assignments(
                 sso_admin_client,
                 identitystore_client,
                 instance_arn,
                 identity_store_id,
-                str(principal_id),
+                principal_id,
                 resolved_type,
                 client_manager,
             )

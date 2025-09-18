@@ -13,6 +13,12 @@ from ...backup_restore.backends import FileSystemStorageBackend, S3StorageBacken
 from ...backup_restore.models import ConflictStrategy, ResourceType, RestoreOptions, RestoreResult
 from ...backup_restore.restore_manager import RestoreManager
 from ...backup_restore.storage import StorageEngine
+
+# Import CrossAccountRestoreManager for type hints
+try:
+    from ...backup_restore.restore_manager import CrossAccountRestoreManager
+except ImportError:
+    CrossAccountRestoreManager = None  # type: ignore
 from ...utils.config import Config
 from ...utils.validators import validate_profile
 
@@ -274,8 +280,8 @@ def restore_backup(
         )
 
         # Select the appropriate restore manager
+        operation_restore_manager: RestoreManager | CrossAccountRestoreManager
         if cross_account_config:
-            from ...backup_restore.restore_manager import CrossAccountRestoreManager
 
             # Create a client manager for cross-account operations
             cross_account_client_manager = AWSClientManager(

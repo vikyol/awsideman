@@ -77,6 +77,8 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             default_ttl: Default TTL for cache entries. Defaults to 15 minutes.
             profile: AWS profile name for isolation
         """
+        # Store initialization kwargs for singleton consistency
+        self._init_kwargs: Dict[str, Any] = {}
         # Only initialize once (singleton pattern)
         if hasattr(self, "_initialized"):
             return
@@ -163,8 +165,12 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
         Raises:
             CacheKeyError: If key is invalid
         """
+        # key is guaranteed to be str by type annotation
+        if key is None:
+            raise CacheKeyError("Cache key cannot be None")
+
         if not isinstance(key, str):
-            raise CacheKeyError("Cache key must be a string")
+            raise CacheKeyError(f"Cache key must be a string, got {type(key).__name__}")
 
         if len(key) > self._max_key_length:
             raise CacheKeyError(f"Cache key too long (max {self._max_key_length} chars)")
@@ -251,8 +257,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
         # Sanitize components
         sanitized_components = []
         for component in components:
-            if not isinstance(component, str):
-                component = str(component)
+            # component is guaranteed to be str by type annotation
             # Remove potentially dangerous characters
             sanitized = re.sub(r"[^a-zA-Z0-9_\-\.:]", "_", component)
             sanitized_components.append(sanitized)
@@ -490,13 +495,7 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             if self._backend is None:
                 try:
                     self._initialize_backend()
-                    if self._backend is not None:
-                        healing_results["actions_taken"].append("Reinitialized cache backend")
-                    else:
-                        healing_results["actions_taken"].append(
-                            "Failed to reinitialize cache backend"
-                        )
-                        healing_results["success"] = False
+                    healing_results["actions_taken"].append("Reinitialized cache backend")
                 except Exception as e:
                     healing_results["actions_taken"].append(f"Backend reinitialization failed: {e}")
                     healing_results["success"] = False
@@ -1110,8 +1109,15 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             CacheKeyError: If pattern format is invalid
             CacheBackendError: If cache operation fails
         """
-        if not pattern or not isinstance(pattern, str):
+        if pattern is None:
+            raise CacheKeyError("Invalid pattern: None")
+
+        if not isinstance(pattern, str):
+            raise CacheKeyError(f"Invalid pattern: must be string, got {type(pattern).__name__}")
+
+        if not pattern:
             raise CacheKeyError(f"Invalid pattern: {pattern}")
+        # pattern is guaranteed to be str by type annotation
 
         def cache_operation():
             return self._circuit_breaker.call(self._invalidate_internal, pattern)
@@ -1286,8 +1292,9 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
             CacheKeyError: If key format is invalid
             CacheBackendError: If cache operation fails
         """
-        if not key or not isinstance(key, str):
+        if not key:
             raise CacheKeyError(f"Invalid cache key: {key}")
+        # key is guaranteed to be str by type annotation
 
         def cache_operation():
             return self._circuit_breaker.call(self._exists_internal, key)

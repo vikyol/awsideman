@@ -1,6 +1,6 @@
 """Backup configuration command for awsideman."""
 
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 import typer
 from rich.console import Console
@@ -12,7 +12,7 @@ console = Console()
 config = Config()
 
 # Valid configuration keys and their types
-VALID_CONFIG_KEYS = {
+VALID_CONFIG_KEYS: Dict[str, Any] = {
     "storage": {
         "default_backend": ["filesystem", "s3"],
         "filesystem": {"path": str},
@@ -54,13 +54,16 @@ def validate_config_key(key: str) -> tuple[bool, str, list]:
             [],
         )
 
-    current_level = VALID_CONFIG_KEYS
-    valid_values = []
+    current_level: Any = VALID_CONFIG_KEYS
+    valid_values: List[str] = []
 
     # Navigate through the key path
     for i, part in enumerate(key_parts):
-        if part not in current_level:
-            valid_keys = list(current_level.keys())
+        if not isinstance(current_level, dict) or part not in current_level:
+            if isinstance(current_level, dict):
+                valid_keys = list(current_level.keys())
+            else:
+                valid_keys = []
             return (
                 False,
                 f"Invalid key '{part}' at position {i+1}. Valid keys: {', '.join(valid_keys)}",
@@ -72,16 +75,16 @@ def validate_config_key(key: str) -> tuple[bool, str, list]:
         # If this is the final key, get valid values
         if i == len(key_parts) - 1:
             if isinstance(current_level, list):
-                valid_values = current_level
-            elif current_level == bool:
+                valid_values = [str(item) for item in current_level]
+            elif current_level is bool:
                 valid_values = ["<boolean>"]
-            elif current_level == int:
+            elif current_level is int:
                 valid_values = ["<integer>"]
-            elif current_level == str:
+            elif current_level is str:
                 valid_values = ["<string>"]
-            elif current_level == [str, None]:
+            elif isinstance(current_level, list) and current_level == [str, None]:
                 valid_values = ["<string>", "none"]
-            elif current_level == [None, str]:
+            elif isinstance(current_level, list) and current_level == [None, str]:
                 valid_values = ["<string>", "none"]
             else:
                 valid_values = ["<value>"]

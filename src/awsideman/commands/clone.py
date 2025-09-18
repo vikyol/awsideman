@@ -144,21 +144,25 @@ def clone_permission_set(
                 typer.echo(f"✅ Successfully cloned permission set '{name}' to '{to}'")
 
                 if clone_result.cloned_config:
-                    config = clone_result.cloned_config
+                    cloned_config = clone_result.cloned_config
                     typer.echo("\nCloned configuration:")
-                    typer.echo(f"  - Session duration: {config.session_duration}")
-                    typer.echo(f"  - Relay state URL: {config.relay_state_url or 'None'}")
-                    typer.echo(f"  - AWS managed policies: {len(config.aws_managed_policies)}")
-                    if config.aws_managed_policies:
-                        for policy in config.aws_managed_policies:
+                    typer.echo(f"  - Session duration: {cloned_config.session_duration}")
+                    typer.echo(f"  - Relay state URL: {cloned_config.relay_state_url or 'None'}")
+                    typer.echo(
+                        f"  - AWS managed policies: {len(cloned_config.aws_managed_policies or [])}"
+                    )
+                    if cloned_config.aws_managed_policies:
+                        for policy in cloned_config.aws_managed_policies:
                             typer.echo(f"    • {policy}")
                     typer.echo(
-                        f"  - Customer managed policies: {len(config.customer_managed_policies)}"
+                        f"  - Customer managed policies: {len(cloned_config.customer_managed_policies or [])}"
                     )
-                    if config.customer_managed_policies:
-                        for policy in config.customer_managed_policies:
+                    if cloned_config.customer_managed_policies:
+                        for policy in cloned_config.customer_managed_policies:
                             typer.echo(f"    • {policy.name}")
-                    typer.echo(f"  - Inline policy: {'Yes' if config.inline_policy else 'No'}")
+                    typer.echo(
+                        f"  - Inline policy: {'Yes' if cloned_config.inline_policy else 'No'}"
+                    )
 
                 # Track operation for rollback if not dry run
                 if not dry_run:

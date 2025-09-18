@@ -67,6 +67,7 @@ def import_backup(
         source_type, source_location = _parse_source(source)
 
         # Initialize storage backend for import destination
+        storage_backend_obj: FileSystemStorageBackend | S3StorageBackend
         if storage_backend.lower() == "filesystem":
             storage_path = storage_path or config.get("backup.storage.filesystem.path", "./backups")
             storage_backend_obj = FileSystemStorageBackend(base_path=storage_path)

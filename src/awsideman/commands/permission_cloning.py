@@ -13,7 +13,10 @@ import typer
 
 from ..aws_clients.manager import AWSClientManager
 from ..permission_cloning.assignment_copier import AssignmentCopier
-from ..permission_cloning.models import CopyFilters, EntityType
+from ..permission_cloning.assignment_retriever import AssignmentRetriever
+from ..permission_cloning.entity_resolver import EntityResolver
+from ..permission_cloning.filter_engine import FilterEngine
+from ..permission_cloning.models import CopyFilters, EntityReference, EntityType
 from ..permission_cloning.permission_set_cloner import PermissionSetCloner
 from ..permission_cloning.preview_generator import PreviewGenerator
 from ..permission_cloning.rollback_integration import PermissionCloningRollbackIntegration
@@ -113,15 +116,37 @@ def copy_assignments(
 
         else:
             # Execute the copy operation
-            assignment_copier = AssignmentCopier(client_manager, instance_arn, identity_store_id)
+            # Create required components for AssignmentCopier
+            entity_resolver = EntityResolver(client_manager, identity_store_id)
+            assignment_retriever = AssignmentRetriever(
+                client_manager, instance_arn, identity_store_id
+            )
+            filter_engine = FilterEngine()
+
+            assignment_copier = AssignmentCopier(
+                entity_resolver=entity_resolver,
+                assignment_retriever=assignment_retriever,
+                filter_engine=filter_engine,
+            )
+
+            # Create EntityReference objects (we need entity names, but we only have IDs)
+            # For now, we'll use the IDs as names - this should be resolved properly in a real implementation
+            source_entity = EntityReference(
+                entity_type=EntityType(source_entity_type),
+                entity_id=source_entity_id,
+                entity_name=source_entity_id,  # Using ID as name for now
+            )
+            target_entity = EntityReference(
+                entity_type=EntityType(target_entity_type),
+                entity_id=target_entity_id,
+                entity_name=target_entity_id,  # Using ID as name for now
+            )
 
             copy_result = assignment_copier.copy_assignments(
-                source_entity_id=source_entity_id,
-                source_entity_type=EntityType(source_entity_type),
-                target_entity_id=target_entity_id,
-                target_entity_type=EntityType(target_entity_type),
+                source=source_entity,
+                target=target_entity,
                 filters=copy_filters,
-                dry_run=dry_run,
+                preview=dry_run,
             )
 
             if copy_result.success:
@@ -239,8 +264,7 @@ def clone_permission_set(
                 source_name=source_name,
                 target_name=target_name,
                 target_description=target_description,
-                preview=False,
-                dry_run=dry_run,
+                preview=dry_run,
             )
 
             if clone_result.success:
@@ -253,9 +277,11 @@ def clone_permission_set(
                     typer.echo("\nCloned configuration:")
                     typer.echo(f"  - Session duration: {config.session_duration}")
                     typer.echo(f"  - Relay state URL: {config.relay_state_url or 'None'}")
-                    typer.echo(f"  - AWS managed policies: {len(config.aws_managed_policies)}")
                     typer.echo(
-                        f"  - Customer managed policies: {len(config.customer_managed_policies)}"
+                        f"  - AWS managed policies: {len(config.aws_managed_policies or [])}"
+                    )
+                    typer.echo(
+                        f"  - Customer managed policies: {len(config.customer_managed_policies or [])}"
                     )
                     typer.echo(f"  - Inline policy: {'Yes' if config.inline_policy else 'No'}")
 
@@ -271,13 +297,15 @@ def clone_permission_set(
                             source_permission_set_name=source_name,
                             source_permission_set_arn=(
                                 clone_result.cloned_config.arn
-                                if hasattr(clone_result.cloned_config, "arn")
+                                if clone_result.cloned_config
+                                and hasattr(clone_result.cloned_config, "arn")
                                 else ""
                             ),
                             target_permission_set_name=target_name,
                             target_permission_set_arn=(
                                 clone_result.cloned_config.arn
-                                if hasattr(clone_result.cloned_config, "arn")
+                                if clone_result.cloned_config
+                                and hasattr(clone_result.cloned_config, "arn")
                                 else ""
                             ),
                             clone_result=clone_result,

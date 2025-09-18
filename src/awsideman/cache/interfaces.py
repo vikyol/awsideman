@@ -1,9 +1,9 @@
 """Cache manager interfaces for the unified cache system."""
 
 import threading
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 
 class ICacheManager(ABC):
@@ -83,7 +83,7 @@ class ICacheManager(ABC):
         pass
 
 
-class SingletonABCMeta(type(ABC)):
+class SingletonABCMeta(ABCMeta):
     """
     Combined metaclass that supports both ABC and Singleton patterns.
 
@@ -91,7 +91,7 @@ class SingletonABCMeta(type(ABC)):
     while maintaining thread safety during initialization and supporting ABC.
     """
 
-    _instances = {}
+    _instances: Dict[type, Any] = {}
     _lock: threading.Lock = threading.Lock()
 
     def __call__(cls, *args, **kwargs):

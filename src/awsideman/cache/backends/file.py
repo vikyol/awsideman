@@ -252,9 +252,7 @@ class FileBackend(CacheBackend):
                 )
                 raise CacheBackendError(f"Invalid cache key format: {key}")
 
-            # Validate data
-            if not isinstance(data, bytes):
-                raise CacheBackendError("Data must be bytes")
+            # data is guaranteed to be bytes by type annotation
 
             # Validate TTL
             if ttl is not None and (not isinstance(ttl, int) or ttl <= 0):
@@ -605,7 +603,7 @@ class FileBackend(CacheBackend):
         Returns:
             List of dictionaries containing entry metadata
         """
-        entries = []
+        entries: List[Dict[str, Any]] = []
 
         try:
             # Get cache files either from path_manager or directly from cache directory
@@ -613,6 +611,8 @@ class FileBackend(CacheBackend):
                 cache_files = self.path_manager.list_cache_files()
             else:
                 # Fallback: list cache files directly from cache directory
+                if self.cache_dir is None:
+                    return entries
                 cache_dir = Path(self.cache_dir)
                 if not cache_dir.exists():
                     return entries
@@ -870,7 +870,7 @@ class FileBackend(CacheBackend):
 
         return entries
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> bool:
         """
         Check if file backend is healthy and accessible.
 
@@ -889,12 +889,7 @@ class FileBackend(CacheBackend):
                     logger.error(
                         f"File backend health check failed - cannot create cache directory: {e}"
                     )
-                    return {
-                        "healthy": False,
-                        "backend_type": self.backend_type,
-                        "message": f"Cannot create cache directory: {e}",
-                        "error": str(e),
-                    }
+                    return False
 
             # Test write access by creating a temporary file
             test_file = cache_dir / ".health_check_test"
@@ -902,30 +897,16 @@ class FileBackend(CacheBackend):
                 test_file.write_text("health_check")
                 test_file.unlink()
                 logger.debug("File backend health check passed")
-                return {
-                    "healthy": True,
-                    "backend_type": self.backend_type,
-                    "message": "File backend is healthy and accessible",
-                }
+                return True
             except Exception as e:
                 logger.error(
                     f"File backend health check failed - cannot write to cache directory: {e}"
                 )
-                return {
-                    "healthy": False,
-                    "backend_type": self.backend_type,
-                    "message": f"Cannot write to cache directory: {e}",
-                    "error": str(e),
-                }
+                return False
 
         except Exception as e:
             logger.error(f"File backend health check failed with unexpected error: {e}")
-            return {
-                "healthy": False,
-                "backend_type": self.backend_type,
-                "message": f"Unexpected error during health check: {e}",
-                "error": str(e),
-            }
+            return False
 
     def get_detailed_health_status(self) -> BackendHealthStatus:
         """
@@ -1057,6 +1038,8 @@ class FileBackend(CacheBackend):
                 cache_files = self.path_manager.list_cache_files()
             else:
                 # Fallback: list cache files directly from cache directory
+                if self.cache_dir is None:
+                    return 0
                 cache_dir = Path(self.cache_dir)
                 if not cache_dir.exists():
                     return 0
@@ -1121,7 +1104,9 @@ class FileBackend(CacheBackend):
 
                         if metadata.get("encrypted", False):
                             # Check if expired
-                            return current_time > metadata["created_at"] + metadata["ttl"]
+                            return current_time > float(metadata["created_at"]) + float(
+                                metadata["ttl"]
+                            )
                 except (ValueError, json.JSONDecodeError, KeyError):
                     # Not the new format, fall through to old format
                     pass

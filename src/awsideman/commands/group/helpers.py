@@ -344,7 +344,7 @@ def _find_user_id(identity_store_client: Any, identity_store_id: str, user_ident
             if user_id is None:
                 console.print("[red]Error: User ID not found in user data.[/red]")
                 raise typer.Exit(1)
-            return user_id
+            return str(user_id)
 
         except ClientError as e:
             console.print(

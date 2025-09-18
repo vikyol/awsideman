@@ -107,7 +107,9 @@ class ProfileCacheConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], profile_name: str = None) -> "ProfileCacheConfig":
+    def from_dict(
+        cls, data: Dict[str, Any], profile_name: str | None = None
+    ) -> "ProfileCacheConfig":
         """Create ProfileCacheConfig from dictionary."""
         # Ensure profile_name is set
         if profile_name and "profile_name" not in data:
@@ -187,7 +189,7 @@ class AdvancedCacheConfig(CacheConfig):
         Returns:
             ProfileCacheConfig for the specified profile, or default config if not found
         """
-        if profile_name in self.profile_configs:
+        if self.profile_configs and profile_name in self.profile_configs:
             return self.profile_configs[profile_name]
 
         # Return default configuration for this profile
@@ -291,7 +293,7 @@ class AdvancedCacheConfig(CacheConfig):
             AdvancedCacheConfig instance loaded from environment variables
         """
         # Load base cache config from environment
-        base_config = {
+        base_config: Dict[str, Any] = {
             "enabled": cls._get_env_bool("AWSIDEMAN_CACHE_ENABLED", True),
             "default_ttl": cls._get_env_int("AWSIDEMAN_CACHE_TTL_DEFAULT", 3600),
             "max_size_mb": cls._get_env_int("AWSIDEMAN_CACHE_MAX_SIZE_MB", 100),
@@ -311,7 +313,7 @@ class AdvancedCacheConfig(CacheConfig):
             base_config["operation_ttls"] = operation_ttls
 
         # Load advanced cache config from environment
-        advanced_config = {
+        advanced_config: Dict[str, Any] = {
             **base_config,
             "backend_type": os.getenv("AWSIDEMAN_CACHE_BACKEND", "file"),
             "encryption_enabled": cls._get_env_bool("AWSIDEMAN_CACHE_ENCRYPTION", False),
@@ -324,7 +326,7 @@ class AdvancedCacheConfig(CacheConfig):
         }
 
         # Load profile-specific configurations from environment
-        profile_configs = {}
+        profile_configs: Dict[str, Dict[str, Any]] = {}
         for env_var in os.environ:
             if env_var.startswith("AWSIDEMAN_CACHE_PROFILE_"):
                 # Format: AWSIDEMAN_CACHE_PROFILE_<PROFILE_NAME>_<SETTING>
@@ -352,7 +354,7 @@ class AdvancedCacheConfig(CacheConfig):
                         "max_size_mb": "max_size_mb",
                     }
 
-                    if setting in setting_mapping:
+                    if setting in setting_mapping and value is not None:
                         config_key = setting_mapping[setting]
                         if setting in ["enabled", "encryption_enabled"]:
                             profile_configs[profile_name][config_key] = value.lower() in (
@@ -371,17 +373,17 @@ class AdvancedCacheConfig(CacheConfig):
 
         # Convert profile configs to ProfileCacheConfig objects
         if profile_configs:
+            final_profile_configs: Dict[str, ProfileCacheConfig] = {}
             for profile_name, profile_data in profile_configs.items():
                 try:
                     profile_data["profile_name"] = profile_name
-                    profile_configs[profile_name] = ProfileCacheConfig.from_dict(profile_data)
+                    final_profile_configs[profile_name] = ProfileCacheConfig.from_dict(profile_data)
                 except Exception as e:
                     logger.warning(
                         f"Failed to create ProfileCacheConfig for profile {profile_name}: {e}"
                     )
-                    del profile_configs[profile_name]
 
-            advanced_config["profile_configs"] = profile_configs
+            advanced_config["profile_configs"] = final_profile_configs
 
         # Auto-configure DynamoDB profile if not specified in environment
         if advanced_config.get("backend_type") in [
@@ -423,7 +425,7 @@ class AdvancedCacheConfig(CacheConfig):
         env_config = cls.from_environment()
 
         # Merge configurations (environment takes precedence)
-        merged_data = {
+        merged_data: Dict[str, Any] = {
             "enabled": (
                 env_config.enabled if os.getenv("AWSIDEMAN_CACHE_ENABLED") else config.enabled
             ),

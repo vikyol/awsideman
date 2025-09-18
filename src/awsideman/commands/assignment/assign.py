@@ -5,7 +5,7 @@ in AWS Identity Center. It supports both single-account and multi-account assign
 with various filtering options.
 """
 
-from typing import Optional
+from typing import List, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -429,21 +429,35 @@ def assign_multi_account_with_filter(
 
         # Create multi-account assignment
         from ...bulk.multi_account_batch import MultiAccountAssignment
+        from ...utils.models import AccountInfo as ModelsAccountInfo
+
+        # Convert account_filter.AccountInfo to models.AccountInfo
+        models_accounts = [
+            ModelsAccountInfo(
+                account_id=acc.account_id,
+                account_name=acc.account_name,
+                email=acc.email,
+                status=acc.status,
+                tags={},  # account_filter.AccountInfo doesn't have tags
+                ou_path=[],  # account_filter.AccountInfo doesn't have ou_path
+            )
+            for acc in accounts
+        ]
 
         multi_assignment = MultiAccountAssignment(
             permission_set_name=permission_set_name,
             principal_name=principal_name,
             principal_type=principal_type,
-            accounts=accounts,
+            accounts=models_accounts,
             operation="assign",
         )
 
         # Validate assignment
-        validation_errors = multi_assignment.validate()
-        if validation_errors:
+        assignment_validation_errors: List[str] = multi_assignment.validate()
+        if assignment_validation_errors:
             console.print("[red]Error: Assignment validation failed.[/red]")
-            for error in validation_errors:
-                console.print(f"  • {error}")
+            for error_msg in assignment_validation_errors:
+                console.print(f"  • {error_msg}")
             raise typer.Exit(1)
 
         # Show confirmation unless dry run
@@ -564,6 +578,11 @@ def assign_multi_account_with_filter(
                         return
 
                     principal_id = principal_result.resolved_value
+                    if principal_id is None:
+                        console.print(
+                            "[yellow]Warning: Principal ID is None, skipping operation logging[/yellow]"
+                        )
+                        return
 
                     # Resolve permission set ARN
                     permission_set_arn = resolve_permission_set_identifier(
@@ -1023,21 +1042,35 @@ def assign_multi_account_explicit(
 
         # Create multi-account assignment
         from ...bulk.multi_account_batch import MultiAccountAssignment
+        from ...utils.models import AccountInfo as ModelsAccountInfo
+
+        # Convert account_filter.AccountInfo to models.AccountInfo
+        models_accounts = [
+            ModelsAccountInfo(
+                account_id=acc.account_id,
+                account_name=acc.account_name,
+                email=acc.email,
+                status=acc.status,
+                tags={},  # account_filter.AccountInfo doesn't have tags
+                ou_path=[],  # account_filter.AccountInfo doesn't have ou_path
+            )
+            for acc in accounts
+        ]
 
         multi_assignment = MultiAccountAssignment(
             permission_set_name=permission_set_name,
             principal_name=principal_name,
             principal_type=principal_type,
-            accounts=accounts,
+            accounts=models_accounts,
             operation="assign",
         )
 
         # Validate assignment
-        validation_errors = multi_assignment.validate()
-        if validation_errors:
+        assignment_validation_errors: List[str] = multi_assignment.validate()
+        if assignment_validation_errors:
             console.print("[red]Error: Assignment validation failed.[/red]")
-            for error in validation_errors:
-                console.print(f"  • {error}")
+            for error_msg in assignment_validation_errors:
+                console.print(f"  • {error_msg}")
             raise typer.Exit(1)
 
         # Show confirmation unless dry run
@@ -1157,6 +1190,11 @@ def assign_multi_account_explicit(
                         return
 
                     principal_id = principal_result.resolved_value
+                    if principal_id is None:
+                        console.print(
+                            "[yellow]Warning: Principal ID is None, skipping operation logging[/yellow]"
+                        )
+                        return
 
                     # Resolve permission set ARN
                     permission_set_arn = resolve_permission_set_identifier(
@@ -1342,21 +1380,35 @@ def assign_multi_account_advanced(
 
         # Create multi-account assignment
         from ...bulk.multi_account_batch import MultiAccountAssignment
+        from ...utils.models import AccountInfo as ModelsAccountInfo
+
+        # Convert account_filter.AccountInfo to models.AccountInfo
+        models_accounts = [
+            ModelsAccountInfo(
+                account_id=acc.account_id,
+                account_name=acc.account_name,
+                email=acc.email,
+                status=acc.status,
+                tags={},  # account_filter.AccountInfo doesn't have tags
+                ou_path=[],  # account_filter.AccountInfo doesn't have ou_path
+            )
+            for acc in accounts
+        ]
 
         multi_assignment = MultiAccountAssignment(
             permission_set_name=permission_set_name,
             principal_name=principal_name,
             principal_type=principal_type,
-            accounts=accounts,
+            accounts=models_accounts,
             operation="assign",
         )
 
         # Validate assignment
-        validation_errors = multi_assignment.validate()
-        if validation_errors:
+        assignment_validation_errors: List[str] = multi_assignment.validate()
+        if assignment_validation_errors:
             console.print("[red]Error: Assignment validation failed.[/red]")
-            for error in validation_errors:
-                console.print(f"  • {error}")
+            for error_msg in assignment_validation_errors:
+                console.print(f"  • {error_msg}")
             raise typer.Exit(1)
 
         # Show confirmation unless dry run
@@ -1477,6 +1529,11 @@ def assign_multi_account_advanced(
                         return
 
                     principal_id = principal_result.resolved_value
+                    if principal_id is None:
+                        console.print(
+                            "[yellow]Warning: Principal ID is None, skipping operation logging[/yellow]"
+                        )
+                        return
 
                     # Resolve permission set ARN
                     permission_set_arn = resolve_permission_set_identifier(

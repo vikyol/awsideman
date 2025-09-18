@@ -7,7 +7,7 @@ in AWS Identity Center. It supports filtering by account, permission set, and pr
 import csv
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -257,7 +257,7 @@ def list_assignments(
                 try:
                     org_client = aws_client.get_raw_organizations_client()
                     paginator = org_client.get_paginator("list_accounts")
-                    accounts = []
+                    accounts: List[Dict[str, Any]] = []
                     for page in paginator.paginate():
                         accounts.extend(page.get("Accounts", []))
 
@@ -276,13 +276,13 @@ def list_assignments(
                     import time
                     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-                    def fetch_account_assignments(account):
+                    def fetch_account_assignments(account: Dict[str, Any]) -> List[Dict[str, Any]]:
                         """Fetch assignments for a single account."""
                         account_id = account["Id"]
-                        account_assignments = []
+                        account_assignments: List[Dict[str, Any]] = []
 
                         # If we have a specific account filter, only check that account
-                        if resolved_account_id and account_id != resolved_account_id:
+                        if resolved_account_id is not None and account_id != resolved_account_id:
                             return account_assignments
 
                         try:
@@ -377,7 +377,7 @@ def list_assignments(
                     max_workers = min(25, total_accounts)  # Limit concurrent requests
                     with ThreadPoolExecutor(max_workers=max_workers) as executor:
                         # Submit all accounts for processing
-                        future_to_account = {
+                        future_to_account: Dict[Any, Dict[str, Any]] = {
                             executor.submit(fetch_account_assignments, account): account
                             for account in accounts
                         }
@@ -404,9 +404,9 @@ def list_assignments(
                                     )
 
                             except Exception as e:
-                                account = future_to_account[future]
+                                account_data: Dict[str, Any] = future_to_account[future]
                                 console.print(
-                                    f"[yellow]Warning: Failed to process account {account['Id']}: {str(e)}[/yellow]"
+                                    f"[yellow]Warning: Failed to process account {account_data['Id']}: {str(e)}[/yellow]"
                                 )
                                 processed_count += 1
 
@@ -607,9 +607,10 @@ def list_assignments(
                         paginator = org_client.get_paginator("list_accounts")
                         account_name = None
                         for page in paginator.paginate():
-                            for account in page.get("Accounts", []):
-                                if account["Id"] == assignment_info["TargetId"]:
-                                    account_name = account.get("Name")
+                            accounts_page: List[Dict[str, Any]] = page.get("Accounts", [])
+                            for account_item in accounts_page:
+                                if account_item["Id"] == assignment_info["TargetId"]:
+                                    account_name = account_item.get("Name")
                                     break
                             if account_name:
                                 break

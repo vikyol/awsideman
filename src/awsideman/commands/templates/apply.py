@@ -385,12 +385,12 @@ def apply_template(
                 failed_table.add_column("Error")
 
                 for result in execution_result.assignments_failed:
-                    error = result.error_message or "Unknown error"
+                    error_msg = str(result.error_message or "Unknown error")
                     failed_table.add_row(
                         f"{result.entity_type}:{result.entity_name}",
                         result.permission_set_name,
                         f"{result.account_id} ({result.account_name})",
-                        error,
+                        error_msg,
                     )
                 console.print(failed_table)
 

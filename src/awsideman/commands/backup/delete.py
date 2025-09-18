@@ -77,6 +77,7 @@ def delete_backup(
             profile_name, profile_data = validate_profile(profile)
 
         # Initialize storage backend based on metadata
+        backend_instance: FileSystemStorageBackend | S3StorageBackend
         if storage_backend_type.lower() == "filesystem":
             backend_instance = FileSystemStorageBackend(base_path=storage_location)
         elif storage_backend_type.lower() == "s3":

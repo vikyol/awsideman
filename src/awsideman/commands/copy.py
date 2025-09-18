@@ -213,7 +213,7 @@ def copy_assignments(
                     assignment_copy_batch_size=batch_size, max_workers=max_workers
                 )
 
-                assignment_copier = OptimizedAssignmentCopier(
+                optimized_copier = OptimizedAssignmentCopier(
                     entity_resolver=entity_resolver,
                     assignment_retriever=assignment_retriever,
                     filter_engine=filter_engine,
@@ -237,7 +237,7 @@ def copy_assignments(
                     typer.echo(f"❌ Error: Target {target_type} '{target_name}' not found")
                     raise typer.Exit(1)
 
-                copy_result = assignment_copier.copy_assignments(
+                copy_result = optimized_copier.copy_assignments(
                     source=source_entity,
                     target=target_entity,
                     filters=copy_filters,
@@ -249,13 +249,27 @@ def copy_assignments(
                     entity_resolver, assignment_retriever, filter_engine
                 )
 
-                copy_result = assignment_copier.copy_assignments_by_name(
-                    source_entity_type=source_type,
-                    source_entity_name=source_name,
-                    target_entity_type=target_type,
-                    target_entity_name=target_name,
+                # Resolve entities first
+                source_entity = entity_resolver.resolve_entity_by_name(
+                    EntityType.USER if source_type == "user" else EntityType.GROUP, source_name
+                )
+                target_entity = entity_resolver.resolve_entity_by_name(
+                    EntityType.USER if target_type == "user" else EntityType.GROUP, target_name
+                )
+
+                if not source_entity:
+                    typer.echo(f"❌ Error: Source {source_type} '{source_name}' not found")
+                    raise typer.Exit(1)
+
+                if not target_entity:
+                    typer.echo(f"❌ Error: Target {target_type} '{target_name}' not found")
+                    raise typer.Exit(1)
+
+                copy_result = assignment_copier.copy_assignments(
+                    source=source_entity,
+                    target=target_entity,
                     filters=copy_filters,
-                    dry_run=dry_run,
+                    preview=dry_run,
                 )
 
             if copy_result.success:
@@ -322,11 +336,13 @@ def copy_assignments(
 
                     if verbose and optimized:
                         # Show optimization recommendations
+                        from datetime import datetime
+
                         from ..permission_cloning.performance import PerformanceMetrics
 
                         perf_metrics = PerformanceMetrics(
                             operation_id="display",
-                            start_time=0,
+                            start_time=datetime.now(),
                             total_assignments=len(copy_result.assignments_copied)
                             + len(copy_result.assignments_skipped),
                             processed_assignments=len(copy_result.assignments_copied),
@@ -338,13 +354,17 @@ def copy_assignments(
                             metrics.get("duration_ms", 0) / 1000
                         )
 
-                        optimizer = assignment_copier.performance_optimizer
-                        recommendations = optimizer.get_optimization_recommendations(perf_metrics)
+                        # Only show optimization recommendations for optimized copier
+                        if optimized:
+                            optimizer = optimized_copier.performance_optimizer
+                            recommendations = optimizer.get_optimization_recommendations(
+                                perf_metrics
+                            )
 
-                        if recommendations:
-                            typer.echo("\n💡 Optimization Recommendations:")
-                            for rec in recommendations:
-                                typer.echo(f"  - {rec}")
+                            if recommendations:
+                                typer.echo("\n💡 Optimization Recommendations:")
+                                for rec in recommendations:
+                                    typer.echo(f"  - {rec}")
 
                 # Track operation for rollback if not dry run
                 if not dry_run:

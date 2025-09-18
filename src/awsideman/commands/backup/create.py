@@ -188,6 +188,7 @@ def create_backup(
         )
 
         # Initialize storage backend
+        backend_instance: FileSystemStorageBackend | S3StorageBackend
         if storage_backend.lower() == "filesystem":
             storage_path = storage_path or backup_config.get("storage", {}).get(
                 "filesystem", {}

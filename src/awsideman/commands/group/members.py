@@ -338,13 +338,15 @@ def list_members(
 
         from ...aws_clients.manager import AWSClientManager
 
-        client_manager = AWSClientManager(profile=profile, region=region)
+        # Extract region string from region dict
+        region_str = region.get("region") if isinstance(region, dict) else region
+        client_manager = AWSClientManager(profile=profile, region=region_str)
         identitystore_client = client_manager.get_identity_store_client()
 
         # Get SSO instance info
-        from ..common import validate_profile
+        from ..common import validate_profile_with_cache
 
-        _, profile_data = validate_profile(profile)
+        _, profile_data, _ = validate_profile_with_cache(profile, True)
         instance_arn, identity_store_id = validate_sso_instance(profile_data)
 
         # Process each membership to get user details
@@ -756,12 +758,7 @@ def _export_members_impl(
         from ..common import validate_profile_with_cache
 
         profile, region_data, enable_caching = validate_profile_with_cache(profile, True)
-
-        # Extract region string from the region data
-        if isinstance(region_data, dict):
-            region = region_data.get("region", "eu-north-1")
-        else:
-            region = region_data
+        region = region_data.get("region", "eu-north-1")
 
         # Get AWS clients
         from ...aws_clients.manager import AWSClientManager
@@ -771,13 +768,10 @@ def _export_members_impl(
 
         # Get SSO instance info from region data
         try:
-            if isinstance(region_data, dict):
-                instance_arn = region_data.get("sso_instance_arn")
-                identity_store_id = region_data.get("identity_store_id")
-                if not instance_arn or not identity_store_id:
-                    raise ValueError("SSO instance information not found in profile data")
-            else:
-                instance_arn, identity_store_id = validate_sso_instance(profile)
+            instance_arn = region_data.get("sso_instance_arn")
+            identity_store_id = region_data.get("identity_store_id")
+            if not instance_arn or not identity_store_id:
+                raise ValueError("SSO instance information not found in profile data")
         except Exception as e:
             console.print(f"[red]Error validating SSO instance: {e}[/red]")
             console.print(f"[red]Error type: {type(e)}[/red]")
