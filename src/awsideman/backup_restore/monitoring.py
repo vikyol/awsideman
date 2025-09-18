@@ -624,7 +624,7 @@ class MonitoringDashboard:
         lines.append("# TYPE backup_operations_total counter")
 
         # Export operation counts by type and status
-        operation_counts = defaultdict(int)
+        operation_counts: Dict[str, int] = defaultdict(int)
         for op in self.metrics_collector._operation_metrics:
             key = f"{op.operation_type.value}_{op.status.value}"
             operation_counts[key] += 1
@@ -740,7 +740,7 @@ class BackupMonitor:
 
     def _extract_warning_count(self, result: Optional[Any]) -> int:
         """Extract warning count from operation result."""
-        if hasattr(result, "warnings"):
+        if result is not None and hasattr(result, "warnings"):
             return len(result.warnings)
         return 0
 

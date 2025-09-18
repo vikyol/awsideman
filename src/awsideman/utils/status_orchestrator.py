@@ -48,6 +48,10 @@ class StatusOrchestrator:
         self.config = config or StatusCheckConfig()
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
+        # Quick scan settings
+        self._quick_scan_enabled = False
+        self._max_orphaned_to_find = 5
+
         # Initialize status checking components
         self.health_checker = HealthChecker(idc_client, config)
         self.provisioning_monitor = ProvisioningMonitor(idc_client, config)
@@ -75,8 +79,9 @@ class StatusOrchestrator:
 
     def enable_quick_scan(self, max_orphaned_to_find: int = 5) -> None:
         """Enable quick scan mode for orphaned assignment detection."""
-        self.orphaned_detector._quick_scan = True
-        self.orphaned_detector._max_orphaned_to_find = max_orphaned_to_find
+        # Store the quick scan settings for use in check_status calls
+        self._quick_scan_enabled = True
+        self._max_orphaned_to_find = max_orphaned_to_find
 
     async def get_comprehensive_status(self) -> StatusReport:
         """
@@ -290,7 +295,7 @@ class StatusOrchestrator:
                     self._component_failures[component_name].append(str(e))
 
         # Prepare parallel tasks
-        results = {}
+        results: Dict[str, Any] = {}
         tasks = []
 
         # Create tasks for each component

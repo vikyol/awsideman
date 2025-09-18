@@ -40,8 +40,7 @@ class TimeoutConfig:
 
     def __post_init__(self):
         """Ensure collections are properly initialized."""
-        if self.operation_timeout_overrides is None:
-            self.operation_timeout_overrides = {}
+        pass  # operation_timeout_overrides is already initialized with default_factory
 
 
 @dataclass
@@ -59,8 +58,7 @@ class TimeoutResult:
 
     def __post_init__(self):
         """Ensure collections are properly initialized."""
-        if self.warnings is None:
-            self.warnings = []
+        pass  # warnings is already initialized with default_factory
 
 
 class TimeoutHandler:
@@ -146,11 +144,6 @@ class TimeoutHandler:
                 )
             elif self.config.strategy == TimeoutStrategy.EXTEND_TIMEOUT:
                 result = await self._execute_with_extension(
-                    operation, operation_id, effective_timeout, *args, **kwargs
-                )
-            else:
-                # Default to retry with backoff
-                result = await self._execute_with_retry(
                     operation, operation_id, effective_timeout, *args, **kwargs
                 )
 
@@ -577,7 +570,11 @@ class TimeoutHandler:
             # This is less precise but works cross-platform
             import threading
 
-            result_container = {"result": None, "exception": None, "completed": False}
+            result_container: Dict[str, Any] = {
+                "result": None,
+                "exception": None,
+                "completed": False,
+            }
 
             def run_operation():
                 try:
@@ -598,7 +595,11 @@ class TimeoutHandler:
                 )
 
             if result_container["exception"]:
-                raise result_container["exception"]
+                exception = result_container["exception"]
+                if isinstance(exception, BaseException):
+                    raise exception
+                else:
+                    raise RuntimeError(f"Unexpected exception type: {type(exception)}")
 
             return result_container["result"]
 

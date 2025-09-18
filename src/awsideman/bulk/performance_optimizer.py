@@ -9,7 +9,7 @@ parallelization, caching, and API optimization.
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from rich.console import Console
 
@@ -196,8 +196,8 @@ class ParallelAccountProcessor:
     async def process_accounts_optimized(
         self,
         accounts: List[Any],
-        operation_func: callable,
-        progress_callback: Optional[callable] = None,
+        operation_func: Callable,
+        progress_callback: Optional[Callable] = None,
     ) -> List[Any]:
         """
         Process accounts with optimized parallelization.
@@ -235,14 +235,14 @@ class ParallelAccountProcessor:
         return results
 
     async def _process_batch_parallel(
-        self, batch_accounts: List[Any], operation_func: callable
+        self, batch_accounts: List[Any], operation_func: Callable
     ) -> List[Any]:
         """Process a batch of accounts in parallel."""
 
         # Use ThreadPoolExecutor with optimized worker count
         with ThreadPoolExecutor(max_workers=self.config.max_concurrent_accounts) as executor:
             # Submit all accounts in batch
-            futures = []
+            futures: List[Any] = []
             for account in batch_accounts:
                 future = executor.submit(operation_func, account)
                 futures.append(future)

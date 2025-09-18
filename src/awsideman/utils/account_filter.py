@@ -99,7 +99,7 @@ class AccountFilter:
     def __init__(
         self,
         filter_expression: Optional[str] = None,
-        organizations_client: OrganizationsClientWrapper = None,
+        organizations_client: Optional[OrganizationsClientWrapper] = None,
         explicit_accounts: Optional[List[str]] = None,
         ou_filter: Optional[str] = None,
         account_name_pattern: Optional[str] = None,
@@ -164,11 +164,11 @@ class AccountFilter:
         Raises:
             ValueError: If tag filter format is invalid
         """
-        if not self.filter_expression.startswith("tag:"):
+        if not self.filter_expression or not self.filter_expression.startswith("tag:"):
             return []
 
         # Remove "tag:" prefix
-        tag_part = self.filter_expression[4:]
+        tag_part = self.filter_expression[4:] if self.filter_expression else ""
 
         if not tag_part:
             raise ValueError("Tag filter expression cannot be empty after 'tag:' prefix")
@@ -411,16 +411,16 @@ class AccountFilter:
                 tag_descriptions.append(f"{tag_filter['key']}={tag_filter['value']}")
             return f"Accounts with tags: {', '.join(tag_descriptions)}"
         elif self.filter_type == FilterType.EXPLICIT:
-            if len(self.explicit_accounts) <= 3:
+            if self.explicit_accounts and len(self.explicit_accounts) <= 3:
                 return f"Explicit accounts: {', '.join(self.explicit_accounts)}"
-            else:
+            elif self.explicit_accounts:
                 return f"Explicit accounts: {', '.join(self.explicit_accounts[:3])}, ... ({len(self.explicit_accounts)} total)"
+            else:
+                return "Explicit accounts: (none)"
         elif self.filter_type == FilterType.OU:
             return f"Accounts in organizational unit: {self.ou_filter}"
         elif self.filter_type == FilterType.PATTERN:
             return f"Accounts matching pattern: {self.account_name_pattern}"
-        else:
-            return f"Unknown filter type: {self.filter_expression}"
 
     def resolve_accounts(self) -> List[AccountInfo]:
         """
@@ -500,6 +500,8 @@ class AccountFilter:
         from .account_cache_optimizer import AccountCacheOptimizer
 
         # Get profile from the organizations client's client manager
+        if self.organizations_client is None:
+            raise ValueError("Organizations client is not available")
         profile = getattr(self.organizations_client.client_manager, "profile", None)
 
         # Normalize profile name - use the actual profile being used by the client manager
@@ -529,6 +531,8 @@ class AccountFilter:
         """
 
         # Get profile from the organizations client's client manager
+        if self.organizations_client is None:
+            raise ValueError("Organizations client is not available")
         profile = getattr(self.organizations_client.client_manager, "profile", None)
 
         # Normalize profile name - use the actual profile being used by the client manager
@@ -604,11 +608,16 @@ class AccountFilter:
         Raises:
             ValueError: If any account ID is invalid or inaccessible
         """
-        resolved_accounts = []
+        resolved_accounts: List[AccountInfo] = []
+
+        if not self.explicit_accounts:
+            return resolved_accounts
 
         for account_id in self.explicit_accounts:
             try:
                 # Get account details from Organizations API
+                if self.organizations_client is None:
+                    raise ValueError("Organizations client is not available")
                 account_data = self.organizations_client.describe_account(account_id)
 
                 # Convert to AccountInfo
@@ -658,12 +667,17 @@ class AccountFilter:
             ValueError: If any account ID is invalid or inaccessible
         """
         # Process explicit accounts in chunks for very large lists
+        if not self.explicit_accounts:
+            return
+
         for i in range(0, len(self.explicit_accounts), chunk_size):
             chunk = self.explicit_accounts[i : i + chunk_size]
 
             for account_id in chunk:
                 try:
                     # Get account details from Organizations API
+                    if self.organizations_client is None:
+                        raise ValueError("Organizations client is not available")
                     account_data = self.organizations_client.describe_account(account_id)
 
                     # Convert to AccountInfo
@@ -720,6 +734,8 @@ class AccountFilter:
         all_accounts = []
 
         # Build the organization hierarchy to get all accounts
+        if self.organizations_client is None:
+            raise ValueError("Organizations client is not available")
         organization_tree = build_organization_hierarchy(self.organizations_client)
 
         # Recursively collect all accounts from the tree
@@ -728,6 +744,8 @@ class AccountFilter:
             if node.is_account():
                 # For account nodes, we need to get the full account data
                 try:
+                    if self.organizations_client is None:
+                        raise ValueError("Organizations client is not available")
                     account_data = self.organizations_client.describe_account(node.id)
                     all_accounts.append(account_data)
                 except Exception as e:
@@ -762,6 +780,8 @@ class AccountFilter:
         from .models import OrgNode
 
         # Build the organization hierarchy to get all accounts
+        if self.organizations_client is None:
+            raise ValueError("Organizations client is not available")
         organization_tree = build_organization_hierarchy(self.organizations_client)
 
         # Recursively yield accounts from the tree using generators
@@ -770,6 +790,8 @@ class AccountFilter:
             if node.is_account():
                 # For account nodes, we need to get the full account data
                 try:
+                    if self.organizations_client is None:
+                        raise ValueError("Organizations client is not available")
                     account_data = self.organizations_client.describe_account(node.id)
 
                     # Convert to AccountInfo and yield immediately

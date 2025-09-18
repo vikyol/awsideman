@@ -139,7 +139,7 @@ class ProvisioningMonitor(BaseStatusChecker):
         Returns:
             List[ProvisioningOperation]: Active provisioning operations
         """
-        active_operations = []
+        active_operations: List[ProvisioningOperation] = []
 
         try:
             client = self.idc_client.get_sso_admin_client()
@@ -372,7 +372,12 @@ class ProvisioningMonitor(BaseStatusChecker):
 
             # Use historical average or default estimate
             if completed_durations:
-                avg_duration_minutes = sum(completed_durations) / len(completed_durations)
+                # Filter out None values before calculating sum
+                valid_durations = [d for d in completed_durations if d is not None]
+                if valid_durations:
+                    avg_duration_minutes = sum(valid_durations) / len(valid_durations)
+                else:
+                    avg_duration_minutes = 5.0
             else:
                 # Default estimate: 5 minutes per operation
                 avg_duration_minutes = 5.0
@@ -479,7 +484,7 @@ class ProvisioningMonitor(BaseStatusChecker):
         Returns:
             Dict mapping operation types to counts
         """
-        breakdown = {}
+        breakdown: Dict[str, int] = {}
         for operation in operations:
             op_type = operation.operation_type
             breakdown[op_type] = breakdown.get(op_type, 0) + 1

@@ -177,14 +177,19 @@ class CleanupScheduler:
             "running": self.is_running(),
             "auto_cleanup_enabled": rollback_config.get("auto_cleanup", True),
             "rollback_enabled": rollback_config.get("enabled", True),
-            "last_cleanup": self._last_cleanup.isoformat() if self._last_cleanup else None,
-            "next_cleanup": (
-                self.get_next_cleanup_time().isoformat() if self.get_next_cleanup_time() else None
+            "last_cleanup": (
+                self._last_cleanup.isoformat() if self._last_cleanup is not None else None
             ),
+            "next_cleanup": self._get_next_cleanup_isoformat(),
             "retention_days": rollback_config.get("retention_days", 90),
             "max_operations": rollback_config.get("max_operations", 10000),
             "storage_stats": self.logger.get_storage_stats(),
         }
+
+    def _get_next_cleanup_isoformat(self) -> Optional[str]:
+        """Get next cleanup time as ISO format string."""
+        next_cleanup = self.get_next_cleanup_time()
+        return next_cleanup.isoformat() if next_cleanup is not None else None
 
 
 # Global scheduler instance

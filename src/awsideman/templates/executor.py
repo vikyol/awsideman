@@ -9,7 +9,10 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    pass
 
 from .interfaces import (
     AssignmentCopierProtocol,
@@ -50,7 +53,7 @@ class ExecutionResult:
 
     def __post_init__(self):
         """Set success based on results."""
-        if self.success is None:
+        if not hasattr(self, "success") or self.success is None:
             self.success = len(self.assignments_failed) == 0
 
     def get_summary(self) -> Dict[str, Any]:
@@ -106,8 +109,8 @@ class TemplateExecutor(TemplateExecutorInterface):
         self.client_manager = client_manager
         self.instance_arn = instance_arn
         self.identity_store_id = identity_store_id
-        self._entity_resolver = None
-        self._assignment_copier = None
+        self._entity_resolver: Optional[Any] = None
+        self._assignment_copier: Optional[Any] = None
         self._identity_center_client = None
         self._organizations_client = None
 
@@ -115,29 +118,56 @@ class TemplateExecutor(TemplateExecutorInterface):
     def entity_resolver(self) -> EntityResolverProtocol:
         """Get the entity resolver, creating it if needed."""
         if self._entity_resolver is None:
+            from ..aws_clients.manager import AWSClientManager
             from ..permission_cloning.entity_resolver import EntityResolver
 
-            self._entity_resolver = EntityResolver(self.client_manager, self.identity_store_id)
+            # Convert protocol to concrete type for EntityResolver
+            if hasattr(self.client_manager, "__class__") and isinstance(
+                self.client_manager, AWSClientManager
+            ):
+                self._entity_resolver = EntityResolver(self.client_manager, self.identity_store_id)
+            else:
+                # Create a wrapper or handle the protocol case
+                raise TypeError("EntityResolver requires AWSClientManager, not protocol")
+        if self._entity_resolver is None:
+            raise RuntimeError("Entity resolver not initialized")
         return self._entity_resolver
 
     @property
     def assignment_copier(self) -> AssignmentCopierProtocol:
         """Get the assignment copier, creating it if needed."""
         if self._assignment_copier is None:
+            from ..aws_clients.manager import AWSClientManager
             from ..permission_cloning.assignment_copier import AssignmentCopier
             from ..permission_cloning.assignment_retriever import AssignmentRetriever
             from ..permission_cloning.filter_engine import FilterEngine
 
-            assignment_retriever = AssignmentRetriever(
-                self.client_manager, self.instance_arn, self.identity_store_id
-            )
-            filter_engine = FilterEngine()
+            # Convert protocol to concrete type for AssignmentRetriever
+            if hasattr(self.client_manager, "__class__") and isinstance(
+                self.client_manager, AWSClientManager
+            ):
+                assignment_retriever = AssignmentRetriever(
+                    self.client_manager, self.instance_arn, self.identity_store_id
+                )
+                filter_engine = FilterEngine()
 
-            self._assignment_copier = AssignmentCopier(
-                entity_resolver=self.entity_resolver,
-                assignment_retriever=assignment_retriever,
-                filter_engine=filter_engine,
-            )
+                # Cast to concrete type for AssignmentCopier
+                from ..permission_cloning.entity_resolver import EntityResolver
+
+                concrete_entity_resolver = self.entity_resolver
+                # Type ignore for the isinstance check since we know the type at runtime
+                if isinstance(concrete_entity_resolver, EntityResolver):
+                    self._assignment_copier = AssignmentCopier(
+                        entity_resolver=concrete_entity_resolver,
+                        assignment_retriever=assignment_retriever,
+                        filter_engine=filter_engine,
+                    )
+                else:
+                    raise TypeError("AssignmentCopier requires concrete EntityResolver")
+            else:
+                raise TypeError("AssignmentRetriever requires AWSClientManager, not protocol")
+        if self._assignment_copier is None:
+            raise RuntimeError("Assignment copier not initialized")
         return self._assignment_copier
 
     @property
@@ -178,13 +208,13 @@ class TemplateExecutor(TemplateExecutorInterface):
                 )
 
                 # Categorize results
-                for result in assignment_results:
-                    if result.status == "created":
-                        assignments_created.append(result)
-                    elif result.status == "skipped":
-                        assignments_skipped.append(result)
-                    elif result.status == "failed":
-                        assignments_failed.append(result)
+                for assignment_result in assignment_results:
+                    if assignment_result.status == "created":
+                        assignments_created.append(assignment_result)
+                    elif assignment_result.status == "skipped":
+                        assignments_skipped.append(assignment_result)
+                    elif assignment_result.status == "failed":
+                        assignments_failed.append(assignment_result)
 
             execution_time = time.time() - start_time
 
@@ -377,7 +407,8 @@ class TemplateExecutor(TemplateExecutorInterface):
         """Get account name from account ID."""
         try:
             response = self.organizations_client.describe_account(account_id=account_id)
-            return response.get("Account", {}).get("Name", account_id)
+            account_name = response.get("Account", {}).get("Name", account_id)
+            return str(account_name) if account_name is not None else account_id
         except Exception as e:
             logger.warning(f"Failed to get account name for {account_id}: {e}")
             return account_id
@@ -388,18 +419,8 @@ class TemplateExecutor(TemplateExecutorInterface):
             # Parse entity reference
             entity_type, entity_name = self._parse_entity_reference(entity_ref)
 
-            # Convert entity_type string to EntityType enum
-            from ..permission_cloning.models import EntityType
-
-            if entity_type == "user":
-                entity_type_enum = EntityType.USER
-            elif entity_type == "group":
-                entity_type_enum = EntityType.GROUP
-            else:
-                return False
-
-            # Resolve entity
-            entity = self.entity_resolver.resolve_entity_by_name(entity_type_enum, entity_name)
+            # Resolve entity (entity_type is already a string)
+            entity = self.entity_resolver.resolve_entity_by_name(entity_type, entity_name)
             if not entity:
                 return False
 
@@ -441,7 +462,7 @@ class TemplateExecutor(TemplateExecutorInterface):
                 )
                 name = ps_response.get("PermissionSet", {}).get("Name")
                 if name == permission_set_name:
-                    return permission_set_arn
+                    return str(permission_set_arn)
 
             return None
 
@@ -457,18 +478,8 @@ class TemplateExecutor(TemplateExecutorInterface):
             # Parse entity reference
             entity_type, entity_name = self._parse_entity_reference(entity_ref)
 
-            # Convert entity_type string to EntityType enum
-            from ..permission_cloning.models import EntityType
-
-            if entity_type == "user":
-                entity_type_enum = EntityType.USER
-            elif entity_type == "group":
-                entity_type_enum = EntityType.GROUP
-            else:
-                raise ValueError(f"Invalid entity type: {entity_type}")
-
-            # Resolve entity
-            entity = self.entity_resolver.resolve_entity_by_name(entity_type_enum, entity_name)
+            # Resolve entity (entity_type is already a string)
+            entity = self.entity_resolver.resolve_entity_by_name(entity_type, entity_name)
             if not entity:
                 raise ValueError(f"Entity not found: {entity_ref}")
 
@@ -545,18 +556,10 @@ class TemplateExecutor(TemplateExecutorInterface):
                     entity_type, entity_name = self._parse_entity_reference(entity_ref)
 
                     # Convert entity_type string to EntityType enum
-                    from ..permission_cloning.models import EntityType
-
-                    if entity_type == "user":
-                        entity_type_enum = EntityType.USER
-                    elif entity_type == "group":
-                        entity_type_enum = EntityType.GROUP
-                    else:
-                        entity_type_enum = None
 
                     entity = (
-                        self.entity_resolver.resolve_entity_by_name(entity_type_enum, entity_name)
-                        if entity_type_enum
+                        self.entity_resolver.resolve_entity_by_name(entity_type, entity_name)
+                        if entity_type in ["user", "group"]
                         else None
                     )
 

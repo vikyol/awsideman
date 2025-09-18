@@ -48,8 +48,7 @@ class ErrorContext:
 
     def __post_init__(self):
         """Ensure additional_context is properly initialized."""
-        if self.additional_context is None:
-            self.additional_context = {}
+        pass  # additional_context is already initialized with default_factory
 
 
 @dataclass
@@ -79,8 +78,7 @@ class StatusError:
 
     def __post_init__(self):
         """Ensure collections are properly initialized."""
-        if self.remediation_steps is None:
-            self.remediation_steps = []
+        pass  # remediation_steps is already initialized with default_factory
 
     def get_error_code(self) -> str:
         """Generate a unique error code for tracking."""
@@ -103,7 +101,7 @@ class StatusError:
 
     def get_technical_details(self) -> Dict[str, Any]:
         """Get technical details for debugging."""
-        details = {
+        details: Dict[str, Any] = {
             "error_id": self.error_id,
             "error_code": self.get_error_code(),
             "category": self.category.value,
@@ -438,9 +436,7 @@ class StatusErrorHandler:
             retry_after_seconds=30,
         )
 
-    def _handle_timeout_error(
-        self, exception: asyncio.TimeoutError, context: ErrorContext
-    ) -> StatusError:
+    def _handle_timeout_error(self, exception: Exception, context: ErrorContext) -> StatusError:
         """Handle timeout errors."""
         return StatusError(
             error_id="TIME_001",
@@ -469,7 +465,7 @@ class StatusErrorHandler:
             retry_after_seconds=60,
         )
 
-    def _handle_validation_error(self, exception: ValueError, context: ErrorContext) -> StatusError:
+    def _handle_validation_error(self, exception: Exception, context: ErrorContext) -> StatusError:
         """Handle validation errors."""
         return StatusError(
             error_id="VAL_001",
@@ -495,7 +491,7 @@ class StatusErrorHandler:
             is_retryable=False,
         )
 
-    def _handle_key_error(self, exception: KeyError, context: ErrorContext) -> StatusError:
+    def _handle_key_error(self, exception: Exception, context: ErrorContext) -> StatusError:
         """Handle key errors (missing configuration or data)."""
         return StatusError(
             error_id="KEY_001",
@@ -691,14 +687,6 @@ def handle_network_error(exception: Exception, operation: str = "NetworkOperatio
 
     console = Console()
     logger = logging.getLogger(__name__)
-
-    # Validate that exception is actually an exception
-    if not isinstance(exception, Exception):
-        logger.error(
-            f"Invalid exception type passed to handle_network_error: {type(exception)} = {exception}"
-        )
-        console.print("[red]Network Error: Invalid error type passed to error handler[/red]")
-        return
 
     context = ErrorContext(component="awsideman", operation=operation)
 

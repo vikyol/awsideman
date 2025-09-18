@@ -70,7 +70,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         self._progress_callback = progress_callback
 
     async def check_status(
-        self, quick_scan: bool = None, max_orphaned_to_find: int = None
+        self, quick_scan: Optional[bool] = None, max_orphaned_to_find: Optional[int] = None
     ) -> OrphanedAssignmentStatus:
         """
         Perform comprehensive orphaned assignment detection.
@@ -82,11 +82,11 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         timestamp = datetime.now(timezone.utc)
 
         try:
-            # Use instance variables if parameters not provided
+            # Use default values if parameters not provided
             if quick_scan is None:
-                quick_scan = getattr(self, "_quick_scan", False)
+                quick_scan = False
             if max_orphaned_to_find is None:
-                max_orphaned_to_find = getattr(self, "_max_orphaned_to_find", 5)
+                max_orphaned_to_find = 5
 
             # Detect orphaned assignments
             orphaned_assignments = await self._detect_orphaned_assignments(
@@ -299,10 +299,10 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
 
                         # Create orphaned assignment object
                         orphaned_assignment = OrphanedAssignment(
-                            assignment_id=f"{assignment.get('permission_set_arn')}#{principal_id}#{assignment.get('account_id')}",
-                            permission_set_arn=assignment.get("permission_set_arn"),
-                            permission_set_name=assignment.get("permission_set_name"),
-                            account_id=assignment.get("account_id"),
+                            assignment_id=f"{assignment.get('permission_set_arn', '')}#{principal_id}#{assignment.get('account_id', '')}",
+                            permission_set_arn=assignment.get("permission_set_arn") or "",
+                            permission_set_name=assignment.get("permission_set_name") or "",
+                            account_id=assignment.get("account_id") or "",
                             account_name=assignment.get("account_name"),
                             principal_id=principal_id,
                             principal_type=PrincipalType(principal_type),
@@ -540,6 +540,9 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             # For unexpected errors, assume principal exists to avoid false positives
             return True, f"Unknown {principal_type.lower()}", None
 
+        # This should never be reached, but satisfies mypy
+        return False, None, "Unexpected control flow"
+
     async def _process_assignments_batch(
         self,
         assignments: List[Dict],
@@ -715,7 +718,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         Returns:
             List of all assignments with metadata
         """
-        all_assignments = []
+        all_assignments: List[Dict[str, Any]] = []
 
         # Process permission sets in parallel batches
         batch_size = 5  # Process 5 permission sets at a time
@@ -750,7 +753,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
                                 f"Error fetching assignments for {ps_name} in {account_id}: {str(e)}"
                             )
 
-                return assignments_for_ps
+                # assignments_for_ps is already added to all_assignments above
 
         # Create tasks for all permission sets
         tasks = []
@@ -768,8 +771,8 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
             for result in results:
                 if isinstance(result, Exception):
                     self.logger.error(f"Error fetching assignments: {str(result)}")
-                else:
-                    all_assignments.extend(result)
+                elif result is not None:
+                    all_assignments.extend(result)  # type: ignore[arg-type]
 
         self.logger.info(f"Fetched {len(all_assignments)} total assignments")
         return all_assignments
@@ -845,7 +848,7 @@ class OrphanedAssignmentDetector(BaseStatusChecker):
         Returns:
             Dict mapping account IDs to orphaned assignment counts
         """
-        breakdown = {}
+        breakdown: Dict[str, int] = {}
         for assignment in orphaned_assignments:
             account_id = assignment.account_id
             breakdown[account_id] = breakdown.get(account_id, 0) + 1

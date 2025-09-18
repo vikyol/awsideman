@@ -56,8 +56,7 @@ class LoggingConfig:
 
     def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.sensitive_data_patterns is None:
-            self.sensitive_data_patterns = []
+        pass  # sensitive_data_patterns is already initialized with default_factory
 
 
 class SensitiveDataFilter(logging.Filter):

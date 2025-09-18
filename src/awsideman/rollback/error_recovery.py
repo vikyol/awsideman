@@ -493,7 +493,7 @@ class RollbackErrorRecovery:
         total_attempts = sum(r.attempts_made for r in results)
         avg_attempts = total_attempts / total_operations if total_operations > 0 else 0
 
-        strategies_used = {}
+        strategies_used: Dict[str, int] = {}
         for result in results:
             strategy = result.strategy_used.value
             strategies_used[strategy] = strategies_used.get(strategy, 0) + 1

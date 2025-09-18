@@ -370,7 +370,8 @@ class StorageMonitor:
         try:
             stat = os.statvfs(self.storage_dir)
             total_bytes = stat.f_frsize * stat.f_blocks
-            free_bytes = stat.f_frsize * stat.f_available
+            # Use f_bavail instead of f_available for better compatibility
+            free_bytes = stat.f_frsize * stat.f_bavail
             used_bytes = total_bytes - free_bytes
 
             return {

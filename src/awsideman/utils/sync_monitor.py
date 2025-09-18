@@ -159,7 +159,7 @@ class SyncMonitor(BaseStatusChecker):
         Returns:
             List[Dict]: List of configured identity providers
         """
-        providers = []
+        providers: List[Dict[str, Any]] = []
 
         try:
             client = self.idc_client.get_sso_admin_client()
@@ -495,7 +495,12 @@ class SyncMonitor(BaseStatusChecker):
             detected_from = provider.get("detected_from")
 
             # Method 1: Check object modification times to infer last sync
-            last_sync_time = await self._infer_last_sync_time(instance_arn, detected_from)
+            if instance_arn is not None:
+                last_sync_time = await self._infer_last_sync_time(
+                    instance_arn, str(detected_from) if detected_from is not None else ""
+                )
+            else:
+                last_sync_time = None
 
             # Method 2: Check for sync errors in CloudTrail or other logs
             # This would require additional permissions and setup
@@ -766,7 +771,7 @@ class SyncMonitor(BaseStatusChecker):
         Returns:
             Dict mapping provider types to counts
         """
-        breakdown = {}
+        breakdown: Dict[str, int] = {}
         for provider in provider_statuses:
             provider_type = provider.provider_type.value
             breakdown[provider_type] = breakdown.get(provider_type, 0) + 1

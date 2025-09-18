@@ -9,7 +9,7 @@ This module provides an optimized version of the assignment copier that uses:
 """
 
 import logging
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 from uuid import uuid4
 
 from .assignment_retriever import AssignmentRetriever
@@ -22,6 +22,7 @@ from .models import (
     EntityType,
     PermissionAssignment,
     ValidationResult,
+    ValidationResultType,
 )
 from .performance import BatchConfig, PerformanceMetrics, PerformanceOptimizer, RateLimitConfig
 
@@ -75,7 +76,7 @@ class OptimizedAssignmentCopier:
         target: EntityReference,
         filters: Optional[CopyFilters] = None,
         preview: bool = False,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable] = None,
     ) -> CopyResult:
         """
         Copy permission assignments from source entity to target entity with optimizations.
@@ -112,6 +113,8 @@ class OptimizedAssignmentCopier:
             self.performance_optimizer.warm_cache([source, target])
 
             # Get source assignments with caching
+            if metrics is None:
+                raise ValueError("Performance metrics are required")
             source_assignments = self._get_source_assignments_optimized(source, metrics)
             if not source_assignments:
                 logger.info(
@@ -119,7 +122,8 @@ class OptimizedAssignmentCopier:
                 )
                 return self._create_success_result(source, target, [], [], None, operation_id)
 
-            metrics.total_assignments = len(source_assignments)
+            if metrics is not None:
+                metrics.total_assignments = len(source_assignments)
 
             # Apply filters if specified
             if filters:
@@ -129,7 +133,8 @@ class OptimizedAssignmentCopier:
                     logger.info("No assignments match the specified filters")
                     return self._create_success_result(source, target, [], [], None, operation_id)
 
-                metrics.total_assignments = len(source_assignments)
+                if metrics is not None:
+                    metrics.total_assignments = len(source_assignments)
 
             # Get target assignments for duplicate detection
             target_assignments = self._get_source_assignments_optimized(target, metrics)
@@ -176,7 +181,7 @@ class OptimizedAssignmentCopier:
         self,
         copy_requests: List[Tuple[EntityReference, EntityReference, Optional[CopyFilters]]],
         preview: bool = False,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable] = None,
     ) -> List[CopyResult]:
         """
         Copy assignments for multiple source-target pairs in an optimized batch.
@@ -261,9 +266,9 @@ class OptimizedAssignmentCopier:
             errors.append("Source and target entities cannot be the same")
 
         if errors:
-            return ValidationResult(result_type="ERROR", messages=errors)
+            return ValidationResult(result_type=ValidationResultType.ERROR, messages=errors)
 
-        return ValidationResult(result_type="SUCCESS", messages=[])
+        return ValidationResult(result_type=ValidationResultType.SUCCESS, messages=[])
 
     def get_performance_stats(self) -> dict:
         """Get performance statistics."""
@@ -309,9 +314,6 @@ class OptimizedAssignmentCopier:
             assignments = self.assignment_retriever.get_user_assignments(entity)
         elif entity.entity_type == EntityType.GROUP:
             assignments = self.assignment_retriever.get_group_assignments(entity)
-        else:
-            logger.error(f"Unsupported entity type: {entity.entity_type}")
-            return []
 
         metrics.assignment_retrieval_time_ms += (time.time() - start_time) * 1000
         metrics.api_calls += 1
@@ -372,7 +374,7 @@ class OptimizedAssignmentCopier:
         assignments_to_copy: List[PermissionAssignment],
         rollback_id: str,
         metrics: PerformanceMetrics,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable] = None,
     ) -> List[PermissionAssignment]:
         """
         Execute the copy operation using optimized batch processing.
@@ -396,7 +398,7 @@ class OptimizedAssignmentCopier:
 
         # Create operation function
         def create_assignment_operation(
-            target_entity: EntityReference, assignment: PermissionAssignment
+            assignment: PermissionAssignment, target_entity: EntityReference
         ) -> None:
             if target_entity.entity_type == EntityType.USER:
                 self._create_user_assignment(

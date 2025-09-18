@@ -167,7 +167,7 @@ class RollbackStateVerifier:
                 warnings.append(f"Skipping verification for failed account {result.account_id}")
                 continue
 
-            verification_result = self._verify_single_assignment(
+            assignment_verification = self._verify_single_assignment(
                 operation=operation,
                 account_id=result.account_id,
                 sso_instance_arn=sso_instance_arn,
@@ -175,10 +175,10 @@ class RollbackStateVerifier:
                 is_pre_rollback=True,
             )
 
-            assignment_results.append(verification_result)
+            assignment_results.append(assignment_verification)
 
-            if not verification_result.verified and verification_result.error:
-                errors.append(verification_result.error)
+            if not assignment_verification.verified and assignment_verification.error:
+                errors.append(assignment_verification.error)
 
         # Calculate overall results
         total_assignments = len(assignment_results)
@@ -187,7 +187,7 @@ class RollbackStateVerifier:
 
         overall_verified = failed_verifications == 0
 
-        result = StateVerificationResult(
+        verification_result = StateVerificationResult(
             operation_id=operation.operation_id,
             verification_level=verification_level,
             total_assignments=total_assignments,
@@ -203,7 +203,7 @@ class RollbackStateVerifier:
             f"Pre-rollback verification completed: {verified_assignments}/{total_assignments} verified"
         )
 
-        return result
+        return verification_result
 
     def verify_post_rollback_state(
         self,
@@ -245,21 +245,21 @@ class RollbackStateVerifier:
 
         assignment_results = []
         errors = []
-        warnings = []
+        warnings: List[str] = []
 
         # Verify each rollback action
         for action in rollback_actions:
-            verification_result = self._verify_rollback_action_result(
+            action_verification = self._verify_rollback_action_result(
                 operation=operation,
                 action=action,
                 sso_instance_arn=sso_instance_arn,
                 verification_level=verification_level,
             )
 
-            assignment_results.append(verification_result)
+            assignment_results.append(action_verification)
 
-            if not verification_result.verified and verification_result.error:
-                errors.append(verification_result.error)
+            if not action_verification.verified and action_verification.error:
+                errors.append(action_verification.error)
 
         # Calculate overall results
         total_assignments = len(assignment_results)
@@ -312,6 +312,8 @@ class RollbackStateVerifier:
         # Check if already rolled back
         if operation.rolled_back:
             existing_rollback_id = operation.rollback_operation_id
+            if existing_rollback_id is None:
+                existing_rollback_id = "unknown"
             raise IdempotencyViolationError(operation_id, existing_rollback_id)
 
         # Check for duplicate rollback attempts in progress
@@ -384,8 +386,7 @@ class RollbackStateVerifier:
         )
 
         if result.success:
-            actual_state = result  # This would be the return value from check_assignment_state
-            # Note: This is simplified - in reality we'd need to handle the return value properly
+            # Get the actual state from the assignment check
             actual_state = self._get_current_assignment_state(
                 operation, account_id, sso_instance_arn
             )
@@ -394,7 +395,7 @@ class RollbackStateVerifier:
 
         verified = actual_state == expected_state
         error = None
-        warnings = []
+        warnings: List[str] = []
 
         if not verified:
             if actual_state == AssignmentState.UNKNOWN:
@@ -456,7 +457,7 @@ class RollbackStateVerifier:
 
         verified = actual_state == expected_state
         error = None
-        warnings = []
+        warnings: List[str] = []
 
         if not verified:
             if actual_state == AssignmentState.UNKNOWN:

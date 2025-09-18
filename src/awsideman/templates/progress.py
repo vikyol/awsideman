@@ -191,8 +191,8 @@ class TemplateProgressBar:
             TextColumn("[progress.description]{task.description}"),
             console=self.console,
         ) as progress:
-            task = progress.add_task(description, total=None)
-            yield task
+            progress.add_task(description, total=None)
+            yield progress
 
 
 class TemplateUserFeedback:

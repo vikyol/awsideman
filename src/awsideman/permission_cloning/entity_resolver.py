@@ -240,8 +240,6 @@ class EntityResolver:
             elif entity_type == EntityType.GROUP:
                 group_info = self._get_group_by_id(entity_id)
                 return group_info is not None, None
-            else:
-                return False, f"Unknown entity type: {entity_type}"
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
@@ -444,7 +442,7 @@ class EntityResolver:
             group_info = self._group_cache.get(entity_id)
             return group_info.get("DisplayName") if group_info else None
 
-        return None
+        return None  # type: ignore[unreachable]
 
     def clear_cache(self) -> None:
         """Clear all cached entity information."""
@@ -532,7 +530,7 @@ class EntityResolver:
                     for group in groups
                 ]
 
-            return []
+            return []  # type: ignore[unreachable]
 
         except Exception as e:
             logger.error(

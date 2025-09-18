@@ -244,7 +244,6 @@ class CrossAccountClientManager:
         )
 
         # Cache the result
-        result._cached_at = datetime.now()
         self._role_validation_cache[cache_key] = result
 
         return result

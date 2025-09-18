@@ -58,7 +58,7 @@ class MonitoringScheduler:
             logger.warning("Monitoring or scheduling is disabled")
             return
 
-        if not self.monitoring_config.schedule.enabled:
+        if not self.monitoring_config.schedule or not self.monitoring_config.schedule.enabled:
             logger.warning("Schedule is disabled in monitoring configuration")
             return
 
@@ -106,7 +106,11 @@ class MonitoringScheduler:
 
                 if due_checks:
                     # Limit concurrent checks
-                    max_concurrent = self.monitoring_config.schedule.max_concurrent_checks
+                    max_concurrent = (
+                        self.monitoring_config.schedule.max_concurrent_checks
+                        if self.monitoring_config.schedule
+                        else 1
+                    )
                     semaphore = asyncio.Semaphore(max_concurrent)
 
                     # Execute due checks concurrently
@@ -174,7 +178,11 @@ class MonitoringScheduler:
                 from ..utils.status_infrastructure import StatusCheckConfig
 
                 status_config = StatusCheckConfig(
-                    timeout_seconds=self.monitoring_config.schedule.timeout_seconds,
+                    timeout_seconds=(
+                        self.monitoring_config.schedule.timeout_seconds
+                        if self.monitoring_config.schedule
+                        else 30
+                    ),
                     enable_parallel_checks=True,
                     max_concurrent_checks=3,
                     retry_attempts=1,
@@ -186,7 +194,11 @@ class MonitoringScheduler:
                 # Execute status check with timeout
                 status_report = await asyncio.wait_for(
                     orchestrator.get_comprehensive_status(),
-                    timeout=self.monitoring_config.schedule.timeout_seconds,
+                    timeout=(
+                        self.monitoring_config.schedule.timeout_seconds
+                        if self.monitoring_config.schedule
+                        else 30
+                    ),
                 )
 
                 # Evaluate thresholds and send alerts
@@ -223,9 +235,10 @@ class MonitoringScheduler:
             check.enabled = False
 
         # Send failure notification if retry is disabled or max attempts reached
-        if (
-            not self.monitoring_config.schedule.retry_on_failure
-            or check.consecutive_failures >= self.monitoring_config.schedule.retry_attempts
+        if not (
+            self.monitoring_config.schedule and self.monitoring_config.schedule.retry_on_failure
+        ) or check.consecutive_failures >= (
+            self.monitoring_config.schedule.retry_attempts if self.monitoring_config.schedule else 0
         ):
             asyncio.create_task(self._send_failure_notification(check.profile_name, error_message))
 
@@ -243,13 +256,50 @@ class MonitoringScheduler:
                 errors=[error_message],
             )
 
+            # Create minimal status report with required fields
+            from ..utils.status_models import (
+                OrphanedAssignmentStatus,
+                ProvisioningStatus,
+                SummaryStatistics,
+                SyncMonitorStatus,
+            )
+
             status_report = StatusReport(
                 timestamp=datetime.now(),
                 overall_health=health_status,
-                provisioning_status=None,
-                orphaned_assignment_status=[],
-                sync_status=[],
-                summary_statistics=None,
+                provisioning_status=ProvisioningStatus(
+                    timestamp=datetime.now(),
+                    status=StatusLevel.WARNING,
+                    message="Not checked",
+                    active_operations=[],
+                    failed_operations=[],
+                    completed_operations=[],
+                    estimated_completion=None,
+                ),
+                orphaned_assignment_status=OrphanedAssignmentStatus(
+                    timestamp=datetime.now(),
+                    status=StatusLevel.WARNING,
+                    message="Not checked",
+                    orphaned_assignments=[],
+                    cleanup_history=[],
+                ),
+                sync_status=SyncMonitorStatus(
+                    timestamp=datetime.now(),
+                    status=StatusLevel.WARNING,
+                    message="Not checked",
+                    sync_providers=[],
+                ),
+                summary_statistics=SummaryStatistics(
+                    total_users=0,
+                    total_groups=0,
+                    total_permission_sets=0,
+                    total_assignments=0,
+                    active_accounts=0,
+                    last_updated=datetime.now(),
+                    user_creation_dates={},
+                    group_creation_dates={},
+                    permission_set_creation_dates={},
+                ),
             )
 
             await self.notification_system.send_alert(
@@ -266,7 +316,13 @@ class MonitoringScheduler:
         if not check.enabled:
             return
 
-        interval = timedelta(minutes=self.monitoring_config.schedule.interval_minutes)
+        interval = timedelta(
+            minutes=(
+                self.monitoring_config.schedule.interval_minutes
+                if self.monitoring_config.schedule
+                else 60
+            )
+        )
 
         # Add extra delay for failed checks
         if check.consecutive_failures > 0:
@@ -303,12 +359,12 @@ class MonitoringScheduler:
                 # Check orphaned assignments count
                 if (
                     threshold.orphaned_assignment_count is not None
-                    and len(status_report.orphaned_assignment_status)
+                    and len(status_report.orphaned_assignment_status.orphaned_assignments)
                     >= threshold.orphaned_assignment_count
                 ):
                     alert_triggered = True
                     alert_reasons.append(
-                        f"Orphaned assignments: {len(status_report.orphaned_assignment_status)}"
+                        f"Orphaned assignments: {len(status_report.orphaned_assignment_status.orphaned_assignments)}"
                     )
 
                 # Check provisioning failures
@@ -326,7 +382,7 @@ class MonitoringScheduler:
                 # Check sync delays
                 if threshold.sync_delay_hours is not None and status_report.sync_status:
                     now = datetime.now()
-                    for sync_status in status_report.sync_status:
+                    for sync_status in status_report.sync_status.sync_providers:
                         if (
                             sync_status.last_sync_time
                             and (now - sync_status.last_sync_time).total_seconds() / 3600
@@ -360,7 +416,8 @@ class MonitoringScheduler:
         """Get current scheduler status."""
         return {
             "running": self.running,
-            "enabled": self.monitoring_config.enabled and self.monitoring_config.schedule.enabled,
+            "enabled": self.monitoring_config.enabled
+            and (self.monitoring_config.schedule and self.monitoring_config.schedule.enabled),
             "scheduled_checks": {
                 name: {
                     "profile_name": check.profile_name,
@@ -372,10 +429,26 @@ class MonitoringScheduler:
                 for name, check in self.scheduled_checks.items()
             },
             "configuration": {
-                "interval_minutes": self.monitoring_config.schedule.interval_minutes,
-                "max_concurrent_checks": self.monitoring_config.schedule.max_concurrent_checks,
-                "timeout_seconds": self.monitoring_config.schedule.timeout_seconds,
-                "retry_on_failure": self.monitoring_config.schedule.retry_on_failure,
+                "interval_minutes": (
+                    self.monitoring_config.schedule.interval_minutes
+                    if self.monitoring_config.schedule
+                    else 60
+                ),
+                "max_concurrent_checks": (
+                    self.monitoring_config.schedule.max_concurrent_checks
+                    if self.monitoring_config.schedule
+                    else 1
+                ),
+                "timeout_seconds": (
+                    self.monitoring_config.schedule.timeout_seconds
+                    if self.monitoring_config.schedule
+                    else 30
+                ),
+                "retry_on_failure": (
+                    self.monitoring_config.schedule.retry_on_failure
+                    if self.monitoring_config.schedule
+                    else False
+                ),
             },
         }
 

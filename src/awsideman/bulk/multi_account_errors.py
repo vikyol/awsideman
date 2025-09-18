@@ -728,7 +728,7 @@ class MultiAccountErrorSummary:
         Returns:
             Dictionary mapping error categories to account lists
         """
-        categories = {
+        categories: Dict[str, List[AccountResult]] = {
             "permission_denied": [],
             "resource_not_found": [],
             "throttling": [],
@@ -789,7 +789,7 @@ class MultiAccountErrorSummary:
         Returns:
             Dictionary with most common error information
         """
-        error_counts = {}
+        error_counts: Dict[str, int] = {}
 
         for account in failed_accounts:
             error_message = account.error_message or "Unknown error"
@@ -1352,8 +1352,10 @@ def analyze_error_patterns(errors: List[MultiAccountError]) -> Dict[str, Any]:
     # Find dominant error types (>25% of total)
     total_errors = len(errors)
     dominant_types = []
-    for error_type, count in error_type_counts.items():
+    for error_type_str, count in error_type_counts.items():
         if count > 0 and (count / total_errors) >= 0.25:
+            # Convert string back to enum
+            error_type = MultiAccountErrorType(error_type_str)
             dominant_types.append(
                 {"type": error_type, "count": count, "percentage": (count / total_errors) * 100}
             )
@@ -1363,8 +1365,11 @@ def analyze_error_patterns(errors: List[MultiAccountError]) -> Dict[str, Any]:
     temporal_analysis = {}
 
     if len(timestamped_errors) > 1:
-        timestamps = [e.timestamp for e in timestamped_errors]
-        time_span = max(timestamps) - min(timestamps)
+        timestamps = [e.timestamp for e in timestamped_errors if e.timestamp is not None]
+        if len(timestamps) > 1:
+            time_span = max(timestamps) - min(timestamps)
+        else:
+            time_span = 0
 
         temporal_analysis = {
             "time_span_seconds": time_span,
@@ -1374,7 +1379,7 @@ def analyze_error_patterns(errors: List[MultiAccountError]) -> Dict[str, Any]:
         }
 
     # Analyze account-specific patterns
-    account_error_counts = {}
+    account_error_counts: Dict[str, int] = {}
     for error in errors:
         if error.account_id:
             account_error_counts[error.account_id] = (

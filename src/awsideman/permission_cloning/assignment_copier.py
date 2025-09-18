@@ -410,9 +410,6 @@ class AssignmentCopier:
             return self.assignment_retriever.get_user_assignments(entity)
         elif entity.entity_type == EntityType.GROUP:
             return self.assignment_retriever.get_group_assignments(entity)
-        else:
-            logger.error(f"Unsupported entity type: {entity.entity_type}")
-            return []
 
     def _identify_assignments_to_copy(
         self,
@@ -658,6 +655,8 @@ class AssignmentCopier:
             )
 
             # Perform the copy operation
+            if source_entity is None or target_entity is None:
+                raise ValueError("Source and target entities must be resolved")
             return self.copy_assignments(
                 source=source_entity, target=target_entity, filters=filters, preview=dry_run
             )

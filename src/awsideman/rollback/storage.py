@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .models import OperationRecord
 
@@ -45,11 +45,11 @@ class OperationStore:
         if not self.rollbacks_file.exists():
             self._write_rollbacks_file({"rollbacks": []})
 
-    def _read_operations_file(self) -> Dict:
+    def _read_operations_file(self) -> Dict[str, Any]:
         """Read the operations file."""
         try:
             with open(self.operations_file, "r") as f:
-                return json.load(f)
+                return json.load(f)  # type: ignore[no-any-return]
         except (FileNotFoundError, json.JSONDecodeError):
             return {"operations": []}
 
@@ -58,11 +58,11 @@ class OperationStore:
         with open(self.operations_file, "w") as f:
             json.dump(data, f, indent=2, default=str)
 
-    def _read_rollbacks_file(self) -> Dict:
+    def _read_rollbacks_file(self) -> Dict[str, Any]:
         """Read the rollbacks file."""
         try:
             with open(self.rollbacks_file, "r") as f:
-                return json.load(f)
+                return json.load(f)  # type: ignore[no-any-return]
         except (FileNotFoundError, json.JSONDecodeError):
             return {"rollbacks": []}
 
@@ -87,7 +87,7 @@ class OperationStore:
                     # This is a permission cloning operation
                     from .models import PermissionCloningOperationRecord
 
-                    return PermissionCloningOperationRecord.from_dict(op_data)
+                    return PermissionCloningOperationRecord.from_dict(op_data)  # type: ignore[return-value]
                 elif (
                     "source_permission_set_name" in op_data
                     and "target_permission_set_name" in op_data
@@ -95,7 +95,7 @@ class OperationStore:
                     # This is a permission set cloning operation
                     from .models import PermissionSetCloningOperationRecord
 
-                    return PermissionSetCloningOperationRecord.from_dict(op_data)
+                    return PermissionSetCloningOperationRecord.from_dict(op_data)  # type: ignore[return-value]
                 else:
                     # This is a standard operation
                     return OperationRecord.from_dict(op_data)
@@ -124,14 +124,14 @@ class OperationStore:
                 # This is a permission cloning operation
                 from .models import PermissionCloningOperationRecord
 
-                operation = PermissionCloningOperationRecord.from_dict(op_data)
+                operation: OperationRecord = PermissionCloningOperationRecord.from_dict(op_data)  # type: ignore[assignment]
             elif (
                 "source_permission_set_name" in op_data and "target_permission_set_name" in op_data
             ):
                 # This is a permission set cloning operation
                 from .models import PermissionSetCloningOperationRecord
 
-                operation = PermissionSetCloningOperationRecord.from_dict(op_data)
+                operation = PermissionSetCloningOperationRecord.from_dict(op_data)  # type: ignore[assignment]
             else:
                 # This is a standard operation
                 operation = OperationRecord.from_dict(op_data)
@@ -143,20 +143,30 @@ class OperationStore:
             # Handle different operation record types for principal filtering
             if principal:
                 principal_match = False
-                if hasattr(operation, "principal_name"):
+                if hasattr(operation, "principal_name") and hasattr(operation, "principal_id"):
                     principal_match = (
                         principal.lower() in operation.principal_name.lower()
                         or principal in operation.principal_id
                     )
-                elif hasattr(operation, "source_entity_name"):
+                elif hasattr(operation, "source_entity_name") and hasattr(
+                    operation, "source_entity_id"
+                ):
                     # For permission cloning operations, check both source and target
                     principal_match = (
                         principal.lower() in operation.source_entity_name.lower()
                         or principal in operation.source_entity_id
-                        or principal.lower() in operation.target_entity_name.lower()
-                        or principal in operation.target_entity_id
+                        or (
+                            hasattr(operation, "target_entity_name")
+                            and principal.lower() in operation.target_entity_name.lower()
+                        )
+                        or (
+                            hasattr(operation, "target_entity_id")
+                            and principal in operation.target_entity_id
+                        )
                     )
-                elif hasattr(operation, "source_permission_set_name"):
+                elif hasattr(operation, "source_permission_set_name") and hasattr(
+                    operation, "target_permission_set_name"
+                ):
                     # For permission set cloning operations, check both source and target
                     principal_match = (
                         principal.lower() in operation.source_permission_set_name.lower()
@@ -169,7 +179,9 @@ class OperationStore:
             # Handle different operation record types for permission set filtering
             if permission_set:
                 permission_set_match = False
-                if hasattr(operation, "permission_set_name"):
+                if hasattr(operation, "permission_set_name") and hasattr(
+                    operation, "permission_set_arn"
+                ):
                     permission_set_match = (
                         permission_set.lower() in operation.permission_set_name.lower()
                         or permission_set in operation.permission_set_arn
@@ -183,7 +195,9 @@ class OperationStore:
                         permission_set.lower() in ps_arn.lower()
                         for ps_arn in operation.permission_sets_involved
                     )
-                elif hasattr(operation, "source_permission_set_name"):
+                elif hasattr(operation, "source_permission_set_name") and hasattr(
+                    operation, "target_permission_set_name"
+                ):
                     # For permission set cloning operations, check both source and target
                     permission_set_match = (
                         permission_set.lower() in operation.source_permission_set_name.lower()

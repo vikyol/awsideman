@@ -15,7 +15,7 @@ import aiofiles
 import aiofiles.os
 
 try:
-    import aioboto3
+    import aioboto3  # type: ignore[import-untyped]
     from botocore.exceptions import NoCredentialsError, TokenRetrievalError
 
     HAS_BOTO3 = True
@@ -386,7 +386,7 @@ class S3StorageBackend(StorageBackendInterface):
                 data = await response["Body"].read()
 
             logger.debug(f"Successfully read data from S3 key {s3_key}")
-            return data
+            return data  # type: ignore[no-any-return]
 
         except Exception as e:
             # Check for authentication errors first

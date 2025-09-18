@@ -8,7 +8,7 @@ many accounts, especially when using wildcard filters.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from ..aws_clients.manager import OrganizationsClientWrapper, get_account_details
@@ -197,8 +197,7 @@ class AccountCacheOptimizer:
             self.cache_manager.set(
                 self.org_snapshot_key,
                 cache_data,
-                ttl=self.ORG_SNAPSHOT_TTL,
-                operation="org_snapshot",
+                ttl=timedelta(seconds=self.ORG_SNAPSHOT_TTL),
             )
 
             logger.debug(f"Cached organization snapshot with {len(accounts)} accounts")
@@ -213,6 +212,8 @@ class AccountCacheOptimizer:
             # without fetching full details
             from ..aws_clients.manager import build_organization_hierarchy
 
+            if self.organizations_client is None:
+                raise ValueError("Organizations client is not available")
             organization_tree = build_organization_hierarchy(self.organizations_client)
 
             def count_accounts_in_tree(nodes):
@@ -223,7 +224,7 @@ class AccountCacheOptimizer:
                     count += count_accounts_in_tree(node.children)
                 return count
 
-            return count_accounts_in_tree(organization_tree)
+            return int(count_accounts_in_tree(organization_tree))
 
         except Exception as e:
             logger.warning(f"Failed to get current account count: {e}")
@@ -242,7 +243,7 @@ class AccountCacheOptimizer:
         """Cache the current account count."""
         try:
             self.cache_manager.set(
-                self.account_count_key, count, ttl=self.ACCOUNT_COUNT_TTL, operation="account_count"
+                self.account_count_key, count, ttl=timedelta(seconds=self.ACCOUNT_COUNT_TTL)
             )
             logger.debug(f"Cached account count: {count}")
         except Exception as e:
@@ -277,6 +278,8 @@ class AccountCacheOptimizer:
         all_accounts = []
 
         # Build the organization hierarchy to get all accounts
+        if self.organizations_client is None:
+            raise ValueError("Organizations client is not available")
         organization_tree = build_organization_hierarchy(self.organizations_client)
 
         # Collect all account IDs first
@@ -298,6 +301,8 @@ class AccountCacheOptimizer:
                 if i % 10 == 0:  # Log progress every 10 accounts
                     logger.debug(f"Fetching account details: {i+1}/{len(account_ids)}")
 
+                if self.organizations_client is None:
+                    raise ValueError("Organizations client is not available")
                 account_details = get_account_details(self.organizations_client, account_id)
                 account_info = AccountInfo.from_account_details(account_details)
                 all_accounts.append(account_info)
@@ -329,8 +334,7 @@ class AccountCacheOptimizer:
             self.cache_manager.set(
                 cache_key,
                 cache_data,
-                ttl=self.INDIVIDUAL_ACCOUNT_TTL,
-                operation="individual_account",
+                ttl=timedelta(seconds=self.INDIVIDUAL_ACCOUNT_TTL),
             )
 
         except Exception as e:
@@ -566,7 +570,7 @@ class AccountCacheOptimizer:
                 # For wildcard profile, clear all cache since we can't enumerate keys
                 logger.info("Wildcard profile specified - clearing all cache entries")
                 try:
-                    self.cache_manager.invalidate()  # Clear all cache
+                    self.cache_manager.invalidate("*")  # Clear all cache
                     cleared_count = initial_entries
                     logger.info(f"Cleared all {initial_entries} cache entries")
                 except Exception as e:
@@ -666,7 +670,7 @@ class AccountCacheOptimizer:
         Returns:
             Dictionary with cache inspection results
         """
-        inspection = {
+        inspection: Dict[str, Any] = {
             "total_entries": 0,
             "account_related_keys": [],
             "other_keys": [],
@@ -707,7 +711,7 @@ class AccountCacheOptimizer:
                         inspection["other_keys"].append(key)
 
                 # Analyze key patterns
-                patterns = {}
+                patterns: Dict[str, int] = {}
                 for key in cache_keys:
                     # Extract pattern (first part before underscore or full key if no underscore)
                     pattern = key.split("_")[0] if "_" in key else key
@@ -728,7 +732,7 @@ class AccountCacheOptimizer:
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics for account-related entries."""
-        stats = {
+        stats: Dict[str, Any] = {
             "org_snapshot_cached": False,
             "account_count_cached": False,
             "org_snapshot_age_seconds": None,

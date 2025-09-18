@@ -69,7 +69,7 @@ class HealthChecker(BaseStatusChecker):
                     },
                 )
 
-                return health_status
+                return health_status  # type: ignore[no-any-return]
             else:
                 # Timeout or other error occurred
                 error = timeout_result.error
@@ -339,7 +339,7 @@ class HealthChecker(BaseStatusChecker):
             if (
                 checks
                 and checks[0]["status"] == "success"
-                and checks[0].get("instances_count", 0) > 0
+                and int(str(checks[0].get("instances_count", 0))) > 0
             ):
                 try:
                     # Get the first instance ARN for further testing

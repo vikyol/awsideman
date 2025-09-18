@@ -13,7 +13,8 @@ from ..permission_cloning.models import EntityReference
 
 if TYPE_CHECKING:
     from .executor import ExecutionResult, PreviewResult
-    from .models import Template, TemplateInfo
+    from .models import Template
+    from .storage import TemplateInfo
     from .validator import ValidationResult
 
 
@@ -107,7 +108,7 @@ class EntityResolverProtocol(Protocol):
     """Protocol for entity resolution operations."""
 
     def resolve_entity_by_name(
-        self, entity_type: str, entity_name: str
+        self, entity_type: Any, entity_name: str
     ) -> Optional[EntityReference]:
         """Resolve entity by name."""
         pass

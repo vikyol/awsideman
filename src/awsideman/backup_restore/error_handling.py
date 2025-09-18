@@ -77,8 +77,10 @@ class ErrorInfo:
     def __post_init__(self):
         """Post-initialization to capture stack trace if exception is present."""
         if self.exception and not self.stack_trace:
-            self.stack_trace = traceback.format_exception(
-                type(self.exception), self.exception, self.exception.__traceback__
+            self.stack_trace = "\n".join(
+                traceback.format_exception(
+                    type(self.exception), self.exception, self.exception.__traceback__
+                )
             )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -184,7 +186,9 @@ class ErrorAnalyzer:
     def __init__(self):
         self.error_patterns = self._initialize_error_patterns()
 
-    def analyze_error(self, exception: Exception, context: Dict[str, Any] = None) -> ErrorInfo:
+    def analyze_error(
+        self, exception: Exception, context: Dict[str, Any] | None = None
+    ) -> ErrorInfo:
         """
         Analyze an error and return detailed error information.
 
@@ -358,7 +362,7 @@ class ErrorAnalyzer:
                 "Ensure backup storage location is accessible",
             ]
 
-    def _initialize_error_patterns(self) -> Dict[str, Dict[str, Any]]:
+    def _initialize_error_patterns(self) -> Dict[str, Any]:
         """Initialize error patterns for analysis."""
         return {
             "throttling_patterns": [
@@ -382,12 +386,12 @@ class ErrorAnalyzer:
 class RetryHandler:
     """Handles retry logic with exponential backoff."""
 
-    def __init__(self, config: RetryConfig = None):
+    def __init__(self, config: RetryConfig | None = None):
         self.config = config or RetryConfig()
         self.error_analyzer = ErrorAnalyzer()
 
     async def execute_with_retry(
-        self, operation: Callable, *args: Any, context: Dict[str, Any] = None, **kwargs: Any
+        self, operation: Callable, *args: Any, context: Dict[str, Any] | None = None, **kwargs: Any
     ) -> Any:
         """
         Execute an operation with retry logic.
@@ -405,7 +409,6 @@ class RetryHandler:
             Exception: If all retries are exhausted
         """
         context = context or {}
-        last_error = None
 
         for attempt in range(self.config.max_retries + 1):
             try:
@@ -424,7 +427,6 @@ class RetryHandler:
                 return result
 
             except Exception as e:
-                last_error = e
                 error_info = self.error_analyzer.analyze_error(e, context)
                 error_info.retry_count = attempt
 
@@ -441,7 +443,7 @@ class RetryHandler:
                     raise e
 
         # This should never be reached, but just in case
-        raise last_error
+        raise RuntimeError("Unexpected error in retry handler")
 
     def _calculate_delay(self, attempt: int) -> float:
         """Calculate delay for exponential backoff."""
@@ -571,7 +573,7 @@ class PartialRecoveryManager:
         recovery_messages = []
 
         # Summarize what was successfully applied
-        resource_counts = {}
+        resource_counts: Dict[str, int] = {}
         for change in applied_changes:
             resource_type = change["resource_type"]
             resource_counts[resource_type] = resource_counts.get(resource_type, 0) + 1
@@ -795,7 +797,7 @@ class ErrorReporter:
         self.error_analyzer = ErrorAnalyzer()
 
     def generate_error_report(
-        self, errors: List[ErrorInfo], operation_context: Dict[str, Any] = None
+        self, errors: List[ErrorInfo], operation_context: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
         """
         Generate a comprehensive error report.
@@ -810,8 +812,8 @@ class ErrorReporter:
         operation_context = operation_context or {}
 
         # Categorize errors
-        error_categories = {}
-        severity_counts = {}
+        error_categories: Dict[str, List[ErrorInfo]] = {}
+        severity_counts: Dict[str, int] = {}
 
         for error in errors:
             category = error.category.value
@@ -932,7 +934,7 @@ class ErrorReporter:
 
 
 # Convenience function to create a comprehensive error handling system
-def create_error_handling_system(retry_config: RetryConfig = None) -> Dict[str, Any]:
+def create_error_handling_system(retry_config: RetryConfig | None = None) -> Dict[str, Any]:
     """
     Create a comprehensive error handling system with all components.
 

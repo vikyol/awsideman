@@ -49,7 +49,7 @@ class KeyManager:
         """
         try:
             # Check if we have a cached key that's still valid
-            if self._is_key_cache_valid():
+            if self._is_key_cache_valid() and self._cached_key is not None:
                 # Lock cached key in memory for security
                 secure_memory.lock_memory(self._cached_key)
                 return self._cached_key
@@ -454,7 +454,7 @@ class FallbackKeyManager(KeyManager):
         """
         try:
             # Check if we have a cached key that's still valid
-            if self._is_key_cache_valid():
+            if self._is_key_cache_valid() and self._cached_key is not None:
                 return self._cached_key
 
             # Try to read existing key file

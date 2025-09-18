@@ -6,7 +6,7 @@ in AWS Identity Center, including caching for performance optimization.
 """
 
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from botocore.exceptions import ClientError
 
@@ -47,9 +47,7 @@ class AssignmentRetriever:
         self.entity_resolver = EntityResolver(client_manager, identity_store_id)
 
         # Cache for assignment data to improve performance
-        self._assignment_cache: Dict[str, List[PermissionAssignment]] = (
-            {}
-        )  # {entity_key: assignments}
+        self._assignment_cache: Dict[str, Any] = {}  # {entity_key: assignments}
         self._permission_set_cache: Dict[str, Dict[str, str]] = {}  # {arn: {name, description}}
         self._account_cache: Dict[str, str] = {}  # {id: name}
 
@@ -102,8 +100,8 @@ class AssignmentRetriever:
                 entity_id=user_entity.entity_id, entity_type="USER"
             )
 
-            # Convert to PermissionAssignment objects and enrich with names
-            enriched_assignments = self._enrich_assignments(assignments)
+            # Assignments are already PermissionAssignment objects, enrich with names
+            enriched_assignments = self._enrich_assignments_from_objects(assignments)
 
             # Cache the results
             self._user_assignments_cache[cache_key] = enriched_assignments
@@ -146,8 +144,8 @@ class AssignmentRetriever:
                 entity_id=group_entity.entity_id, entity_type="GROUP"
             )
 
-            # Convert to PermissionAssignment objects and enrich with names
-            enriched_assignments = self._enrich_assignments(assignments)
+            # Assignments are already PermissionAssignment objects, enrich with names
+            enriched_assignments = self._enrich_assignments_from_objects(assignments)
 
             # Cache the results
             self._group_assignments_cache[cache_key] = enriched_assignments
@@ -178,7 +176,7 @@ class AssignmentRetriever:
         elif entity.entity_type == EntityType.GROUP:
             return self.get_group_assignments(entity)
         else:
-            logger.error(f"Unsupported entity type: {entity.entity_type}")
+            logger.error(f"Unsupported entity type: {entity.entity_type}")  # type: ignore[unreachable]
             return []
 
     def get_assignments_for_multiple_entities(
@@ -244,7 +242,9 @@ class AssignmentRetriever:
             "account_cache_size": len(self._account_cache),
         }
 
-    def _fetch_entity_assignments(self, entity_id: str, entity_type: str) -> List[Dict[str, str]]:
+    def _fetch_entity_assignments(
+        self, entity_id: str, entity_type: str
+    ) -> List[PermissionAssignment]:
         """
         Fetch raw assignment data from AWS APIs.
 
@@ -284,12 +284,12 @@ class AssignmentRetriever:
                                 and assignment.get("PrincipalType") == entity_type
                             ):
                                 assignments.append(
-                                    {
-                                        "PermissionSetArn": permission_set_arn,
-                                        "AccountId": account_id,
-                                        "PrincipalId": entity_id,
-                                        "PrincipalType": entity_type,
-                                    }
+                                    PermissionAssignment(
+                                        permission_set_arn=permission_set_arn,
+                                        account_id=account_id,
+                                        permission_set_name="",  # Will be filled by enrichment
+                                        account_name="",  # Will be filled by enrichment
+                                    )
                                 )
                                 # Found an assignment for this entity, no need to check other accounts for this permission set
                                 break
@@ -312,7 +312,7 @@ class AssignmentRetriever:
     def _get_all_permission_sets(self) -> List[str]:
         """Get all permission sets in the instance."""
         if "permission_sets" in self._assignment_cache:
-            return self._assignment_cache["permission_sets"]
+            return self._assignment_cache["permission_sets"]  # type: ignore[no-any-return]
 
         try:
             permission_sets = []
@@ -332,7 +332,7 @@ class AssignmentRetriever:
     def _get_all_accounts(self) -> List[Dict[str, str]]:
         """Get all accounts in the organization."""
         if "accounts" in self._assignment_cache:
-            return self._assignment_cache["accounts"]
+            return self._assignment_cache["accounts"]  # type: ignore[no-any-return]
 
         try:
             accounts = []
@@ -390,6 +390,45 @@ class AssignmentRetriever:
 
         return enriched_assignments
 
+    def _enrich_assignments_from_objects(
+        self, assignments: List[PermissionAssignment]
+    ) -> List[PermissionAssignment]:
+        """
+        Enrich PermissionAssignment objects with additional metadata.
+
+        Args:
+            assignments: List of PermissionAssignment objects
+
+        Returns:
+            List of enriched PermissionAssignment objects
+        """
+        enriched_assignments = []
+
+        for assignment in assignments:
+            try:
+                # Get permission set name
+                permission_set_name = self._get_permission_set_name(assignment.permission_set_arn)
+
+                # Get account name
+                account_name = self._get_account_name(assignment.account_id)
+
+                # Create enriched assignment
+                enriched_assignment = PermissionAssignment(
+                    permission_set_arn=assignment.permission_set_arn,
+                    account_id=assignment.account_id,
+                    permission_set_name=permission_set_name,
+                    account_name=account_name,
+                )
+
+                enriched_assignments.append(enriched_assignment)
+
+            except Exception as e:
+                logger.warning(f"Error enriching assignment: {str(e)}")
+                # Add the original assignment if enrichment fails
+                enriched_assignments.append(assignment)
+
+        return enriched_assignments
+
     def _get_permission_set_name(self, permission_set_arn: str) -> str:
         """Get permission set name from ARN, with caching."""
         if permission_set_arn in self._permission_set_cache:
@@ -410,7 +449,7 @@ class AssignmentRetriever:
                 "description": description,
             }
 
-            return name
+            return name  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning(
@@ -428,7 +467,7 @@ class AssignmentRetriever:
             if "accounts" in self._assignment_cache:
                 for account in self._assignment_cache["accounts"]:
                     if account.get("Id") == account_id:
-                        account_name = account.get("Name", "")
+                        account_name = str(account.get("Name", ""))
                         self._account_cache[account_id] = account_name
                         return account_name
 
@@ -438,7 +477,7 @@ class AssignmentRetriever:
 
             # Cache the result
             self._account_cache[account_id] = account_name
-            return account_name
+            return account_name  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning(f"Error retrieving account name for {account_id}: {str(e)}")

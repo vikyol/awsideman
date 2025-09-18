@@ -36,14 +36,16 @@ class SecureMemory:
         try:
             if os.name == "posix":
                 # Check if mlock is available
-                import mlock  # noqa: F401
+                import importlib.util
 
-                return True
+                return importlib.util.find_spec("mlock") is not None
             elif os.name == "nt":
                 # Check if VirtualLock is available
                 try:
-                    ctypes.windll.kernel32.VirtualLock
-                    return True
+                    if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "kernel32"):
+                        ctypes.windll.kernel32.VirtualLock
+                        return True
+                    return False
                 except AttributeError:
                     return False
             else:
@@ -81,18 +83,21 @@ class SecureMemory:
         try:
             if os.name == "posix":
                 # Use mlock on Unix systems
-                import mlock
+                try:
+                    import mlock  # type: ignore[import-not-found]
 
-                addr = id(data)
-                mlock.mlockall(mlock.MCL_CURRENT | mlock.MCL_FUTURE)
-                self._locked_pages.add(addr)
+                    addr = id(data)
+                    mlock.mlockall(mlock.MCL_CURRENT | mlock.MCL_FUTURE)
+                    self._locked_pages.add(addr)
+                except ImportError:
+                    return None
                 logger.debug(f"Locked memory page at address {addr}")
                 return addr
             elif os.name == "nt":
                 # Use VirtualLock on Windows
                 addr = id(data)
                 size = len(data)
-                result = ctypes.windll.kernel32.VirtualLock(addr, size)
+                result = ctypes.windll.kernel32.VirtualLock(addr, size)  # type: ignore[attr-defined]
                 if result:
                     self._locked_pages.add(addr)
                     logger.debug(f"Locked memory page at address {addr}")
@@ -100,6 +105,9 @@ class SecureMemory:
                 else:
                     logger.warning("Failed to lock memory page on Windows")
                     return None
+            else:
+                logger.warning(f"Unsupported platform: {os.name}")
+                return None
         except Exception as e:
             logger.warning(f"Failed to lock memory: {e}")
             return None
@@ -129,7 +137,7 @@ class SecureMemory:
             elif os.name == "nt":
                 # Use VirtualUnlock on Windows
                 # Note: We don't have the size, so this is best effort
-                result = ctypes.windll.kernel32.VirtualUnlock(addr, 0)
+                result = ctypes.windll.kernel32.VirtualUnlock(addr, 0)  # type: ignore[attr-defined]
                 if result:
                     self._locked_pages.discard(addr)
                     logger.debug(f"Unlocked memory page at address {addr}")
@@ -137,6 +145,9 @@ class SecureMemory:
                 else:
                     logger.warning("Failed to unlock memory page on Windows")
                     return False
+            else:
+                logger.warning(f"Unsupported platform: {os.name}")
+                return False
         except Exception as e:
             logger.warning(f"Failed to unlock memory: {e}")
             return False
@@ -148,9 +159,6 @@ class SecureMemory:
         Args:
             data: Bytearray to zero out
         """
-        if not isinstance(data, bytearray):
-            logger.warning("secure_zero called on non-bytearray, cannot securely clear")
-            return
 
         try:
             # Overwrite with random data first
@@ -523,7 +531,7 @@ class SecureLogger:
             else:
                 safe_kwargs[key] = "[REDACTED]"
 
-        self.logger.debug(sanitized_message, *sanitized_args, **safe_kwargs)
+        self.logger.debug(sanitized_message, *sanitized_args)
 
     def info(self, message: str, *args: Any, **kwargs: Any) -> None:
         """
@@ -544,7 +552,7 @@ class SecureLogger:
             else:
                 safe_kwargs[key] = "[REDACTED]"
 
-        self.logger.info(sanitized_message, *sanitized_args, **safe_kwargs)
+        self.logger.info(sanitized_message, *sanitized_args)
 
     def warning(self, message: str, *args: Any, **kwargs: Any) -> None:
         """
@@ -565,7 +573,7 @@ class SecureLogger:
             else:
                 safe_kwargs[key] = "[REDACTED]"
 
-        self.logger.warning(sanitized_message, *sanitized_args, **safe_kwargs)
+        self.logger.warning(sanitized_message, *sanitized_args)
 
     def error(self, message: str, *args: Any, **kwargs: Any) -> None:
         """
@@ -586,7 +594,7 @@ class SecureLogger:
             else:
                 safe_kwargs[key] = "[REDACTED]"
 
-        self.logger.error(sanitized_message, *sanitized_args, **safe_kwargs)
+        self.logger.error(sanitized_message, *sanitized_args)
 
     def security_event(
         self, event_type: str, details: Dict[str, Any], severity: str = "INFO"

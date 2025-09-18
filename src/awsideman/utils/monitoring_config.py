@@ -325,7 +325,7 @@ class MonitoringConfigManager:
 
     def validate_config(self, monitoring_config: MonitoringConfig) -> List[str]:
         """Validate monitoring configuration and return list of errors."""
-        errors = []
+        errors: List[str] = []
 
         if not monitoring_config.enabled:
             return errors  # No validation needed if monitoring is disabled

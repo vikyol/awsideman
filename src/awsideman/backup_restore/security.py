@@ -244,7 +244,7 @@ class SecurityMonitor:
         cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=self.alert_threshold_minutes)
         recent_events = [e for e in events if e.timestamp >= cutoff_time]
 
-        user_events = {}
+        user_events: Dict[str, List[AuditEvent]] = {}
         for event in recent_events:
             if event.user_id:
                 if event.user_id not in user_events:
@@ -567,7 +567,7 @@ class SecurityEventCorrelator:
         alerts = []
 
         # Group events by user
-        user_events = {}
+        user_events: Dict[str, List[AuditEvent]] = {}
         for event in events:
             if event.user_id:
                 if event.user_id not in user_events:
@@ -619,7 +619,7 @@ class SecurityEventCorrelator:
         alerts = []
 
         # Look for pattern: multiple backups -> multiple exports
-        user_events = {}
+        user_events: Dict[str, List[AuditEvent]] = {}
         for event in events:
             if event.user_id:
                 if event.user_id not in user_events:
@@ -658,7 +658,7 @@ class SecurityEventCorrelator:
         alerts = []
 
         # Look for excessive listing/viewing operations
-        user_events = {}
+        user_events: Dict[str, List[AuditEvent]] = {}
         for event in events:
             if event.user_id:
                 if event.user_id not in user_events:

@@ -243,7 +243,9 @@ def validate_profile(profile_name: Optional[str] = None) -> tuple[str, dict]:
     return profile_name, profiles[profile_name]
 
 
-def validate_sso_instance(profile_data: dict, profile_name: str = None) -> tuple[str, str]:
+def validate_sso_instance(
+    profile_data: dict, profile_name: Optional[str] = None
+) -> tuple[str, str]:
     """
     Validate the SSO instance configuration and return instance ARN and identity store ID.
 
@@ -348,7 +350,9 @@ def validate_sso_instance(profile_data: dict, profile_name: str = None) -> tuple
     raise typer.Exit(1)
 
 
-def validate_sso_instance_no_auto(profile_data: dict, profile_name: str = None) -> tuple[str, str]:
+def validate_sso_instance_no_auto(
+    profile_data: dict, profile_name: Optional[str] = None
+) -> tuple[str, str]:
     """
     Validate the SSO instance configuration and return instance ARN and identity store ID.
 

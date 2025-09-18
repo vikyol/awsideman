@@ -550,14 +550,14 @@ class BatchProcessor:
                 if entity:
                     self.cache.put_entity(entity)
 
-                results[entity_id] = entity
+                results[entity_id] = entity  # type: ignore[assignment]
                 metrics.api_calls += 1
 
             except Exception as e:
                 logger.error(f"Error resolving entity {entity_id}: {str(e)}")
-                results[entity_id] = None
+                results[entity_id] = None  # type: ignore[assignment]
 
-        return results
+        return results  # type: ignore[return-value]
 
     def _execute_with_retry(
         self,
@@ -572,7 +572,7 @@ class BatchProcessor:
         for attempt in range(self.rate_limiter.config.max_retries + 1):
             try:
                 start_time = time.time()
-                operation_func(target_entity, assignment)
+                operation_func(target_entity, assignment)  # type: ignore[arg-type]
                 metrics.assignment_creation_time_ms += (time.time() - start_time) * 1000
                 return True
 
@@ -598,9 +598,11 @@ class BatchProcessor:
                     if attempt < self.rate_limiter.config.max_retries:
                         metrics.retry_attempts += 1
                         time.sleep(backoff_ms / 1000.0)
-                        backoff_ms = min(
-                            backoff_ms * self.rate_limiter.config.backoff_multiplier,
-                            self.rate_limiter.config.max_backoff_ms,
+                        backoff_ms = int(
+                            min(
+                                backoff_ms * self.rate_limiter.config.backoff_multiplier,
+                                self.rate_limiter.config.max_backoff_ms,
+                            )
                         )
                         continue
 
@@ -657,7 +659,7 @@ class StreamProcessor:
         if len(assignments) < self.config.stream_threshold:
             # Use regular batch processing for smaller lists
             with self.batch_processor as bp:
-                return bp.process_assignments_parallel(
+                return bp.process_assignments_parallel(  # type: ignore[no-any-return]
                     assignments, target_entity, operation_func, metrics
                 )
 
@@ -770,7 +772,7 @@ class PerformanceOptimizer:
 
     def get_optimization_recommendations(self, metrics: PerformanceMetrics) -> List[str]:
         """Get optimization recommendations based on metrics."""
-        recommendations = []
+        recommendations: List[str] = []
 
         if not metrics.duration_ms:
             return recommendations

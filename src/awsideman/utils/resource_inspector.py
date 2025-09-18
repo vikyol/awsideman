@@ -220,7 +220,7 @@ class ResourceInspector(BaseStatusChecker):
                 errors=[str(e)],
             )
 
-    async def _find_user(self, user_identifier: str) -> Optional[Dict[str, Any]]:
+    async def _find_user(self, user_identifier: str) -> Any:
         """
         Find a user by ID, username, or email.
 
@@ -245,7 +245,7 @@ class ResourceInspector(BaseStatusChecker):
                     response = identity_store_client.describe_user(
                         IdentityStoreId=identity_store_id, UserId=user_identifier
                     )
-                    return response
+                    return dict(response)
                 except ClientError as e:
                     if e.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
                         return None
@@ -287,7 +287,7 @@ class ResourceInspector(BaseStatusChecker):
             self.logger.error(f"Error finding user {user_identifier}: {str(e)}")
             raise
 
-    async def _find_group(self, group_identifier: str) -> Optional[Dict[str, Any]]:
+    async def _find_group(self, group_identifier: str) -> Any:
         """
         Find a group by ID or display name.
 
@@ -312,7 +312,7 @@ class ResourceInspector(BaseStatusChecker):
                     response = identity_store_client.describe_group(
                         IdentityStoreId=identity_store_id, GroupId=group_identifier
                     )
-                    return response
+                    return dict(response)
                 except ClientError as e:
                     if e.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
                         return None
@@ -343,9 +343,7 @@ class ResourceInspector(BaseStatusChecker):
             self.logger.error(f"Error finding group {group_identifier}: {str(e)}")
             raise
 
-    async def _find_permission_set(
-        self, permission_set_identifier: str
-    ) -> Optional[Dict[str, Any]]:
+    async def _find_permission_set(self, permission_set_identifier: str) -> Any:
         """
         Find a permission set by ARN or name.
 
@@ -366,7 +364,7 @@ class ResourceInspector(BaseStatusChecker):
                     response = sso_admin_client.describe_permission_set(
                         InstanceArn=instance_arn, PermissionSetArn=permission_set_identifier
                     )
-                    return response.get("PermissionSet")
+                    return dict(response.get("PermissionSet", {}))
                 except ClientError as e:
                     if e.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
                         return None
@@ -589,7 +587,7 @@ class ResourceInspector(BaseStatusChecker):
             # Calculate similarity scores
             scored_users = []
             for user, searchable_strings in user_strings:
-                max_similarity = 0
+                max_similarity = 0.0
                 best_match = ""
 
                 for searchable in searchable_strings:
@@ -921,7 +919,7 @@ class ResourceInspector(BaseStatusChecker):
                 raise StatusCheckError("No Identity Center instances found", "ResourceInspector")
 
             # Use the first instance
-            return instances[0]["IdentityStoreId"]
+            return str(instances[0]["IdentityStoreId"])
 
         except Exception as e:
             self.logger.error(f"Error getting identity store ID: {str(e)}")
@@ -945,7 +943,7 @@ class ResourceInspector(BaseStatusChecker):
                 raise StatusCheckError("No Identity Center instances found", "ResourceInspector")
 
             # Use the first instance
-            return instances[0]["InstanceArn"]
+            return str(instances[0]["InstanceArn"])
 
         except Exception as e:
             self.logger.error(f"Error getting instance ARN: {str(e)}")

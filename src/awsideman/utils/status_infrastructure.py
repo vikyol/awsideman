@@ -5,7 +5,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type, Union
 
 from .status_models import (
     BaseStatusResult,
@@ -128,7 +128,7 @@ class BaseStatusChecker(ABC):
         Returns:
             BaseStatusResult: Status check results
         """
-        last_error = None
+        last_error: Optional[Union[TimeoutError, StatusCheckError]] = None
 
         for attempt in range(self.config.retry_attempts + 1):
             try:
@@ -157,7 +157,16 @@ class BaseStatusChecker(ABC):
                 await asyncio.sleep(self.config.retry_delay_seconds)
 
         # All attempts failed, return error result
-        return self._create_error_result(last_error)
+        if last_error is not None:
+            return self._create_error_result(last_error)
+        else:
+            # Create a generic error if no specific error was captured
+            generic_error = StatusCheckError(
+                "Status check failed after all retry attempts",
+                self.__class__.__name__,
+                {"retry_attempts": self.config.retry_attempts},
+            )
+            return self._create_error_result(generic_error)
 
     def _create_error_result(self, error: StatusCheckError) -> BaseStatusResult:
         """
@@ -391,7 +400,13 @@ class StatusOrchestrator:
 
         # Prepare tasks for parallel execution
         tasks = []
-        results = {"health": [], "provisioning": [], "orphaned": [], "sync": [], "summary": []}
+        results: Dict[str, List[Any]] = {
+            "health": [],
+            "provisioning": [],
+            "orphaned": [],
+            "sync": [],
+            "summary": [],
+        }
 
         # Add tasks for each checker type
         for checker_name, result_key in [

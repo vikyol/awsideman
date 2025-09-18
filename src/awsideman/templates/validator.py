@@ -10,7 +10,7 @@ This module provides comprehensive validation of templates including:
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..permission_cloning.models import EntityReference
 from .interfaces import AWSClientManagerProtocol, EntityResolverProtocol, TemplateValidatorInterface
@@ -31,7 +31,7 @@ class ValidationResult:
 
     def __post_init__(self):
         """Set is_valid based on errors."""
-        if self.is_valid is None:
+        if not hasattr(self, "is_valid") or self.is_valid is None:
             self.is_valid = len(self.errors) == 0
 
     def add_error(self, error: str) -> None:
@@ -62,7 +62,7 @@ class TemplateValidator(TemplateValidatorInterface):
         self.client_manager = client_manager
         self.instance_arn = instance_arn
         self.identity_store_id = identity_store_id
-        self._entity_resolver = None
+        self._entity_resolver: Optional[Any] = None
         self._identity_center_client = None
         self._organizations_client = None
 
@@ -70,9 +70,19 @@ class TemplateValidator(TemplateValidatorInterface):
     def entity_resolver(self) -> EntityResolverProtocol:
         """Get the entity resolver, creating it if needed."""
         if self._entity_resolver is None:
+            from ..aws_clients.manager import AWSClientManager
             from ..permission_cloning.entity_resolver import EntityResolver
 
-            self._entity_resolver = EntityResolver(self.client_manager, self.identity_store_id)
+            # Convert protocol to concrete type for EntityResolver
+            if hasattr(self.client_manager, "__class__") and isinstance(
+                self.client_manager, AWSClientManager
+            ):
+                self._entity_resolver = EntityResolver(self.client_manager, self.identity_store_id)
+            else:
+                # Create a wrapper or handle the protocol case
+                raise TypeError("EntityResolver requires AWSClientManager, not protocol")
+        if self._entity_resolver is None:
+            raise RuntimeError("Entity resolver not initialized")
         return self._entity_resolver
 
     @property

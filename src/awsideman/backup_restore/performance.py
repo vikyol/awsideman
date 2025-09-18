@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import lz4.frame
+import lz4.frame  # type: ignore[import-untyped]
 import psutil
 
 from .interfaces import (
@@ -94,7 +94,7 @@ class CompressionProvider(CompressionProviderInterface):
         """
         self.default_algorithm = default_algorithm
         self.compression_level = compression_level
-        self._compression_stats = {}
+        self._compression_stats: Dict[str, Any] = {}
         self._stats_lock = Lock()
 
     async def compress(self, data: bytes, algorithm: Optional[str] = None) -> CompressionResult:
@@ -195,7 +195,7 @@ class CompressionProvider(CompressionProviderInterface):
             logger.debug(
                 f"Decompressed {len(data)} bytes to {len(decompressed_data)} bytes using {algorithm}"
             )
-            return decompressed_data
+            return decompressed_data  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.error(f"Decompression failed with {algorithm}: {e}")
@@ -604,7 +604,9 @@ class ParallelProcessor:
         try:
             # Create executor
             if self.use_processes:
-                executor = ProcessPoolExecutor(max_workers=worker_count)
+                executor: Union[ThreadPoolExecutor, ProcessPoolExecutor] = ProcessPoolExecutor(
+                    max_workers=worker_count
+                )
             else:
                 executor = ThreadPoolExecutor(max_workers=worker_count)
 
@@ -746,7 +748,7 @@ class PerformanceOptimizer(PerformanceOptimizerInterface):
             Tuple of (optimized_data, optimization_metadata)
         """
         start_time = time.time()
-        optimization_metadata = {
+        optimization_metadata: Dict[str, Any] = {
             "original_size": 0,
             "final_size": 0,
             "compression_applied": False,
@@ -920,7 +922,7 @@ class PerformanceOptimizer(PerformanceOptimizerInterface):
 
     def get_optimization_stats(self) -> Dict[str, Any]:
         """Get optimization statistics from all components."""
-        stats = {
+        stats: Dict[str, Any] = {
             "compression_enabled": self.enable_compression,
             "deduplication_enabled": self.enable_deduplication,
             "parallel_processing_enabled": self.enable_parallel_processing,

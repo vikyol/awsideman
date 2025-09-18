@@ -51,13 +51,13 @@ class TemplateStorageManager(TemplateStorageInterface):
 
     def list_templates(self) -> List[TemplateInfo]:
         """List all available templates."""
-        templates = []
+        templates: List[TemplateInfo] = []
 
         if not self.templates_dir.exists():
             return templates
 
         # Find all template files
-        template_files = []
+        template_files: List[Path] = []
         for pattern in ["*.yaml", "*.yml", "*.json"]:
             template_files.extend(self.templates_dir.glob(pattern))
 
@@ -284,9 +284,9 @@ class TemplateStorageManager(TemplateStorageInterface):
         for template_info in templates:
             try:
                 # Load the actual template to get accurate assignment count
-                template = self._load_template_from_path(template_info.file_path)
-                if template:
-                    count = template.get_total_assignments()
+                loaded_template = self._load_template_from_path(template_info.file_path)
+                if loaded_template is not None:
+                    count = loaded_template.get_total_assignments()
                     if count >= 0:
                         total_actual_assignments += count
                     else:

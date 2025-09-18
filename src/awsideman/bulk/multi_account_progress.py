@@ -14,7 +14,7 @@ import os
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from rich.console import Console
 from rich.live import Live
@@ -296,7 +296,7 @@ class MultiAccountProgressTracker(ProgressTracker):
     def record_account_result(
         self,
         account_id: str,
-        status: str,
+        status: Literal["success", "failed", "skipped"],
         account_name: str = "",
         error: Optional[str] = None,
         processing_time: float = 0.0,

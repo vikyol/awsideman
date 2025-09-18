@@ -31,12 +31,14 @@ class CompressedJSONStorage:
 
         try:
             with gzip.open(self.file_path, "rt", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             # Try reading as uncompressed file (for migration)
             try:
                 with open(self.file_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    return data if isinstance(data, dict) else {}
             except (FileNotFoundError, json.JSONDecodeError):
                 return {}
 
@@ -139,8 +141,8 @@ class MemoryOptimizedOperationStore:
             self.operations_storage = CompressedJSONStorage(self.operations_file, compression_level)
             self.rollbacks_storage = CompressedJSONStorage(self.rollbacks_file, compression_level)
         else:
-            self.operations_storage = None
-            self.rollbacks_storage = None
+            self.operations_storage = None  # type: ignore[assignment]
+            self.rollbacks_storage = None  # type: ignore[assignment]
 
         # In-memory index for fast lookups
         self._operation_index: Dict[str, Dict[str, Any]] = {}
@@ -455,7 +457,14 @@ class MemoryOptimizedOperationStore:
             # Append to existing temp file
             with open(temp_file, "r") as f:
                 temp_data = json.load(f)
-            temp_data["operations"].extend(operations)
+            if (
+                isinstance(temp_data, dict)
+                and "operations" in temp_data
+                and isinstance(temp_data["operations"], list)
+            ):
+                temp_data["operations"].extend(operations)
+            else:
+                temp_data = {"operations": operations}
         else:
             temp_data = {"operations": operations}
 
@@ -505,11 +514,13 @@ class MemoryOptimizedOperationStore:
 
         if self.operations_file.exists() and self.operations_file.stat().st_size > max_size_bytes:
             self._rotate_file(self.operations_file)
-            results["files_rotated"].append("operations")
+            if isinstance(results["files_rotated"], list):
+                results["files_rotated"].append("operations")
 
         if self.rollbacks_file.exists() and self.rollbacks_file.stat().st_size > max_size_bytes:
             self._rotate_file(self.rollbacks_file)
-            results["files_rotated"].append("rollbacks")
+            if isinstance(results["files_rotated"], list):
+                results["files_rotated"].append("rollbacks")
 
         # Enable compression if not already enabled and files are large
         if not self.compression_enabled:

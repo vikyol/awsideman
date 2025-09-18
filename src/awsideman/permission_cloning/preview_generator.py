@@ -92,7 +92,7 @@ class PreviewGenerator:
             )
 
             # Generate preview summary
-            preview = {
+            preview: Dict[str, Any] = {
                 "operation_type": "assignment_copy",
                 "source_entity": {
                     "id": source_entity_id,
@@ -180,16 +180,16 @@ class PreviewGenerator:
                     "already_exists": existing_target is not None,
                 },
                 "policies_summary": {
-                    "aws_managed_policies": len(source_config.aws_managed_policies),
-                    "customer_managed_policies": len(source_config.customer_managed_policies),
+                    "aws_managed_policies": len(source_config.aws_managed_policies or []),
+                    "customer_managed_policies": len(source_config.customer_managed_policies or []),
                     "has_inline_policy": source_config.inline_policy is not None,
                 },
                 "clone_details": {
                     "session_duration_will_copy": source_config.session_duration,
                     "relay_state_will_copy": source_config.relay_state_url is not None,
                     "total_policies_to_copy": (
-                        len(source_config.aws_managed_policies)
-                        + len(source_config.customer_managed_policies)
+                        len(source_config.aws_managed_policies or [])
+                        + len(source_config.customer_managed_policies or [])
                         + (1 if source_config.inline_policy else 0)
                     ),
                 },
@@ -202,7 +202,7 @@ class PreviewGenerator:
             }
 
             logger.info(
-                f"Permission set clone preview generated: {preview['clone_details']['total_policies_to_copy']} policies to copy"
+                f"Permission set clone preview generated: {preview['clone_details']['total_policies_to_copy']} policies to copy"  # type: ignore[index]
             )
             return preview
 
@@ -299,7 +299,7 @@ class PreviewGenerator:
                 entity_id, entity_type
             )
             # Convert to PermissionAssignment objects and enrich with names
-            return self.assignment_retriever._enrich_assignments(raw_assignments)
+            return self.assignment_retriever._enrich_assignments_from_objects(raw_assignments)
         except Exception as e:
             logger.error(f"Error getting source assignments: {e}")
             return []
@@ -314,7 +314,7 @@ class PreviewGenerator:
                 entity_id, entity_type
             )
             # Convert to PermissionAssignment objects and enrich with names
-            return self.assignment_retriever._enrich_assignments(raw_assignments)
+            return self.assignment_retriever._enrich_assignments_from_objects(raw_assignments)
         except Exception as e:
             logger.error(f"Error getting target assignments: {e}")
             return []
@@ -432,10 +432,10 @@ class PreviewGenerator:
 
             # Generate preview using resolved IDs
             preview = self.preview_assignment_copy(
-                source_entity.entity_id,
-                source_entity.entity_type.value,
-                target_entity.entity_id,
-                target_entity.entity_type.value,
+                source_entity.entity_id,  # type: ignore[union-attr]
+                source_entity.entity_type.value,  # type: ignore[union-attr]
+                target_entity.entity_id,  # type: ignore[union-attr]
+                target_entity.entity_type.value,  # type: ignore[union-attr]
                 filters,
             )
 

@@ -100,7 +100,7 @@ class BackupComparison:
 
     source_version: BackupVersion
     target_version: BackupVersion
-    resource_changes: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    resource_changes: Dict[str, Dict[str, float | int]] = field(default_factory=dict)
     size_difference: int = 0
     time_difference: timedelta = field(default_factory=timedelta)
     similarity_score: float = 0.0
@@ -265,7 +265,9 @@ class RetentionManager:
             Dictionary mapping retention periods to backup lists
         """
         now = datetime.now()
-        categorized = {period: [] for period in RetentionPeriod}
+        categorized: Dict[RetentionPeriod, List[BackupMetadata]] = {
+            period: [] for period in RetentionPeriod
+        }
 
         for backup in backups:
             age = now - backup.timestamp
@@ -333,8 +335,8 @@ class RetentionManager:
         """
         deleted_backups = []
         freed_bytes = 0
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         for backup in backups_to_delete:
             try:
@@ -468,7 +470,7 @@ class RetentionManager:
 
     def _calculate_resource_changes(
         self, source_counts: Dict[str, int], target_counts: Dict[str, int]
-    ) -> Dict[str, Dict[str, int]]:
+    ) -> Dict[str, Dict[str, float | int]]:
         """
         Calculate changes in resource counts between two backups.
 
@@ -668,7 +670,7 @@ class RetentionManager:
             usage = await self.get_storage_usage()
             alerts = await self.check_storage_limits()
 
-            recommendations = {
+            recommendations: Dict[str, Any] = {
                 "current_usage": usage.to_dict(),
                 "current_policy": current_policy.to_dict(),
                 "alerts": [alert.to_dict() for alert in alerts],

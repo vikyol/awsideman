@@ -236,7 +236,7 @@ class CachedOrganizationsClient:
         Returns:
             List of root dictionaries
         """
-        return self._cached_aws_client._execute_with_cache(
+        return self._cached_aws_client._execute_with_cache(  # type: ignore[no-any-return]
             "list_roots", {}, lambda: self._organizations_client.list_roots()
         )
 
@@ -250,7 +250,7 @@ class CachedOrganizationsClient:
         Returns:
             List of OU dictionaries
         """
-        return self._cached_aws_client._execute_with_cache(
+        return self._cached_aws_client._execute_with_cache(  # type: ignore[no-any-return]
             "list_organizational_units_for_parent",
             {"parent_id": parent_id},
             lambda: self._organizations_client.list_organizational_units_for_parent(parent_id),
@@ -266,7 +266,7 @@ class CachedOrganizationsClient:
         Returns:
             List of account dictionaries
         """
-        return self._cached_aws_client._execute_with_cache(
+        return self._cached_aws_client._execute_with_cache(  # type: ignore[no-any-return]
             "list_accounts_for_parent",
             {"parent_id": parent_id},
             lambda: self._organizations_client.list_accounts_for_parent(parent_id),
@@ -279,7 +279,7 @@ class CachedOrganizationsClient:
         Returns:
             Dictionary with 'Accounts' key containing list of account dictionaries
         """
-        return self._cached_aws_client._execute_with_cache(
+        return self._cached_aws_client._execute_with_cache(  # type: ignore[no-any-return]
             "list_accounts",
             {},
             lambda: self._organizations_client.list_accounts(),
@@ -295,7 +295,7 @@ class CachedOrganizationsClient:
         Returns:
             Account dictionary
         """
-        return self._cached_aws_client._execute_with_cache(
+        return self._cached_aws_client._execute_with_cache(  # type: ignore[no-any-return]
             "describe_account",
             {"account_id": account_id},
             lambda: self._organizations_client.describe_account(account_id),
@@ -329,7 +329,7 @@ class CachedOrganizationsClient:
         Returns:
             List of policy dictionaries
         """
-        return self._cached_aws_client._execute_with_cache(
+        return self._cached_aws_client._execute_with_cache(  # type: ignore[no-any-return]
             "list_policies_for_target",
             {"target_id": target_id, "filter_type": filter_type},
             lambda: self._organizations_client.list_policies_for_target(target_id, filter_type),
@@ -345,7 +345,7 @@ class CachedOrganizationsClient:
         Returns:
             List of parent dictionaries
         """
-        return self._cached_aws_client._execute_with_cache(
+        return self._cached_aws_client._execute_with_cache(  # type: ignore[no-any-return]
             "list_parents",
             {"child_id": child_id},
             lambda: self._organizations_client.list_parents(child_id),

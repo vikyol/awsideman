@@ -62,13 +62,13 @@ class CronParser:
         for part in field.split(","):
             if "/" in part:
                 # Handle step values (e.g., */5)
-                range_part, step = part.split("/")
-                step = int(step)
+                range_part, step_str = part.split("/")
+                step_value = int(step_str)
                 if range_part == "*":
-                    values.extend(list(range(min_val, max_val + 1, step)))
+                    values.extend(list(range(min_val, max_val + 1, step_value)))
                 else:
                     start, end = map(int, range_part.split("-"))
-                    values.extend(list(range(start, end + 1, step)))
+                    values.extend(list(range(start, end + 1, step_value)))
             elif "-" in part:
                 # Handle ranges (e.g., 1-5)
                 start, end = map(int, part.split("-"))
@@ -336,9 +336,6 @@ class ScheduleManager(ScheduleManagerInterface):
 
                 # Execute due schedules
                 for schedule_id in due_schedules:
-                    if not self.running:
-                        break
-
                     try:
                         # Run backup in asyncio context
                         asyncio.run(self.execute_scheduled_backup(schedule_id))
@@ -444,7 +441,8 @@ class ScheduleManager(ScheduleManagerInterface):
         for url in webhook_urls:
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.post(url, json=payload, timeout=30) as response:
+                    timeout = aiohttp.ClientTimeout(total=30)
+                    async with session.post(url, json=payload, timeout=timeout) as response:
                         if response.status < 400:
                             logger.info(f"Webhook notification sent to {url}")
                         else:

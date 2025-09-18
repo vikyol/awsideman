@@ -36,8 +36,7 @@ class OrgNode:
 
     def __post_init__(self):
         """Ensure children is always a list."""
-        if self.children is None:
-            self.children = []
+        pass  # children is already initialized with default_factory
 
     def add_child(self, child: "OrgNode") -> None:
         """Add a child node to this node."""
@@ -133,12 +132,7 @@ class HierarchyPath:
 
     def __post_init__(self):
         """Ensure all lists are properly initialized and have same length."""
-        if self.ids is None:
-            self.ids = []
-        if self.names is None:
-            self.names = []
-        if self.types is None:
-            self.types = []
+        # Lists are already initialized, just ensure they have same length
 
         # Ensure all lists have the same length
         max_len = max(len(self.ids), len(self.names), len(self.types))

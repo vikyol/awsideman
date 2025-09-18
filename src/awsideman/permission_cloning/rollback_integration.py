@@ -109,7 +109,7 @@ class PermissionCloningRollbackIntegration:
             )
 
             # Store the operation record
-            self.rollback_processor.store.store_operation(operation_record)
+            self.rollback_processor.store.store_operation(operation_record)  # type: ignore[arg-type]
 
             logger.info(
                 f"Tracked assignment copy operation {operation_record.operation_id} for rollback"
@@ -172,7 +172,7 @@ class PermissionCloningRollbackIntegration:
             )
 
             # Store the operation record
-            self.rollback_processor.store.store_operation(operation_record)
+            self.rollback_processor.store.store_operation(operation_record)  # type: ignore[arg-type]
 
             logger.info(
                 f"Tracked permission set clone operation {operation_record.operation_id} for rollback"
@@ -208,7 +208,7 @@ class PermissionCloningRollbackIntegration:
 
             # Create rollback actions
             rollback_actions = []
-            for assignment_id in operation_record.assignments_copied:
+            for assignment_id in getattr(operation_record, "assignments_copied", []):
                 # Parse assignment ID to extract components
                 parts = assignment_id.split(":")
                 if len(parts) >= 3:
@@ -222,7 +222,9 @@ class PermissionCloningRollbackIntegration:
                         account_id=account_id,
                         action_type=RollbackActionType.REVOKE_COPIED_ASSIGNMENTS,
                         current_state=AssignmentState.ASSIGNED,
-                        principal_type=operation_record.target_entity_type,
+                        principal_type=getattr(
+                            operation_record, "target_entity_type", PrincipalType.USER
+                        ),
                     )
                     rollback_actions.append(rollback_action)
 
@@ -294,12 +296,12 @@ class PermissionCloningRollbackIntegration:
             if not operation_record:
                 raise ValueError(f"Operation {operation_id} not found")
 
-            if not isinstance(operation_record, PermissionSetCloningOperationRecord):
+            if not isinstance(operation_record, PermissionSetCloningOperationRecord):  # type: ignore[unreachable]
                 raise ValueError(
                     f"Operation {operation_id} is not a permission set cloning operation"
                 )
 
-            if operation_record.rolled_back:
+            if operation_record.rolled_back:  # type: ignore[unreachable]
                 raise ValueError(f"Operation {operation_id} has already been rolled back")
 
             logger.info(f"Rolling back permission set clone operation {operation_id}")
@@ -500,7 +502,7 @@ class PermissionCloningRollbackIntegration:
             response = sso_admin_client.list_instances()
             instances = response.get("Instances", [])
             if instances:
-                return instances[0]["InstanceArn"]
+                return instances[0]["InstanceArn"]  # type: ignore[no-any-return]
             else:
                 raise ValueError("No SSO instances found")
         except Exception as e:

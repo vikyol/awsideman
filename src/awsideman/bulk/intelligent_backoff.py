@@ -657,7 +657,8 @@ class CircuitBreaker:
         elif self.state == CircuitBreakerState.HALF_OPEN:
             return True
 
-        return False
+        # This should never be reached as all enum values are covered above
+        return False  # type: ignore[unreachable]
 
     def record_success(self):
         """Record a successful execution."""
@@ -865,7 +866,7 @@ class IntelligentBackoffManager:
     def _classify_error_type(self, error: Exception) -> str:
         """Classify an exception into an error type."""
         if isinstance(error, ClientError):
-            return error.response.get("Error", {}).get("Code", "Unknown")
+            return str(error.response.get("Error", {}).get("Code", "Unknown"))
 
         return type(error).__name__
 
@@ -974,7 +975,7 @@ class IntelligentBackoffManager:
         total_circuit_breakers = len(self.circuit_breakers)
 
         # Count contexts by service type
-        service_context_counts = {}
+        service_context_counts: Dict[str, int] = {}
         total_retries = 0
         total_consecutive_failures = 0
 

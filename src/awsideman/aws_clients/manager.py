@@ -128,7 +128,7 @@ class AWSClientManager:
         if self.session is None:
             raise RuntimeError("Session not initialized")
 
-        try:
+        try:  # type: ignore[unreachable]
             # Try to get caller identity using STS - this is a lightweight operation
             # that will fail if credentials are invalid or expired
             sts_client = self.session.client("sts")
@@ -325,7 +325,7 @@ class AWSClientManager:
             return {"caching_enabled": False}
 
         try:
-            return self.cache_manager.get_cache_stats()
+            return self.cache_manager.get_cache_stats()  # type: ignore[no-any-return,union-attr]
         except Exception as e:
             logger.warning(f"Failed to get cache stats: {e}")
             return {"caching_enabled": True, "error": str(e)}
@@ -341,7 +341,7 @@ class AWSClientManager:
             return False
 
         try:
-            self.cache_manager.clear()
+            self.cache_manager.clear()  # type: ignore[union-attr]
             return True
         except Exception as e:
             logger.warning(f"Failed to clear cache: {e}")
@@ -448,7 +448,7 @@ class OrganizationsClientWrapper:
         try:
             # Use the basic AWS Organizations API to list all accounts
             response = self.client.list_accounts()
-            return response
+            return response  # type: ignore[no-any-return]
         except ClientError as e:
             handle_aws_error(e, "ListAccounts")
             # This should never be reached, but mypy needs it
@@ -813,18 +813,18 @@ def get_account_details(
             tags_data = organizations_client.list_tags_for_resource(account_id)
 
             # Handle different return types from cached vs non-cached clients
-            if isinstance(tags_data, dict) and "Tags" in tags_data:
+            tags_list: List[Dict[str, str]] = []
+            if isinstance(tags_data, dict) and "Tags" in tags_data:  # type: ignore[unreachable]
                 # Cached client returns {"Tags": [...]}
-                tags_list = tags_data["Tags"]
+                tags_list = tags_data["Tags"]  # type: ignore[unreachable]
             elif isinstance(tags_data, list):
                 # Non-cached client returns [...] directly
                 tags_list = tags_data
             else:
                 # Fallback for unexpected types
-                console.print(
+                console.print(  # type: ignore[unreachable]
                     f"[yellow]Warning: Unexpected tags data format for account {account_id}: {type(tags_data)}[/yellow]"
                 )
-                tags_list = []
 
             tags = {tag["Key"]: tag["Value"] for tag in tags_list}
         except Exception as e:

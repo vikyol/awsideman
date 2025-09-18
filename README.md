@@ -185,7 +185,6 @@ awsideman user list --profile development --export-format json
 awsideman assignment assign AuditorAccess compliance.team \
   --ou-filter "Root/Production" \
   --batch-size 50 \
-  --parallel-execution
 ```
 
 ## Performance Benchmarks

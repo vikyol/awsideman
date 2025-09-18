@@ -9,7 +9,7 @@ Classes:
 
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from rich.columns import Columns
 from rich.console import Console
@@ -205,7 +205,7 @@ class ReportGenerator:
             return
 
         # Group errors by type
-        error_groups = {}
+        error_groups: Dict[str, List[Any]] = {}
         for result in results.failed:
             error_msg = result.error_message or "Unknown error"
             # Extract error type (first part before colon or full message if no colon)

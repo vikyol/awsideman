@@ -11,7 +11,7 @@ Classes:
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from rich.console import Console
 
@@ -19,7 +19,11 @@ from ..aws_clients.manager import AWSClientManager
 from ..utils.models import AccountInfo, AccountResult, MultiAccountAssignment, MultiAccountResults
 from .batch import BatchProcessor
 from .intelligent_backoff import AdaptiveBackoffStrategy, IntelligentBackoffManager, ServiceType
-from .multi_account_errors import MultiAccountErrorHandler, MultiAccountErrorSummary
+from .multi_account_errors import (
+    AccountFilterError,
+    MultiAccountErrorHandler,
+    MultiAccountErrorSummary,
+)
 from .multi_account_progress import MultiAccountProgressTracker
 from .resolver import ResourceResolver
 
@@ -80,7 +84,7 @@ class MultiAccountBatchProcessor(BatchProcessor):
         permission_set_name: str,
         principal_name: str,
         principal_type: str,
-        operation: str,
+        operation: Literal["assign", "revoke"],
         instance_arn: str,
         dry_run: bool = False,
         continue_on_error: bool = True,
@@ -347,7 +351,11 @@ class MultiAccountBatchProcessor(BatchProcessor):
         Returns:
             Dictionary with categorized account results
         """
-        batch_results = {"successful": [], "failed": [], "skipped": []}
+        batch_results: Dict[str, List[AccountResult]] = {
+            "successful": [],
+            "failed": [],
+            "skipped": [],
+        }
 
         # Use ThreadPoolExecutor for parallel processing with proper error isolation
         with ThreadPoolExecutor(max_workers=len(batch_accounts)) as executor:
@@ -553,6 +561,10 @@ class MultiAccountBatchProcessor(BatchProcessor):
         context_key = f"{account.account_id}_{multi_assignment.operation}_{multi_assignment.permission_set_name}_{multi_assignment.principal_name}"
 
         try:
+            # Type assertions - we know these are not None due to validation
+            assert multi_assignment.principal_id is not None
+            assert multi_assignment.permission_set_arn is not None
+
             # Use intelligent backoff manager for execution with retry logic
             operation_result = asyncio.run(
                 self.backoff_manager.execute_with_backoff(
@@ -621,6 +633,10 @@ class MultiAccountBatchProcessor(BatchProcessor):
         Raises:
             Exception: If the operation fails
         """
+        # Type assertions - we know these are not None due to validation
+        assert multi_assignment.principal_id is not None
+        assert multi_assignment.permission_set_arn is not None
+
         if multi_assignment.operation == "assign":
             result = self._execute_assign_operation(
                 multi_assignment.principal_id,
@@ -702,9 +718,7 @@ class MultiAccountBatchProcessor(BatchProcessor):
         console.print(f"[red]{filter_error.get_display_message()}[/red]")
 
         # Show filter-specific guidance
-        if isinstance(
-            filter_error, self.error_handler.__class__.__module__ + ".AccountFilterError"
-        ):
+        if isinstance(filter_error, AccountFilterError):
             guidance = filter_error.get_filter_guidance()
             if guidance:
                 console.print("\n[yellow]💡 Filter Guidance:[/yellow]")
@@ -820,14 +834,9 @@ class MultiAccountBatchProcessor(BatchProcessor):
                         processing_time=time.time() - start_time,
                     )
 
-            else:
-                return AccountResult(
-                    account_id=account.account_id,
-                    account_name=account.account_name,
-                    status="failed",
-                    error_message=f"Unknown operation: {multi_assignment.operation}",
-                    processing_time=time.time() - start_time,
-                )
+            # This should never be reached as operation is Literal["assign", "revoke"]
+            # but keeping for safety - this code is unreachable but mypy doesn't recognize it
+            pass
 
         except Exception as e:
             # If we can't check the current state, assume the operation would succeed
@@ -904,7 +913,11 @@ class MultiAccountBatchProcessor(BatchProcessor):
         for i, result in enumerate(all_results[:display_limit]):
             if result.status == "success":
                 if multi_assignment.operation == "assign":
-                    action = "✓ CREATE" if "create" in result.error_message.lower() else "✓ ASSIGN"
+                    action = (
+                        "✓ CREATE"
+                        if result.error_message and "create" in result.error_message.lower()
+                        else "✓ ASSIGN"
+                    )
                 else:
                     action = "✓ REVOKE"
                 reason = result.error_message or "Operation would succeed"

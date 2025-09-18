@@ -263,7 +263,7 @@ class JSONProcessor:
         """
         import copy
 
-        schema = copy.deepcopy(self._base_schema)
+        schema: Dict[str, Any] = copy.deepcopy(self._base_schema)
 
         if account_override:
             # Remove account_name from required fields
@@ -488,7 +488,7 @@ class FileFormatDetector:
     SUPPORTED_EXTENSIONS = {".csv", ".json"}
 
     @classmethod
-    def detect_format(cls, file_path: Path) -> str:
+    def detect_format(cls, file_path: Path | str) -> str:
         """Detect file format based on extension.
 
         Args:

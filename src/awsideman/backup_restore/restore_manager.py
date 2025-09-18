@@ -63,9 +63,6 @@ class ConflictResolver:
             return await self._attempt_merge(conflict)
         elif self.strategy == ConflictStrategy.PROMPT:
             return await self._prompt_user(conflict)
-        else:
-            logger.warning(f"Unknown conflict strategy: {self.strategy}, defaulting to skip")
-            return "skip"
 
     async def _attempt_merge(self, conflict: ConflictInfo) -> str:
         """Attempt to merge conflicting resources."""
@@ -204,9 +201,9 @@ class CompatibilityValidator:
         self, permission_sets: List[PermissionSetData], instance_arn: str
     ) -> Dict[str, Any]:
         """Validate permission set compatibility."""
-        errors = []
-        warnings = []
-        details = {"total": len(permission_sets), "conflicts": []}
+        errors: List[str] = []
+        warnings: List[str] = []
+        details: Dict[str, Any] = {"total": len(permission_sets), "conflicts": []}
 
         try:
             # Get existing permission sets
@@ -233,10 +230,14 @@ class CompatibilityValidator:
 
     async def _validate_account_access(self, assignments: List[AssignmentData]) -> Dict[str, Any]:
         """Validate access to accounts referenced in assignments."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
         account_ids = {assignment.account_id for assignment in assignments}
-        details = {"total_accounts": len(account_ids), "accessible": [], "inaccessible": []}
+        details: Dict[str, Any] = {
+            "total_accounts": len(account_ids),
+            "accessible": [],
+            "inaccessible": [],
+        }
 
         for account_id in account_ids:
             try:
@@ -447,21 +448,27 @@ class RestoreProcessor:
                 logger.info(f"Looking for instance: {instance_arn}")
 
                 # Find the matching instance
+                found_instance = None
                 for instance in instances:
                     if instance.get("InstanceArn") == instance_arn:
-                        self._identity_store_id = instance.get("IdentityStoreId")
-                        logger.info(f"Found identity store ID: {self._identity_store_id}")
+                        found_instance = instance
                         break
 
-                if not self._identity_store_id:
+                if not found_instance:
                     raise ValueError(
                         f"Could not find identity store ID for instance {instance_arn}. Available instances: {[instance.get('InstanceArn') for instance in instances]}"
                     )
 
+                identity_store_id = found_instance.get("IdentityStoreId")
+                if not identity_store_id:
+                    raise ValueError(f"IdentityStoreId not found in instance {instance_arn}")
+                self._identity_store_id = identity_store_id
+                logger.info(f"Found identity store ID: {identity_store_id}")
+                return identity_store_id  # type: ignore[no-any-return]
+
             except Exception as e:
                 logger.error(f"Failed to get identity store ID for instance {instance_arn}: {e}")
                 raise
-        return self._identity_store_id
 
     def _calculate_total_steps(self, backup_data: BackupData, options: RestoreOptions) -> int:
         """Calculate total steps for progress reporting."""
@@ -497,8 +504,8 @@ class RestoreProcessor:
         start_step: int,
     ) -> Dict[str, Any]:
         """Restore user data."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
         applied = 0
 
         for i, user in enumerate(users):
@@ -533,6 +540,8 @@ class RestoreProcessor:
                         # Merge would be handled in conflict resolver
                     else:
                         # Create new user
+                        if options.target_instance_arn is None:
+                            raise ValueError("target_instance_arn is required for user creation")
                         await self._create_user(user, options.target_instance_arn)
                         applied += 1
                 else:
@@ -589,6 +598,8 @@ class RestoreProcessor:
                             warnings.append(f"Skipped existing group: {group.display_name}")
                     else:
                         # Create new group
+                        if options.target_instance_arn is None:
+                            raise ValueError("target_instance_arn is required for group creation")
                         await self._create_group(group, options.target_instance_arn)
                         applied += 1
                 else:
@@ -609,8 +620,8 @@ class RestoreProcessor:
         start_step: int,
     ) -> Dict[str, Any]:
         """Restore permission set data."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
         applied = 0
 
         # Skip permission sets if none to restore
@@ -688,8 +699,8 @@ class RestoreProcessor:
         start_step: int,
     ) -> Dict[str, Any]:
         """Restore assignment data."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
         applied = 0
 
         # Skip assignments if none to restore
@@ -763,7 +774,7 @@ class RestoreProcessor:
                     else None
                 ),
             )
-            return response["UserId"]
+            return response["UserId"]  # type: ignore[no-any-return]
         except Exception as e:
             logger.error(f"Failed to create user {user.user_name}: {e}")
             raise
@@ -791,7 +802,7 @@ class RestoreProcessor:
                 Description=group.description
                 or "Restored from backup",  # Use default description if None
             )
-            return response["GroupId"]
+            return response["GroupId"]  # type: ignore[no-any-return]
         except Exception as e:
             logger.error(f"Failed to create group {group.display_name}: {e}")
             raise
@@ -819,7 +830,7 @@ class RestoreProcessor:
                 or "Restored from backup",  # Use default description if None
                 SessionDuration=ps.session_duration or "PT1H",  # Default to 1 hour if not specified
             )
-            return response["PermissionSet"]["PermissionSetArn"]
+            return response["PermissionSet"]["PermissionSetArn"]  # type: ignore[no-any-return]
         except Exception as e:
             logger.error(f"Failed to create permission set {ps.name}: {e}")
             raise
@@ -972,7 +983,7 @@ class CrossAccountRestoreManager(RestoreManagerInterface):
             }
 
             # Identify potential conflicts (simplified for now)
-            conflicts = []
+            conflicts: List[Dict[str, Any]] = []
             warnings = []
 
             # Add cross-account warnings
@@ -990,7 +1001,7 @@ class CrossAccountRestoreManager(RestoreManagerInterface):
 
             return RestorePreview(
                 changes_summary=changes_summary,
-                conflicts=conflicts,
+                conflicts=conflicts,  # type: ignore[arg-type]
                 warnings=warnings,
                 estimated_duration=timedelta(minutes=5),  # Rough estimate
             )
@@ -1014,9 +1025,9 @@ class CrossAccountRestoreManager(RestoreManagerInterface):
         Returns:
             ValidationResult containing compatibility status and details
         """
-        errors = []
-        warnings = []
-        details = {}
+        errors: List[str] = []
+        warnings: List[str] = []
+        details: Dict[str, Any] = {}
 
         try:
             # Retrieve backup data
@@ -1332,9 +1343,9 @@ class RestoreManager(RestoreManagerInterface):
                 return RestorePreview(warnings=[f"Backup {backup_id} not found"])
 
             # Calculate changes summary
-            changes_summary = {}
-            conflicts = []
-            warnings = []
+            changes_summary: Dict[str, Any] = {}
+            conflicts: List[Dict[str, Any]] = []
+            warnings: List[str] = []
 
             # Analyze each resource type
             if (
@@ -1385,7 +1396,7 @@ class RestoreManager(RestoreManagerInterface):
 
             return RestorePreview(
                 changes_summary=changes_summary,
-                conflicts=conflicts,
+                conflicts=conflicts,  # type: ignore[arg-type]
                 warnings=warnings,
                 estimated_duration=estimated_duration,
             )
@@ -1436,8 +1447,8 @@ class RestoreManager(RestoreManagerInterface):
     async def _analyze_user_changes(self, users: List[UserData]) -> Dict[str, Any]:
         """Analyze changes for user restoration."""
         changes = len(users)  # Simplified: assume all users are new/changed
-        conflicts = []
-        warnings = []
+        conflicts: List[Dict[str, Any]] = []
+        warnings: List[str] = []
 
         # In a real implementation, we'd check existing users and identify conflicts
         # For now, simulate some conflicts
@@ -1449,8 +1460,8 @@ class RestoreManager(RestoreManagerInterface):
     async def _analyze_group_changes(self, groups: List[GroupData]) -> Dict[str, Any]:
         """Analyze changes for group restoration."""
         changes = len(groups)
-        conflicts = []
-        warnings = []
+        conflicts: List[Dict[str, Any]] = []
+        warnings: List[str] = []
 
         if changes > 50:
             warnings.append(f"Large number of groups ({changes}) will be processed")
@@ -1462,8 +1473,8 @@ class RestoreManager(RestoreManagerInterface):
     ) -> Dict[str, Any]:
         """Analyze changes for permission set restoration."""
         changes = len(permission_sets)
-        conflicts = []
-        warnings = []
+        conflicts: List[Dict[str, Any]] = []
+        warnings: List[str] = []
 
         if changes > 20:
             warnings.append(f"Large number of permission sets ({changes}) will be processed")
@@ -1475,8 +1486,8 @@ class RestoreManager(RestoreManagerInterface):
     ) -> Dict[str, Any]:
         """Analyze changes for assignment restoration."""
         changes = len(assignments)
-        conflicts = []
-        warnings = []
+        conflicts: List[Dict[str, Any]] = []
+        warnings: List[str] = []
 
         if changes > 1000:
             warnings.append(f"Large number of assignments ({changes}) will be processed")

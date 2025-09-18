@@ -194,7 +194,7 @@ class RetryHandler:
             Delay in seconds
         """
         delay = self.base_delay * (2**attempt)
-        return min(delay, self.max_delay)
+        return min(delay, self.max_delay)  # type: ignore[no-any-return]
 
     async def execute_with_retry(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
         """Execute a function with retry logic.
@@ -227,7 +227,10 @@ class RetryHandler:
                 )
                 await asyncio.sleep(delay)
 
-        raise last_exception
+        if last_exception is not None:
+            raise last_exception
+        else:
+            raise RuntimeError("Retry exhausted but no exception was captured")
 
 
 class ProgressTracker:
@@ -381,7 +384,7 @@ class ProgressTracker:
         """
         elapsed = self.get_elapsed_time()
 
-        stats = {
+        stats: Dict[str, Any] = {
             "total_items": self.total_items,
             "completed_items": self.completed_items,
             "remaining_items": self.total_items - self.completed_items,
@@ -547,7 +550,7 @@ class BatchProcessor:
         Returns:
             Dictionary with categorized results
         """
-        batch_results = {"successful": [], "failed": [], "skipped": []}
+        batch_results: Dict[str, List[Any]] = {"successful": [], "failed": [], "skipped": []}
 
         # Use ThreadPoolExecutor for parallel processing with proper error isolation
         with ThreadPoolExecutor(max_workers=self.batch_size) as executor:
@@ -758,6 +761,11 @@ class BatchProcessor:
 
         # Execute the actual operation
         try:
+            # Type assertions - we know these are not None due to validation above
+            assert principal_id is not None
+            assert permission_set_arn is not None
+            assert account_id is not None
+
             if operation == "assign":
                 result = self._execute_assign_operation(
                     principal_id, permission_set_arn, account_id, principal_type, instance_arn
@@ -1024,6 +1032,9 @@ class BatchProcessor:
         if last_exception:
             raise last_exception
 
+        # Fallback return (should never be reached)
+        return {"status": "error", "message": "Unexpected error", "retry_count": retry_count}
+
     def _execute_revoke_operation(
         self,
         principal_id: str,
@@ -1170,6 +1181,9 @@ class BatchProcessor:
         if last_exception:
             raise last_exception
 
+        # Fallback return (should never be reached)
+        return {"status": "error", "message": "Unexpected error", "retry_count": retry_count}
+
     def _log_bulk_operations(
         self,
         successful_results: List[AssignmentResult],
@@ -1186,7 +1200,7 @@ class BatchProcessor:
         try:
             # Group successful results by principal and permission set
             # This allows us to log one operation per unique combination
-            operation_groups = {}
+            operation_groups: Dict[tuple, Dict[str, Any]] = {}
 
             for result in successful_results:
                 # Create a key for grouping

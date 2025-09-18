@@ -443,7 +443,7 @@ class ProgressReporter:
             clone_result: Clone operation result
             duration_ms: Operation duration in milliseconds
         """
-        details = {
+        details: Dict[str, Any] = {
             "source_name": clone_result.source_name,
             "target_name": clone_result.target_name,
             "rollback_id": clone_result.rollback_id,
@@ -458,13 +458,13 @@ class ProgressReporter:
                 "description": config.description,
                 "session_duration": config.session_duration,
                 "relay_state_url": config.relay_state_url,
-                "aws_managed_policies_count": len(config.aws_managed_policies),
-                "customer_managed_policies_count": len(config.customer_managed_policies),
+                "aws_managed_policies_count": len(config.aws_managed_policies or []),
+                "customer_managed_policies_count": len(config.customer_managed_policies or []),
                 "has_inline_policy": config.inline_policy is not None,
                 "aws_managed_policies": config.aws_managed_policies,
                 "customer_managed_policies": [
                     {"name": policy.name, "path": policy.path}
-                    for policy in config.customer_managed_policies
+                    for policy in (config.customer_managed_policies or [])
                 ],
             }
 
@@ -639,8 +639,9 @@ class ProgressReporter:
             List of active operation status information
         """
         return [
-            self.get_operation_status(operation_id)
+            status
             for operation_id in self._active_operations.keys()
+            if (status := self.get_operation_status(operation_id)) is not None
         ]
 
     def _log_audit_event(

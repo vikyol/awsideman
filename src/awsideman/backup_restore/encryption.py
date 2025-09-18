@@ -11,7 +11,7 @@ import hashlib
 import logging
 import os
 import secrets
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
@@ -432,7 +432,7 @@ class ManagedAESEncryptionProvider(EncryptionProviderInterface):
         self.service_name = service_name
 
         if use_fallback:
-            self.key_manager = FallbackKeyManager(
+            self.key_manager: Union[FallbackKeyManager, KeyManager] = FallbackKeyManager(
                 service_name=service_name, username="backup-encryption-key"
             )
         else:

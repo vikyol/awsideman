@@ -267,7 +267,7 @@ class TemplateErrorCollector:
 
     def _group_errors_by_type(self, error_list: List[TemplateError]) -> Dict[str, int]:
         """Group errors by their type."""
-        grouped = {}
+        grouped: Dict[str, int] = {}
         for error in error_list:
             error_type = error.error_type.value
             grouped[error_type] = grouped.get(error_type, 0) + 1
@@ -318,7 +318,7 @@ class RetryHandler:
         else:
             delay = self.base_delay
 
-        return min(delay, self.max_delay)
+        return float(min(delay, self.max_delay))
 
     def execute_with_retry(self, operation: Any, *args: Any, **kwargs: Any) -> Any:
         """Execute operation with retry logic."""
@@ -347,4 +347,7 @@ class RetryHandler:
                     time.sleep(delay)
 
         # If we get here, all retries failed
-        raise last_error
+        if last_error is not None:
+            raise last_error
+        else:
+            raise RuntimeError("All retry attempts failed")

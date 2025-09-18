@@ -71,10 +71,7 @@ class BaseStatusResult:
 
     def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.details is None:  # type: ignore
-            self.details = {}
-        if self.errors is None:  # type: ignore
-            self.errors = []
+        pass  # Fields are already initialized with default_factory
 
     def is_healthy(self) -> bool:
         """Check if the status is healthy."""
@@ -187,12 +184,7 @@ class ProvisioningStatus(BaseStatusResult):
     def __post_init__(self) -> None:
         """Initialize parent and ensure collections are properly set."""
         super().__post_init__()
-        if self.active_operations is None:  # type: ignore
-            self.active_operations = []
-        if self.failed_operations is None:  # type: ignore
-            self.failed_operations = []
-        if self.completed_operations is None:  # type: ignore
-            self.completed_operations = []
+        # Fields are already initialized with default_factory
 
     def get_total_operations(self) -> int:
         """Get total number of operations."""
@@ -284,10 +276,7 @@ class CleanupResult:
 
     def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.cleanup_errors is None:  # type: ignore
-            self.cleanup_errors = []
-        if self.cleaned_assignments is None:  # type: ignore
-            self.cleaned_assignments = []
+        # Fields are already initialized with default_factory
 
     def get_success_rate(self) -> float:
         """Calculate cleanup success rate as percentage."""
@@ -321,10 +310,7 @@ class OrphanedAssignmentStatus(BaseStatusResult):
     def __post_init__(self) -> None:
         """Initialize parent and ensure collections are properly set."""
         super().__post_init__()
-        if self.orphaned_assignments is None:  # type: ignore
-            self.orphaned_assignments = []
-        if self.cleanup_history is None:  # type: ignore
-            self.cleanup_history = []
+        # Fields are already initialized with default_factory
 
     def get_orphaned_count(self) -> int:
         """Get total number of orphaned assignments."""
@@ -407,8 +393,7 @@ class SyncMonitorStatus(BaseStatusResult):
     def __post_init__(self) -> None:
         """Initialize parent and calculate provider counts."""
         super().__post_init__()
-        if self.sync_providers is None:  # type: ignore
-            self.sync_providers = []
+        # Fields are already initialized with default_factory
 
         self.providers_configured = len(self.sync_providers)
         self.providers_healthy = len([p for p in self.sync_providers if p.is_healthy()])
@@ -454,10 +439,7 @@ class ResourceStatus:
 
     def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.configuration is None:  # type: ignore
-            self.configuration = {}
-        if self.health_details is None:  # type: ignore
-            self.health_details = {}
+        # Fields are already initialized with default_factory
 
     def is_healthy(self) -> bool:
         """Check if the resource is healthy."""
@@ -496,8 +478,7 @@ class ResourceInspectionStatus(BaseStatusResult):
     def __post_init__(self) -> None:
         """Initialize parent and ensure collections are properly set."""
         super().__post_init__()
-        if self.similar_resources is None:  # type: ignore
-            self.similar_resources = []
+        # Fields are already initialized with default_factory
 
     def resource_found(self) -> bool:
         """Check if the target resource was found."""
@@ -538,12 +519,7 @@ class SummaryStatistics:
 
     def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.user_creation_dates is None:  # type: ignore
-            self.user_creation_dates = {}
-        if self.group_creation_dates is None:  # type: ignore
-            self.group_creation_dates = {}
-        if self.permission_set_creation_dates is None:  # type: ignore
-            self.permission_set_creation_dates = {}
+        # Fields are already initialized with default_factory
 
     def get_total_principals(self) -> int:
         """Get total number of principals (users + groups)."""
@@ -594,8 +570,7 @@ class StatusReport:
 
     def __post_init__(self) -> None:
         """Ensure collections are properly initialized."""
-        if self.resource_inspections is None:  # type: ignore
-            self.resource_inspections = []
+        # Fields are already initialized with default_factory
 
     def get_overall_status_level(self) -> StatusLevel:
         """Determine overall status level from all components."""
@@ -683,8 +658,7 @@ class FormattedOutput:
 
     def __post_init__(self) -> None:
         """Ensure metadata is properly initialized."""
-        if self.metadata is None:  # type: ignore
-            self.metadata = {}
+        # Fields are already initialized with default_factory
 
     def get_content_length(self) -> int:
         """Get length of formatted content."""

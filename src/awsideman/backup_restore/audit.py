@@ -471,7 +471,7 @@ class AuditLogger:
         """
         # This is a simplified implementation
         # In a production system, this would query a database or log aggregation system
-        events = []
+        events: List[AuditEvent] = []
 
         if not self.log_file.exists():
             return events

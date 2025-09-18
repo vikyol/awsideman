@@ -1157,12 +1157,11 @@ class OutputFormatter:
         if isinstance(value, dict):
             return json.dumps(value, indent=2, ensure_ascii=False)
         # For any other type (int, float, bool, etc.)
-        return str(value)  # type: ignore[unreachable]
+        return str(value)
 
     def _escape_html(self, text: str) -> str:
         """Escape HTML special characters."""
-        if not isinstance(text, str):
-            text = str(text)
+        # text is guaranteed to be str by type annotation
 
         return (
             text.replace("&", "&amp;")

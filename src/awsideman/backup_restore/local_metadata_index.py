@@ -28,7 +28,7 @@ class LocalMetadataIndex:
     - Offline access to backup information
     """
 
-    def __init__(self, index_path: str = None, profile: Optional[str] = None):
+    def __init__(self, index_path: str | None = None, profile: Optional[str] = None):
         """
         Initialize the local metadata index.
 
@@ -67,7 +67,7 @@ class LocalMetadataIndex:
         try:
             if self.metadata_file.exists():
                 with open(self.metadata_file, "r") as f:
-                    return json.load(f)
+                    return json.load(f)  # type: ignore[no-any-return]
             return {}
         except Exception as e:
             logger.error(f"Failed to load metadata index: {e}")
@@ -86,7 +86,7 @@ class LocalMetadataIndex:
         try:
             if self.storage_locations_file.exists():
                 with open(self.storage_locations_file, "r") as f:
-                    return json.load(f)
+                    return json.load(f)  # type: ignore[no-any-return]
             return {}
         except Exception as e:
             logger.error(f"Failed to load storage locations: {e}")
@@ -304,13 +304,13 @@ class LocalMetadataIndex:
             locations = self._load_storage_locations()
 
             # Count by storage backend
-            backend_counts = {}
+            backend_counts: Dict[str, int] = {}
             for location_info in locations.values():
                 backend = location_info.get("backend", "unknown")
                 backend_counts[backend] = backend_counts.get(backend, 0) + 1
 
             # Count by backup type
-            type_counts = {}
+            type_counts: Dict[str, int] = {}
             for backup_id, metadata_dict in index.items():
                 try:
                     backup_type = metadata_dict.get("backup_type", "unknown")

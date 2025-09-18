@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.11]
+        python-version: [3.13]
 
     steps:
     - uses: actions/checkout@v3
@@ -29,5 +29,5 @@ jobs:
     - name: Run linting
       run: poetry run ruff check src/ tests/
 
-    #- name: Run type checking
-    #  run: poetry run mypy src/
+    - name: Run type checking
+      run: poetry run mypy src/
