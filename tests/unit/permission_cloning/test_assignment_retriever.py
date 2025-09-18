@@ -103,20 +103,22 @@ class TestAssignmentRetriever:
 
     @pytest.fixture
     def sample_assignments(self):
-        """Sample raw assignments for testing."""
+        """Sample PermissionAssignment objects for testing."""
+        from src.awsideman.permission_cloning.models import PermissionAssignment
+
         return [
-            {
-                "PermissionSetArn": "arn:aws:sso:::permissionSet/ssoins-123/ps-admin",
-                "AccountId": "123456789012",
-                "PrincipalId": "12345678-1234-1234-1234-123456789012",
-                "PrincipalType": "USER",
-            },
-            {
-                "PermissionSetArn": "arn:aws:sso:::permissionSet/ssoins-123/ps-readonly",
-                "AccountId": "098765432109",
-                "PrincipalId": "12345678-1234-1234-1234-123456789012",
-                "PrincipalType": "USER",
-            },
+            PermissionAssignment(
+                permission_set_arn="arn:aws:sso:::permissionSet/ssoins-123/ps-admin",
+                permission_set_name="AdministratorAccess",
+                account_id="123456789012",
+                account_name="Production",
+            ),
+            PermissionAssignment(
+                permission_set_arn="arn:aws:sso:::permissionSet/ssoins-123/ps-readonly",
+                permission_set_name="ReadOnlyAccess",
+                account_id="098765432109",
+                account_name="Development",
+            ),
         ]
 
     def test_init(self, mock_client_manager):
@@ -258,13 +260,15 @@ class TestAssignmentRetriever:
         assignment_retriever.entity_resolver.validate_entity.return_value = Mock(has_errors=False)
 
         # Mock the _fetch_entity_assignments method to return controlled data
+        from src.awsideman.permission_cloning.models import PermissionAssignment
+
         mock_group_assignments = [
-            {
-                "PermissionSetArn": "arn:aws:sso:::permissionSet/ssoins-123/ps-developer",
-                "AccountId": "555555555555",
-                "PrincipalId": "87654321-4321-4321-4321-210987654321",
-                "PrincipalType": "GROUP",
-            }
+            PermissionAssignment(
+                permission_set_arn="arn:aws:sso:::permissionSet/ssoins-123/ps-developer",
+                permission_set_name="DeveloperAccess",
+                account_id="555555555555",
+                account_name="Staging",
+            )
         ]
         assignment_retriever._fetch_entity_assignments = Mock(return_value=mock_group_assignments)
 
@@ -456,11 +460,10 @@ class TestAssignmentRetriever:
 
         assert len(assignments) == 1
         assert (
-            assignments[0]["PermissionSetArn"] == "arn:aws:sso:::permissionSet/ssoins-123/ps-admin"
+            assignments[0].permission_set_arn == "arn:aws:sso:::permissionSet/ssoins-123/ps-admin"
         )
-        assert assignments[0]["AccountId"] == "123456789012"
-        assert assignments[0]["PrincipalId"] == "test-user-id"
-        assert assignments[0]["PrincipalType"] == "USER"
+        assert assignments[0].account_id == "123456789012"
+        assert isinstance(assignments[0], PermissionAssignment)
 
     def test_fetch_entity_assignments_with_api_error(
         self, assignment_retriever, mock_sso_admin_client, sample_permission_sets, sample_accounts

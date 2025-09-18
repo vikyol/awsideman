@@ -1084,8 +1084,17 @@ class CacheManager(ICacheManager, GracefulDegradationMixin):
                 try:
                     import pickle
 
+                    from .key_builder import CacheKeyBuilder
+
                     backend_data = pickle.dumps(entry_data)
-                    self._backend.set(key, backend_data, ttl=int(entry_ttl.total_seconds()))
+
+                    # Parse operation from cache key for better status display
+                    key_components = CacheKeyBuilder.parse_key(key)
+                    operation = key_components.get("operation", "unknown")
+
+                    self._backend.set(
+                        key, backend_data, ttl=int(entry_ttl.total_seconds()), operation=operation
+                    )
                 except Exception as e:
                     logger.debug(f"Backend set failed for key {key}: {e}")
 

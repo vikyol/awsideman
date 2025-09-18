@@ -410,6 +410,9 @@ class AssignmentCopier:
             return self.assignment_retriever.get_user_assignments(entity)
         elif entity.entity_type == EntityType.GROUP:
             return self.assignment_retriever.get_group_assignments(entity)
+        else:
+            # Unsupported entity type
+            return []
 
     def _identify_assignments_to_copy(
         self,

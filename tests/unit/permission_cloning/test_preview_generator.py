@@ -103,7 +103,7 @@ class TestPreviewGenerator:
             ],  # First call for source
             [],  # Second call for target
         ]
-        preview_generator.assignment_retriever._enrich_assignments.side_effect = [
+        preview_generator.assignment_retriever._enrich_assignments_from_objects.side_effect = [
             sample_assignments,  # First call for source
             [],  # Second call for target
         ]
@@ -135,7 +135,7 @@ class TestPreviewGenerator:
             ],  # First call for source
             [],  # Second call for target
         ]
-        preview_generator.assignment_retriever._enrich_assignments.side_effect = [
+        preview_generator.assignment_retriever._enrich_assignments_from_objects.side_effect = [
             sample_assignments,  # First call for source
             [],  # Second call for target
         ]
@@ -171,7 +171,7 @@ class TestPreviewGenerator:
                 }
             ],  # Second call for target (duplicate)
         ]
-        preview_generator.assignment_retriever._enrich_assignments.side_effect = [
+        preview_generator.assignment_retriever._enrich_assignments_from_objects.side_effect = [
             sample_assignments,  # First call for source
             [sample_assignments[0]],  # Second call for target (duplicate)
         ]
@@ -188,7 +188,7 @@ class TestPreviewGenerator:
         """Test assignment copy preview with invalid entity type."""
         # Mock the internal methods to avoid the iteration error
         preview_generator.assignment_retriever._fetch_entity_assignments.return_value = []
-        preview_generator.assignment_retriever._enrich_assignments.return_value = []
+        preview_generator.assignment_retriever._enrich_assignments_from_objects.return_value = []
 
         # The PreviewGenerator doesn't validate entity types, so this should not raise an error
         # It will just return an empty preview since no assignments are found
@@ -268,7 +268,7 @@ class TestPreviewGenerator:
             ],  # First call for source
             [],  # Second call for target
         ]
-        preview_generator.assignment_retriever._enrich_assignments.side_effect = [
+        preview_generator.assignment_retriever._enrich_assignments_from_objects.side_effect = [
             sample_assignments,  # First call for source
             [],  # Second call for target
         ]

@@ -23,18 +23,49 @@ class TestCopyCommand:
         self.mock_config.get_identity_store_id.return_value = self.identity_store_id
 
         # Mock successful copy result
+        from src.awsideman.permission_cloning.models import (
+            EntityReference,
+            EntityType,
+            PermissionAssignment,
+        )
+
         self.mock_copy_result = Mock()
         self.mock_copy_result.success = True
         self.mock_copy_result.error_message = None
-        self.mock_copy_result.assignments_copied = [Mock(), Mock()]  # 2 assignments copied
+        self.mock_copy_result.assignments_copied = [
+            PermissionAssignment(
+                permission_set_arn="arn:aws:sso:::permissionSet/ssoins-1234567890123456/ps-1234567890abcdef",
+                permission_set_name="TestPermissionSet1",
+                account_id="123456789012",
+                account_name="TestAccount1",
+            ),
+            PermissionAssignment(
+                permission_set_arn="arn:aws:sso:::permissionSet/ssoins-1234567890123456/ps-abcdef1234567890",
+                permission_set_name="TestPermissionSet2",
+                account_id="123456789012",
+                account_name="TestAccount1",
+            ),
+        ]
         self.mock_copy_result.assignments_skipped = []
+        self.mock_copy_result.source = EntityReference(
+            entity_type=EntityType.USER, entity_id="user-123", entity_name="SourceUser"
+        )
+        self.mock_copy_result.target = EntityReference(
+            entity_type=EntityType.USER, entity_id="user-456", entity_name="TargetUser"
+        )
 
         # Mock failed copy result
         self.mock_failed_result = Mock()
         self.mock_failed_result.success = False
         self.mock_failed_result.error_message = "Entity not found"
-        self.mock_copy_result.assignments_copied = []
-        self.mock_copy_result.assignments_skipped = []
+        self.mock_failed_result.assignments_copied = []
+        self.mock_failed_result.assignments_skipped = []
+        self.mock_failed_result.source = EntityReference(
+            entity_type=EntityType.USER, entity_id="user-123", entity_name="SourceUser"
+        )
+        self.mock_failed_result.target = EntityReference(
+            entity_type=EntityType.USER, entity_id="user-456", entity_name="TargetUser"
+        )
 
     @patch("src.awsideman.commands.copy.Config")
     @patch("src.awsideman.commands.copy.AWSClientManager")
@@ -54,7 +85,7 @@ class TestCopyCommand:
         mock_config_class.return_value = self.mock_config
 
         mock_copier = Mock()
-        mock_copier.copy_assignments_by_name.return_value = self.mock_copy_result
+        mock_copier.copy_assignments.return_value = self.mock_copy_result
         mock_copier_class.return_value = mock_copier
 
         mock_integration = Mock()
@@ -85,12 +116,12 @@ class TestCopyCommand:
         # Note: SourceUser and TargetUser names are not displayed in the output when 0 assignments are copied
 
         # Verify copier was called correctly
-        mock_copier.copy_assignments_by_name.assert_called_once()
-        call_args = mock_copier.copy_assignments_by_name.call_args
-        assert call_args[1]["source_entity_type"] == "user"
-        assert call_args[1]["source_entity_name"] == "SourceUser"
-        assert call_args[1]["target_entity_type"] == "user"
-        assert call_args[1]["target_entity_name"] == "TargetUser"
+        mock_copier.copy_assignments.assert_called_once()
+        call_args = mock_copier.copy_assignments.call_args
+        assert call_args[1]["source"].entity_type.value == "USER"
+        assert call_args[1]["source"].entity_name == "SourceUser"
+        assert call_args[1]["target"].entity_type.value == "USER"
+        assert call_args[1]["target"].entity_name == "TargetUser"
 
     @patch("src.awsideman.commands.copy.Config")
     @patch("src.awsideman.commands.copy.AWSClientManager")
@@ -110,7 +141,7 @@ class TestCopyCommand:
         mock_config_class.return_value = self.mock_config
 
         mock_copier = Mock()
-        mock_copier.copy_assignments_by_name.return_value = self.mock_copy_result
+        mock_copier.copy_assignments.return_value = self.mock_copy_result
         mock_copier_class.return_value = mock_copier
 
         mock_integration = Mock()
@@ -140,10 +171,10 @@ class TestCopyCommand:
         assert "Successfully copied" in result.stdout
 
         # Verify copier was called with correct entity types
-        mock_copier.copy_assignments_by_name.assert_called_once()
-        call_args = mock_copier.copy_assignments_by_name.call_args
-        assert call_args[1]["source_entity_type"] == "user"
-        assert call_args[1]["target_entity_type"] == "group"
+        mock_copier.copy_assignments.assert_called_once()
+        call_args = mock_copier.copy_assignments.call_args
+        assert call_args[1]["source"].entity_type.value == "USER"
+        assert call_args[1]["target"].entity_type.value == "GROUP"
 
     @pytest.mark.skip(
         reason="Preview mode requires complex AWS credential mocking that's not implemented yet"
@@ -209,7 +240,7 @@ class TestCopyCommand:
         mock_config_class.return_value = self.mock_config
 
         mock_copier = Mock()
-        mock_copier.copy_assignments_by_name.return_value = self.mock_copy_result
+        mock_copier.copy_assignments.return_value = self.mock_copy_result
         mock_copier_class.return_value = mock_copier
 
         # Import and run command
@@ -235,10 +266,10 @@ class TestCopyCommand:
         assert result.exit_code == 0
         assert "Successfully copied" in result.stdout
 
-        # Verify copier was called with dry_run=True
-        mock_copier.copy_assignments_by_name.assert_called_once()
-        call_args = mock_copier.copy_assignments_by_name.call_args
-        assert call_args[1]["dry_run"] is True
+        # Verify copier was called with preview=True
+        mock_copier.copy_assignments.assert_called_once()
+        call_args = mock_copier.copy_assignments.call_args
+        assert call_args[1]["preview"] is True
 
     @patch("src.awsideman.commands.copy.Config")
     @patch("src.awsideman.commands.copy.AWSClientManager")
@@ -249,7 +280,7 @@ class TestCopyCommand:
         mock_config_class.return_value = self.mock_config
 
         mock_copier = Mock()
-        mock_copier.copy_assignments_by_name.return_value = self.mock_failed_result
+        mock_copier.copy_assignments.return_value = self.mock_failed_result
         mock_copier_class.return_value = mock_copier
 
         # Import and run command
@@ -372,7 +403,7 @@ class TestCopyCommand:
         mock_config_class.return_value = self.mock_config
 
         mock_copier = Mock()
-        mock_copier.copy_assignments_by_name.return_value = self.mock_copy_result
+        mock_copier.copy_assignments.return_value = self.mock_copy_result
         mock_copier_class.return_value = mock_copier
 
         # Import and run command
@@ -402,8 +433,8 @@ class TestCopyCommand:
         assert "Successfully copied" in result.stdout
 
         # Verify copier was called with filters
-        mock_copier.copy_assignments_by_name.assert_called_once()
-        call_args = mock_copier.copy_assignments_by_name.call_args
+        mock_copier.copy_assignments.assert_called_once()
+        call_args = mock_copier.copy_assignments.call_args
         filters = call_args[1]["filters"]
         assert filters is not None
         assert "AdminAccess" in filters.exclude_permission_sets
@@ -425,7 +456,7 @@ class TestCopyCommand:
         mock_config_class.return_value = self.mock_config
 
         mock_optimized_copier = Mock()
-        mock_optimized_copier.copy_assignments_by_name.return_value = self.mock_copy_result
+        mock_optimized_copier.copy_assignments.return_value = self.mock_copy_result
         mock_optimized_copier_class.return_value = mock_optimized_copier
 
         # Import and run command
@@ -455,7 +486,7 @@ class TestCopyCommand:
         assert "Successfully copied" in result.stdout
 
         # Verify optimized copier was used
-        mock_optimized_copier.copy_assignments_by_name.assert_called_once()
+        mock_optimized_copier.copy_assignments.assert_called_once()
 
     @patch("src.awsideman.commands.copy.Config")
     @patch("src.awsideman.commands.copy.AWSClientManager")
@@ -468,7 +499,7 @@ class TestCopyCommand:
         mock_config_class.return_value = self.mock_config
 
         mock_copier = Mock()
-        mock_copier.copy_assignments_by_name.return_value = self.mock_copy_result
+        mock_copier.copy_assignments.return_value = self.mock_copy_result
         mock_copier_class.return_value = mock_copier
 
         # Import and run command
@@ -494,7 +525,7 @@ class TestCopyCommand:
         assert "Successfully copied" in result.stdout
 
         # Verify regular copier was used
-        mock_copier.copy_assignments_by_name.assert_called_once()
+        mock_copier.copy_assignments.assert_called_once()
 
     def test_copy_verbose_output(self):
         """Test copy with verbose output."""

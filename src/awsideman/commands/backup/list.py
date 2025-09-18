@@ -147,7 +147,7 @@ def list_backups(
 
 def display_unified_backup_list(backups, metadata_index):
     """Display unified backup list in a formatted table."""
-    table = Table(title="All Available Backups (Unified View)")
+    table = Table(title="All Available Backups)")
     table.add_column("Backup ID", style="cyan", no_wrap=True)
     table.add_column("Timestamp", style="white")
     table.add_column("Type", style="green")

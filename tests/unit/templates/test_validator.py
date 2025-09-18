@@ -116,7 +116,9 @@ class TestTemplateValidator:
     @pytest.fixture
     def mock_client_manager(self):
         """Create a mock AWS client manager."""
-        manager = MagicMock()
+        from src.awsideman.aws_clients.manager import AWSClientManager
+
+        manager = MagicMock(spec=AWSClientManager)
         manager.get_identity_center_client.return_value = MagicMock()
         manager.get_identity_store_client.return_value = MagicMock()
         manager.get_organizations_client.return_value = MagicMock()

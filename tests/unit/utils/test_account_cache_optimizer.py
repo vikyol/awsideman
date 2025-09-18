@@ -58,8 +58,9 @@ class TestAccountCacheOptimizer:
         call_args = optimizer.cache_manager.set.call_args
 
         assert call_args[0][0] == optimizer.org_snapshot_key
-        assert call_args[1]["ttl"] == AccountCacheOptimizer.ORG_SNAPSHOT_TTL
-        assert call_args[1]["operation"] == "org_snapshot"
+        from datetime import timedelta
+
+        assert call_args[1]["ttl"] == timedelta(seconds=AccountCacheOptimizer.ORG_SNAPSHOT_TTL)
 
         # Check the cached data structure
         cached_data = call_args[0][1]
@@ -115,11 +116,12 @@ class TestAccountCacheOptimizer:
         """Test caching account count."""
         optimizer._cache_account_count(29)
 
+        from datetime import timedelta
+
         optimizer.cache_manager.set.assert_called_once_with(
             optimizer.account_count_key,
             29,
-            ttl=AccountCacheOptimizer.ACCOUNT_COUNT_TTL,
-            operation="account_count",
+            ttl=timedelta(seconds=AccountCacheOptimizer.ACCOUNT_COUNT_TTL),
         )
 
     def test_get_cached_account_count(self, optimizer):

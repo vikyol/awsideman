@@ -1318,9 +1318,22 @@ class DynamoDBBackend(CacheBackend):
                     if "#chunk#" in cache_key:
                         continue
 
+                    # Parse operation and resource from cache key for better display
+                    operation = item.get("operation", "Unknown")
+                    resource_type = "other"
+
+                    # If operation is "unknown" or "Unknown", try to parse from cache key
+                    if operation in ["unknown", "Unknown"]:
+                        from ..key_builder import CacheKeyBuilder
+
+                        key_components = CacheKeyBuilder.parse_key(cache_key)
+                        operation = key_components.get("operation", "unknown")
+                        resource_type = key_components.get("resource_type", "other")
+
                     entry = {
                         "key": cache_key,
-                        "operation": item.get("operation", "Unknown"),
+                        "operation": operation,
+                        "resource": resource_type,
                         "age": age,
                         "ttl": ttl_display,
                         "size": size_display,

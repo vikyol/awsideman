@@ -68,7 +68,7 @@ def get_user(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-) -> None:
+) -> Optional[dict]:
     """Get detailed information about a specific user.
 
     Retrieves and displays comprehensive information about a user by their username, email, or user ID.
@@ -333,7 +333,8 @@ def get_user(
                 f"[yellow]Warning: Could not retrieve group memberships: {str(e)}[/yellow]"
             )
 
-        # User data has been displayed, no need to return anything
+        # Return user data for testing purposes
+        return user
 
     except ClientError as e:
         # Handle AWS API errors

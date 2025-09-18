@@ -46,6 +46,13 @@ class AccountInfo:
     tags: Dict[str, str]
     ou_path: List[str]
 
+    def __post_init__(self):
+        """Initialize default values for optional fields."""
+        if self.tags is None:
+            self.tags = {}
+        if self.ou_path is None:
+            self.ou_path = []
+
     def matches_tag_filter(self, tag_key: str, tag_value: str) -> bool:
         """
         Check if account matches a specific tag filter.

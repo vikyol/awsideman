@@ -870,7 +870,7 @@ class FileBackend(CacheBackend):
 
         return entries
 
-    def health_check(self) -> bool:
+    def health_check(self) -> Dict[str, Any]:
         """
         Check if file backend is healthy and accessible.
 
@@ -889,7 +889,12 @@ class FileBackend(CacheBackend):
                     logger.error(
                         f"File backend health check failed - cannot create cache directory: {e}"
                     )
-                    return False
+                    return {
+                        "healthy": False,
+                        "backend_type": self.backend_type,
+                        "message": f"Cannot create cache directory: {e}",
+                        "error": str(e),
+                    }
 
             # Test write access by creating a temporary file
             test_file = cache_dir / ".health_check_test"
@@ -897,16 +902,30 @@ class FileBackend(CacheBackend):
                 test_file.write_text("health_check")
                 test_file.unlink()
                 logger.debug("File backend health check passed")
-                return True
+                return {
+                    "healthy": True,
+                    "backend_type": self.backend_type,
+                    "message": "File backend is healthy and accessible",
+                }
             except Exception as e:
                 logger.error(
                     f"File backend health check failed - cannot write to cache directory: {e}"
                 )
-                return False
+                return {
+                    "healthy": False,
+                    "backend_type": self.backend_type,
+                    "message": f"Cannot write to cache directory: {e}",
+                    "error": str(e),
+                }
 
         except Exception as e:
             logger.error(f"File backend health check failed with unexpected error: {e}")
-            return False
+            return {
+                "healthy": False,
+                "backend_type": self.backend_type,
+                "message": f"Unexpected error: {e}",
+                "error": str(e),
+            }
 
     def get_detailed_health_status(self) -> BackendHealthStatus:
         """

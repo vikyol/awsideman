@@ -16,9 +16,12 @@ from src.awsideman.utils.monitoring_config import (
 from src.awsideman.utils.monitoring_scheduler import MonitoringScheduler, ScheduledCheck
 from src.awsideman.utils.status_models import (
     HealthStatus,
+    OrphanedAssignmentStatus,
     ProvisioningStatus,
     StatusLevel,
     StatusReport,
+    SummaryStatistics,
+    SyncMonitorStatus,
 )
 
 
@@ -281,9 +284,26 @@ class TestMonitoringScheduler:
                 errors=[],
             ),
             provisioning_status=None,
-            orphaned_assignment_status=[],
-            sync_status=[],
-            summary_statistics=None,
+            orphaned_assignment_status=OrphanedAssignmentStatus(
+                timestamp=datetime.now(),
+                status=StatusLevel.HEALTHY,
+                message="No orphaned assignments",
+                orphaned_assignments=[],
+            ),
+            sync_status=SyncMonitorStatus(
+                timestamp=datetime.now(),
+                status=StatusLevel.HEALTHY,
+                message="Sync status healthy",
+                sync_providers=[],
+            ),
+            summary_statistics=SummaryStatistics(
+                total_users=0,
+                total_groups=0,
+                total_permission_sets=0,
+                total_assignments=0,
+                active_accounts=0,
+                last_updated=datetime.now(),
+            ),
         )
 
         with patch.object(self.scheduler.notification_system, "send_alert") as mock_send:
@@ -312,9 +332,26 @@ class TestMonitoringScheduler:
                 errors=[],
             ),
             provisioning_status=None,
-            orphaned_assignment_status=orphaned_assignments,
-            sync_status=[],
-            summary_statistics=None,
+            orphaned_assignment_status=OrphanedAssignmentStatus(
+                timestamp=datetime.now(),
+                status=StatusLevel.WARNING,
+                message="6 orphaned assignments found",
+                orphaned_assignments=orphaned_assignments,
+            ),
+            sync_status=SyncMonitorStatus(
+                timestamp=datetime.now(),
+                status=StatusLevel.HEALTHY,
+                message="Sync status healthy",
+                sync_providers=[],
+            ),
+            summary_statistics=SummaryStatistics(
+                total_users=0,
+                total_groups=0,
+                total_permission_sets=0,
+                total_assignments=0,
+                active_accounts=0,
+                last_updated=datetime.now(),
+            ),
         )
 
         with patch.object(self.scheduler.notification_system, "send_alert") as mock_send:

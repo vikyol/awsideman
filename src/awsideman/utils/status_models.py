@@ -184,7 +184,13 @@ class ProvisioningStatus(BaseStatusResult):
     def __post_init__(self) -> None:
         """Initialize parent and ensure collections are properly set."""
         super().__post_init__()
-        # Fields are already initialized with default_factory
+        # Handle explicit None values
+        if self.active_operations is None:
+            self.active_operations = []
+        if self.failed_operations is None:
+            self.failed_operations = []
+        if self.completed_operations is None:
+            self.completed_operations = []
 
     def get_total_operations(self) -> int:
         """Get total number of operations."""

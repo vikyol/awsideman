@@ -36,7 +36,8 @@ class OrgNode:
 
     def __post_init__(self):
         """Ensure children is always a list."""
-        pass  # children is already initialized with default_factory
+        if self.children is None:
+            self.children = []
 
     def add_child(self, child: "OrgNode") -> None:
         """Add a child node to this node."""
@@ -71,6 +72,13 @@ class AccountDetails:
     joined_timestamp: datetime
     tags: Dict[str, str]
     ou_path: List[str]  # List of OU IDs or names from root to account
+
+    def __post_init__(self):
+        """Initialize default values for optional fields."""
+        if self.tags is None:
+            self.tags = {}
+        if self.ou_path is None:
+            self.ou_path = []
 
     def get_tag(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get a tag value by key."""
@@ -132,7 +140,13 @@ class HierarchyPath:
 
     def __post_init__(self):
         """Ensure all lists are properly initialized and have same length."""
-        # Lists are already initialized, just ensure they have same length
+        # Initialize None values to empty lists
+        if self.ids is None:
+            self.ids = []
+        if self.names is None:
+            self.names = []
+        if self.types is None:
+            self.types = []
 
         # Ensure all lists have the same length
         max_len = max(len(self.ids), len(self.names), len(self.types))
