@@ -310,7 +310,7 @@ class HybridBackend(CacheBackend):
         Check if hybrid backend is healthy.
 
         Returns:
-            True if at least one backend is healthy, False if both are unhealthy
+            Dictionary with health status information
         """
         try:
             local_healthy = False
@@ -318,13 +318,21 @@ class HybridBackend(CacheBackend):
 
             # Check local backend health
             try:
-                local_healthy = self.local_backend.health_check()
+                local_health = self.local_backend.health_check()
+                if isinstance(local_health, bool):
+                    local_healthy = local_health
+                else:
+                    local_healthy = local_health.get("healthy", False)
             except Exception as e:
                 logger.warning(f"Local backend health check failed: {e}")
 
             # Check remote backend health
             try:
-                remote_healthy = self.remote_backend.health_check()
+                remote_health = self.remote_backend.health_check()
+                if isinstance(remote_health, bool):
+                    remote_healthy = remote_health
+                else:
+                    remote_healthy = remote_health.get("healthy", False)
             except Exception as e:
                 logger.warning(f"Remote backend health check failed: {e}")
 
@@ -335,10 +343,10 @@ class HybridBackend(CacheBackend):
                 logger.debug(
                     f"Hybrid backend health check passed (local: {local_healthy}, remote: {remote_healthy})"
                 )
+                return True
             else:
                 logger.error("Hybrid backend health check failed - both backends are unhealthy")
-
-            return is_healthy
+                return False
 
         except Exception as e:
             logger.error(f"Hybrid backend health check failed with unexpected error: {e}")
@@ -362,7 +370,12 @@ class HybridBackend(CacheBackend):
                 if hasattr(self.local_backend, "get_detailed_health_status"):
                     local_status = self.local_backend.get_detailed_health_status()
                 else:
-                    local_healthy = self.local_backend.health_check()
+                    local_health = self.local_backend.health_check()
+                    local_healthy = (
+                        local_health
+                        if isinstance(local_health, bool)
+                        else local_health.get("healthy", False)
+                    )
                     local_status = BackendHealthStatus(
                         is_healthy=local_healthy,
                         backend_type="file",
@@ -380,7 +393,12 @@ class HybridBackend(CacheBackend):
                 if hasattr(self.remote_backend, "get_detailed_health_status"):
                     remote_status = self.remote_backend.get_detailed_health_status()
                 else:
-                    remote_healthy = self.remote_backend.health_check()
+                    remote_health = self.remote_backend.health_check()
+                    remote_healthy = (
+                        remote_health
+                        if isinstance(remote_health, bool)
+                        else remote_health.get("healthy", False)
+                    )
                     remote_status = BackendHealthStatus(
                         is_healthy=remote_healthy,
                         backend_type="dynamodb",
@@ -597,12 +615,24 @@ class HybridBackend(CacheBackend):
             local_healthy = self.local_backend.health_check()
             remote_healthy = self.remote_backend.health_check()
 
-            if local_healthy and remote_healthy:
+            # Normalize to booleans if dicts are returned
+            local_ok = (
+                local_healthy
+                if isinstance(local_healthy, bool)
+                else local_healthy.get("healthy", False)
+            )
+            remote_ok = (
+                remote_healthy
+                if isinstance(remote_healthy, bool)
+                else remote_healthy.get("healthy", False)
+            )
+
+            if local_ok and remote_ok:
                 sync_result["success"] = True
                 logger.info("Backend synchronization completed - both backends healthy")
             else:
                 sync_result["errors"].append(
-                    f"Backend health issues - local: {local_healthy}, remote: {remote_healthy}"
+                    f"Backend health issues - local: {local_ok}, remote: {remote_ok}"
                 )
 
             return sync_result

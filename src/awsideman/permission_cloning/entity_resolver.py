@@ -442,7 +442,7 @@ class EntityResolver:
             group_info = self._group_cache.get(entity_id)
             return group_info.get("DisplayName") if group_info else None
 
-        return None  # type: ignore[unreachable]
+        return None
 
     def clear_cache(self) -> None:
         """Clear all cached entity information."""
@@ -530,7 +530,7 @@ class EntityResolver:
                     for group in groups
                 ]
 
-            return []  # type: ignore[unreachable]
+            return []
 
         except Exception as e:
             logger.error(

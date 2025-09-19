@@ -76,12 +76,13 @@ class CacheBackend(ABC):
         pass
 
     @abstractmethod
-    def health_check(self) -> bool:
+    def health_check(self) -> Dict[str, Any] | bool:
         """
         Check if backend is healthy and accessible.
 
         Returns:
-            True if backend is healthy, False otherwise
+            Either a boolean (simple health indicator) or a dictionary with
+            health status information including 'healthy' key
         """
         pass
 

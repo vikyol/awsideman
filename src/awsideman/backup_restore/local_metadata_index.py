@@ -67,7 +67,8 @@ class LocalMetadataIndex:
         try:
             if self.metadata_file.exists():
                 with open(self.metadata_file, "r") as f:
-                    return json.load(f)  # type: ignore[no-any-return]
+                    data: Dict[str, Any] = json.load(f)
+                    return data
             return {}
         except Exception as e:
             logger.error(f"Failed to load metadata index: {e}")
@@ -86,7 +87,8 @@ class LocalMetadataIndex:
         try:
             if self.storage_locations_file.exists():
                 with open(self.storage_locations_file, "r") as f:
-                    return json.load(f)  # type: ignore[no-any-return]
+                    data: Dict[str, Dict[str, str]] = json.load(f)
+                    return data
             return {}
         except Exception as e:
             logger.error(f"Failed to load storage locations: {e}")

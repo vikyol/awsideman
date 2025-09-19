@@ -526,7 +526,7 @@ class BatchProcessor:
         metrics: PerformanceMetrics,
     ) -> Dict[str, Optional[EntityReference]]:
         """Resolve a batch of entities."""
-        results = {}
+        results: Dict[str, Optional[EntityReference]] = {}
 
         for entity_type, entity_id in entity_references:
             try:
@@ -550,14 +550,14 @@ class BatchProcessor:
                 if entity:
                     self.cache.put_entity(entity)
 
-                results[entity_id] = entity  # type: ignore[assignment]
+                results[entity_id] = entity
                 metrics.api_calls += 1
 
             except Exception as e:
                 logger.error(f"Error resolving entity {entity_id}: {str(e)}")
-                results[entity_id] = None  # type: ignore[assignment]
+                results[entity_id] = None
 
-        return results  # type: ignore[return-value]
+        return results
 
     def _execute_with_retry(
         self,
@@ -659,9 +659,12 @@ class StreamProcessor:
         if len(assignments) < self.config.stream_threshold:
             # Use regular batch processing for smaller lists
             with self.batch_processor as bp:
-                return bp.process_assignments_parallel(  # type: ignore[no-any-return]
-                    assignments, target_entity, operation_func, metrics
+                result: Tuple[List[PermissionAssignment], List[str]] = (
+                    bp.process_assignments_parallel(
+                        assignments, target_entity, operation_func, metrics
+                    )
                 )
+                return result
 
         logger.info(f"Using stream processing for {len(assignments)} assignments")
 

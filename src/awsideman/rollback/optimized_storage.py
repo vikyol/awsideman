@@ -97,6 +97,9 @@ class CompressedJSONStorage:
 class MemoryOptimizedOperationStore:
     """Memory-optimized operation store with compression and efficient querying."""
 
+    operations_storage: Optional[CompressedJSONStorage]
+    rollbacks_storage: Optional[CompressedJSONStorage]
+
     def __init__(
         self,
         storage_directory: Optional[str] = None,
@@ -141,8 +144,8 @@ class MemoryOptimizedOperationStore:
             self.operations_storage = CompressedJSONStorage(self.operations_file, compression_level)
             self.rollbacks_storage = CompressedJSONStorage(self.rollbacks_file, compression_level)
         else:
-            self.operations_storage = None  # type: ignore[assignment]
-            self.rollbacks_storage = None  # type: ignore[assignment]
+            self.operations_storage = None
+            self.rollbacks_storage = None
 
         # In-memory index for fast lookups
         self._operation_index: Dict[str, Dict[str, Any]] = {}
@@ -155,9 +158,9 @@ class MemoryOptimizedOperationStore:
     def _initialize_storage(self) -> None:
         """Initialize storage files if they don't exist."""
         if self.compression_enabled:
-            if not self.operations_file.exists():
+            if not self.operations_file.exists() and self.operations_storage:
                 self.operations_storage.write_data({"operations": []})
-            if not self.rollbacks_file.exists():
+            if not self.rollbacks_file.exists() and self.rollbacks_storage:
                 self.rollbacks_storage.write_data({"rollbacks": []})
         else:
             if not self.operations_file.exists():
@@ -208,7 +211,10 @@ class MemoryOptimizedOperationStore:
     def _iterate_operations(self) -> Iterator[Dict[str, Any]]:
         """Iterate over operations without loading all into memory."""
         if self.compression_enabled:
-            data = self.operations_storage.read_data()
+            if self.operations_storage:
+                data = self.operations_storage.read_data()
+            else:
+                data = {"operations": []}
         else:
             try:
                 with open(self.operations_file, "r") as f:
@@ -225,7 +231,8 @@ class MemoryOptimizedOperationStore:
 
         if self.compression_enabled:
             # Append to compressed storage
-            self.operations_storage.append_data("operations", [operation_dict])
+            if self.operations_storage:
+                self.operations_storage.append_data("operations", [operation_dict])
         else:
             # Read, append, write for uncompressed
             try:
@@ -339,7 +346,10 @@ class MemoryOptimizedOperationStore:
 
         # Update storage
         if self.compression_enabled:
-            data = self.operations_storage.read_data()
+            if self.operations_storage:
+                data = self.operations_storage.read_data()
+            else:
+                return False
         else:
             try:
                 with open(self.operations_file, "r") as f:
@@ -358,7 +368,8 @@ class MemoryOptimizedOperationStore:
 
         if updated:
             if self.compression_enabled:
-                self.operations_storage.write_data(data)
+                if self.operations_storage:
+                    self.operations_storage.write_data(data)
             else:
                 with open(self.operations_file, "w") as f:
                     json.dump(data, f, separators=(",", ":"), default=str)
@@ -368,7 +379,8 @@ class MemoryOptimizedOperationStore:
     def store_rollback_record(self, rollback_data: Dict) -> None:
         """Store a rollback operation record."""
         if self.compression_enabled:
-            self.rollbacks_storage.append_data("rollbacks", [rollback_data])
+            if self.rollbacks_storage:
+                self.rollbacks_storage.append_data("rollbacks", [rollback_data])
         else:
             try:
                 with open(self.rollbacks_file, "r") as f:
@@ -428,14 +440,16 @@ class MemoryOptimizedOperationStore:
                     # Read from temp and write compressed
                     with open(temp_file, "r") as f:
                         temp_data = json.load(f)
-                    self.operations_storage.write_data(temp_data)
+                    if self.operations_storage:
+                        self.operations_storage.write_data(temp_data)
                 else:
                     temp_file.replace(self.operations_file)
             else:
                 # Small dataset, write directly
                 final_data = {"operations": kept_operations}
                 if self.compression_enabled:
-                    self.operations_storage.write_data(final_data)
+                    if self.operations_storage:
+                        self.operations_storage.write_data(final_data)
                 else:
                     with open(self.operations_file, "w") as f:
                         json.dump(final_data, f, separators=(",", ":"), default=str)
@@ -487,10 +501,10 @@ class MemoryOptimizedOperationStore:
 
         if self.compression_enabled:
             stats["operations_compression_ratio"] = int(
-                self.operations_storage.get_compression_ratio()
+                self.operations_storage.get_compression_ratio() if self.operations_storage else 0.0
             )
             stats["rollbacks_compression_ratio"] = int(
-                self.rollbacks_storage.get_compression_ratio()
+                self.rollbacks_storage.get_compression_ratio() if self.rollbacks_storage else 0.0
             )
 
         # Calculate memory usage estimate
@@ -554,13 +568,15 @@ class MemoryOptimizedOperationStore:
         # Create new empty file
         if file_path.name.startswith("operations"):
             if self.compression_enabled:
-                self.operations_storage.write_data({"operations": []})
+                if self.operations_storage:
+                    self.operations_storage.write_data({"operations": []})
             else:
                 with open(file_path, "w") as f:
                     json.dump({"operations": []}, f)
         elif file_path.name.startswith("rollbacks"):
             if self.compression_enabled:
-                self.rollbacks_storage.write_data({"rollbacks": []})
+                if self.rollbacks_storage:
+                    self.rollbacks_storage.write_data({"rollbacks": []})
             else:
                 with open(file_path, "w") as f:
                     json.dump({"rollbacks": []}, f)

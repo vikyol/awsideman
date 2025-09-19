@@ -6,7 +6,7 @@ in AWS Identity Center, including caching for performance optimization.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Dict, List, Union
 
 from botocore.exceptions import ClientError
 
@@ -47,7 +47,9 @@ class AssignmentRetriever:
         self.entity_resolver = EntityResolver(client_manager, identity_store_id)
 
         # Cache for assignment data to improve performance
-        self._assignment_cache: Dict[str, Any] = {}  # {entity_key: assignments}
+        self._assignment_cache: Dict[str, Union[List[str], List[Dict[str, str]]]] = (
+            {}
+        )  # {entity_key: assignments}
         self._permission_set_cache: Dict[str, Dict[str, str]] = {}  # {arn: {name, description}}
         self._account_cache: Dict[str, str] = {}  # {id: name}
 
@@ -176,7 +178,7 @@ class AssignmentRetriever:
         elif entity.entity_type == EntityType.GROUP:
             return self.get_group_assignments(entity)
         else:
-            logger.error(f"Unsupported entity type: {entity.entity_type}")  # type: ignore[unreachable]
+            logger.error(f"Unsupported entity type: {entity.entity_type}")
             return []
 
     def get_assignments_for_multiple_entities(
@@ -312,7 +314,13 @@ class AssignmentRetriever:
     def _get_all_permission_sets(self) -> List[str]:
         """Get all permission sets in the instance."""
         if "permission_sets" in self._assignment_cache:
-            return self._assignment_cache["permission_sets"]  # type: ignore[no-any-return]
+            cached_value = self._assignment_cache["permission_sets"]
+            if isinstance(cached_value, list) and all(
+                isinstance(item, str) for item in cached_value
+            ):
+                return cached_value  # type: ignore[return-value]
+            # If cached value is not the expected type, clear it and refetch
+            del self._assignment_cache["permission_sets"]
 
         try:
             permission_sets = []
@@ -332,7 +340,13 @@ class AssignmentRetriever:
     def _get_all_accounts(self) -> List[Dict[str, str]]:
         """Get all accounts in the organization."""
         if "accounts" in self._assignment_cache:
-            return self._assignment_cache["accounts"]  # type: ignore[no-any-return]
+            cached_value = self._assignment_cache["accounts"]
+            if isinstance(cached_value, list) and all(
+                isinstance(item, dict) for item in cached_value
+            ):
+                return cached_value  # type: ignore[return-value]
+            # If cached value is not the expected type, clear it and refetch
+            del self._assignment_cache["accounts"]
 
         try:
             accounts = []
@@ -440,8 +454,8 @@ class AssignmentRetriever:
             )
 
             permission_set = response.get("PermissionSet", {})
-            name = permission_set.get("Name", "")
-            description = permission_set.get("Description", "")
+            name = str(permission_set.get("Name", ""))
+            description = str(permission_set.get("Description", ""))
 
             # Cache the result
             self._permission_set_cache[permission_set_arn] = {
@@ -449,7 +463,7 @@ class AssignmentRetriever:
                 "description": description,
             }
 
-            return name  # type: ignore[no-any-return]
+            return name
 
         except Exception as e:
             logger.warning(
@@ -465,19 +479,21 @@ class AssignmentRetriever:
         try:
             # Try to get account name from cache first
             if "accounts" in self._assignment_cache:
-                for account in self._assignment_cache["accounts"]:
-                    if account.get("Id") == account_id:
-                        account_name = str(account.get("Name", ""))
-                        self._account_cache[account_id] = account_name
-                        return account_name
+                cached_accounts = self._assignment_cache["accounts"]
+                if isinstance(cached_accounts, list):
+                    for account in cached_accounts:
+                        if isinstance(account, dict) and account.get("Id") == account_id:
+                            account_name = str(account.get("Name", ""))
+                            self._account_cache[account_id] = account_name
+                            return account_name
 
             # If not in cache, try to get from Organizations API
             response = self.organizations_client.describe_account(AccountId=account_id)
-            account_name = response.get("Account", {}).get("Name", "")
+            account_name = str(response.get("Account", {}).get("Name", ""))
 
             # Cache the result
             self._account_cache[account_id] = account_name
-            return account_name  # type: ignore[no-any-return]
+            return account_name
 
         except Exception as e:
             logger.warning(f"Error retrieving account name for {account_id}: {str(e)}")

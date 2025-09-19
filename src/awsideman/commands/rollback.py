@@ -1509,11 +1509,11 @@ def show_status(
             op_type = operation.operation_type.value.upper()
 
             # Truncate names for display
-            principal_name = operation.principal_name
+            principal_name = getattr(operation, "principal_name", "N/A")
             if len(principal_name) > 15:
                 principal_name = principal_name[:12] + "..."
 
-            ps_name = operation.permission_set_name
+            ps_name = getattr(operation, "permission_set_name", "N/A")
             if len(ps_name) > 20:
                 ps_name = ps_name[:17] + "..."
 
@@ -1521,8 +1521,9 @@ def show_status(
             if operation.rolled_back:
                 status = "[red]Rolled Back[/red]"
             else:
-                successful_results = sum(1 for r in operation.results if r.success)
-                total_results = len(operation.results)
+                results = getattr(operation, "results", [])
+                successful_results = sum(1 for r in results if r.success)
+                total_results = len(results)
 
                 if successful_results == total_results:
                     status = "[green]Success[/green]"

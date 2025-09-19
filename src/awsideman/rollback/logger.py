@@ -1,8 +1,15 @@
 """Operation logger for tracking permission set operations."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from .models import OperationRecord, OperationResult, OperationType, PrincipalType
+from .models import (
+    OperationRecord,
+    OperationResult,
+    OperationType,
+    PermissionCloningOperationRecord,
+    PermissionSetCloningOperationRecord,
+    PrincipalType,
+)
 from .storage import OperationStore
 
 
@@ -108,7 +115,11 @@ class OperationLogger:
         permission_set: Optional[str] = None,
         days: Optional[int] = None,
         limit: Optional[int] = None,
-    ) -> List[OperationRecord]:
+    ) -> List[
+        Union[
+            OperationRecord, PermissionCloningOperationRecord, PermissionSetCloningOperationRecord
+        ]
+    ]:
         """Get operations with optional filtering.
 
         Args:

@@ -184,7 +184,7 @@ class ProvisioningStatus(BaseStatusResult):
     def __post_init__(self) -> None:
         """Initialize parent and ensure collections are properly set."""
         super().__post_init__()
-        # Handle explicit None values
+        # Handle explicit None values - these checks are needed for explicit None assignments
         if self.active_operations is None:
             self.active_operations = []
         if self.failed_operations is None:

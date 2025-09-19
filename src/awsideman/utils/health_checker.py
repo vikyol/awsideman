@@ -55,7 +55,7 @@ class HealthChecker(BaseStatusChecker):
             )
 
             if timeout_result.success:
-                health_status = timeout_result.result
+                health_status: HealthStatus = timeout_result.result
                 health_status.add_detail(
                     "check_duration_ms", timeout_result.duration_seconds * 1000
                 )
@@ -69,7 +69,7 @@ class HealthChecker(BaseStatusChecker):
                     },
                 )
 
-                return health_status  # type: ignore[no-any-return]
+                return health_status
             else:
                 # Timeout or other error occurred
                 error = timeout_result.error

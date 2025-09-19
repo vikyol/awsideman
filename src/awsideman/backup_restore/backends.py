@@ -383,10 +383,10 @@ class S3StorageBackend(StorageBackendInterface):
             session = self._create_session()
             async with session.client("s3", **self.aws_config) as s3:
                 response = await s3.get_object(Bucket=self.bucket_name, Key=s3_key)
-                data = await response["Body"].read()
+                data: bytes = await response["Body"].read()
 
             logger.debug(f"Successfully read data from S3 key {s3_key}")
-            return data  # type: ignore[no-any-return]
+            return data
 
         except Exception as e:
             # Check for authentication errors first

@@ -202,10 +202,10 @@ class PermissionSetRetriever:
                 InstanceArn=self.instance_arn, PermissionSetArn=permission_set_arn
             )
 
-            inline_policy = response.get("InlinePolicy")
+            inline_policy: str | None = response.get("InlinePolicy")
             if inline_policy:
                 logger.debug("Found inline policy")
-                return inline_policy  # type: ignore[no-any-return]
+                return inline_policy
             else:
                 logger.debug("No inline policy found")
                 return None
@@ -230,8 +230,8 @@ class PermissionSetRetriever:
             for permission_set_arn in response["PermissionSets"]:
                 try:
                     basic_info = self._get_permission_set_basic_info(permission_set_arn)
-                    if basic_info["name"] == permission_set_name:
-                        return permission_set_arn  # type: ignore[no-any-return]
+                    if str(basic_info["name"]) == permission_set_name:
+                        return str(permission_set_arn)
                 except Exception:
                     # Skip this permission set if we can't get its info
                     continue

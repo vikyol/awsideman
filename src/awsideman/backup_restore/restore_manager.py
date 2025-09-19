@@ -464,7 +464,7 @@ class RestoreProcessor:
                     raise ValueError(f"IdentityStoreId not found in instance {instance_arn}")
                 self._identity_store_id = identity_store_id
                 logger.info(f"Found identity store ID: {identity_store_id}")
-                return identity_store_id  # type: ignore[no-any-return]
+                return str(identity_store_id)
 
             except Exception as e:
                 logger.error(f"Failed to get identity store ID for instance {instance_arn}: {e}")
@@ -774,7 +774,7 @@ class RestoreProcessor:
                     else None
                 ),
             )
-            return response["UserId"]  # type: ignore[no-any-return]
+            return str(response["UserId"])
         except Exception as e:
             logger.error(f"Failed to create user {user.user_name}: {e}")
             raise
@@ -802,7 +802,7 @@ class RestoreProcessor:
                 Description=group.description
                 or "Restored from backup",  # Use default description if None
             )
-            return response["GroupId"]  # type: ignore[no-any-return]
+            return str(response["GroupId"])
         except Exception as e:
             logger.error(f"Failed to create group {group.display_name}: {e}")
             raise
@@ -830,7 +830,7 @@ class RestoreProcessor:
                 or "Restored from backup",  # Use default description if None
                 SessionDuration=ps.session_duration or "PT1H",  # Default to 1 hour if not specified
             )
-            return response["PermissionSet"]["PermissionSetArn"]  # type: ignore[no-any-return]
+            return str(response["PermissionSet"]["PermissionSetArn"])
         except Exception as e:
             logger.error(f"Failed to create permission set {ps.name}: {e}")
             raise

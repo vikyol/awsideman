@@ -658,7 +658,7 @@ class CircuitBreaker:
             return True
 
         # This should never be reached as all enum values are covered above
-        return False  # type: ignore[unreachable]
+        return False
 
     def record_success(self):
         """Record a successful execution."""

@@ -128,7 +128,7 @@ class AWSClientManager:
         if self.session is None:
             raise RuntimeError("Session not initialized")
 
-        try:  # type: ignore[unreachable]
+        try:
             # Try to get caller identity using STS - this is a lightweight operation
             # that will fail if credentials are invalid or expired
             sts_client = self.session.client("sts")
@@ -190,7 +190,7 @@ class AWSClientManager:
         """
         if self.session is None:
             raise RuntimeError("Session not initialized")
-        return self.session.client(service_name)  # type: ignore[unreachable]
+        return self.session.client(service_name)
 
     def get_raw_identity_center_client(self) -> Any:
         """
@@ -814,15 +814,15 @@ def get_account_details(
 
             # Handle different return types from cached vs non-cached clients
             tags_list: List[Dict[str, str]] = []
-            if isinstance(tags_data, dict) and "Tags" in tags_data:  # type: ignore[unreachable]
+            if isinstance(tags_data, dict) and "Tags" in tags_data:
                 # Cached client returns {"Tags": [...]}
-                tags_list = tags_data["Tags"]  # type: ignore[unreachable]
+                tags_list = tags_data["Tags"]
             elif isinstance(tags_data, list):
                 # Non-cached client returns [...] directly
                 tags_list = tags_data
             else:
                 # Fallback for unexpected types
-                console.print(  # type: ignore[unreachable]
+                console.print(
                     f"[yellow]Warning: Unexpected tags data format for account {account_id}: {type(tags_data)}[/yellow]"
                 )
 

@@ -193,8 +193,8 @@ class RetryHandler:
         Returns:
             Delay in seconds
         """
-        delay = self.base_delay * (2**attempt)
-        return min(delay, self.max_delay)  # type: ignore[no-any-return]
+        delay: float = self.base_delay * (2**attempt)
+        return min(delay, self.max_delay)
 
     async def execute_with_retry(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
         """Execute a function with retry logic.

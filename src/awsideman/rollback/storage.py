@@ -3,9 +3,13 @@
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from .models import OperationRecord
+from .models import (
+    OperationRecord,
+    PermissionCloningOperationRecord,
+    PermissionSetCloningOperationRecord,
+)
 
 
 class OperationStore:
@@ -49,7 +53,8 @@ class OperationStore:
         """Read the operations file."""
         try:
             with open(self.operations_file, "r") as f:
-                return json.load(f)  # type: ignore[no-any-return]
+                data = json.load(f)
+                return data if isinstance(data, dict) else {"operations": []}
         except (FileNotFoundError, json.JSONDecodeError):
             return {"operations": []}
 
@@ -62,7 +67,8 @@ class OperationStore:
         """Read the rollbacks file."""
         try:
             with open(self.rollbacks_file, "r") as f:
-                return json.load(f)  # type: ignore[no-any-return]
+                data = json.load(f)
+                return data if isinstance(data, dict) else {"rollbacks": []}
         except (FileNotFoundError, json.JSONDecodeError):
             return {"rollbacks": []}
 
@@ -108,7 +114,11 @@ class OperationStore:
         permission_set: Optional[str] = None,
         days: Optional[int] = None,
         limit: Optional[int] = None,
-    ) -> List[OperationRecord]:
+    ) -> List[
+        Union[
+            OperationRecord, PermissionCloningOperationRecord, PermissionSetCloningOperationRecord
+        ]
+    ]:
         """Get operations with optional filtering."""
         data = self._read_operations_file()
         operations = []
@@ -122,16 +132,16 @@ class OperationStore:
             # Determine the operation type and create the appropriate record
             if "source_entity_id" in op_data and "target_entity_id" in op_data:
                 # This is a permission cloning operation
-                from .models import PermissionCloningOperationRecord
-
-                operation: OperationRecord = PermissionCloningOperationRecord.from_dict(op_data)  # type: ignore[assignment]
+                operation: Union[
+                    OperationRecord,
+                    PermissionCloningOperationRecord,
+                    PermissionSetCloningOperationRecord,
+                ] = PermissionCloningOperationRecord.from_dict(op_data)
             elif (
                 "source_permission_set_name" in op_data and "target_permission_set_name" in op_data
             ):
                 # This is a permission set cloning operation
-                from .models import PermissionSetCloningOperationRecord
-
-                operation = PermissionSetCloningOperationRecord.from_dict(op_data)  # type: ignore[assignment]
+                operation = PermissionSetCloningOperationRecord.from_dict(op_data)
             else:
                 # This is a standard operation
                 operation = OperationRecord.from_dict(op_data)

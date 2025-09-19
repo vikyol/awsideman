@@ -412,7 +412,7 @@ class DynamoDBBackend(CacheBackend):
         Check if DynamoDB backend is healthy and accessible.
 
         Returns:
-            True if backend is healthy, False otherwise
+            Dictionary with health status information
         """
         try:
             # Try to describe the table or list tables to check connectivity
@@ -1327,8 +1327,8 @@ class DynamoDBBackend(CacheBackend):
                         from ..key_builder import CacheKeyBuilder
 
                         key_components = CacheKeyBuilder.parse_key(cache_key)
-                        operation = key_components.get("operation", "unknown")
-                        resource_type = key_components.get("resource_type", "other")
+                        operation = key_components.get("operation") or "unknown"
+                        resource_type = key_components.get("resource_type") or "other"
 
                     entry = {
                         "key": cache_key,

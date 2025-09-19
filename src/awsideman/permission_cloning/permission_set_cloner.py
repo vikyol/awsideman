@@ -355,10 +355,10 @@ class PermissionSetCloner:
 
             response = self.sso_admin_client.create_permission_set(**create_params)
 
-            permission_set_arn = response["PermissionSet"]["PermissionSetArn"]
+            permission_set_arn: str = response["PermissionSet"]["PermissionSetArn"]
             logger.info(f"Created permission set '{name}' with ARN: {permission_set_arn}")
 
-            return permission_set_arn  # type: ignore[no-any-return]
+            return permission_set_arn
 
         except Exception as e:
             logger.error(f"Failed to create permission set '{name}': {str(e)}")
@@ -507,7 +507,7 @@ class PermissionSetCloner:
         try:
             sts_client = self.client_manager.get_client("sts")
             response = sts_client.get_caller_identity()
-            return response["Account"]  # type: ignore[no-any-return]
+            return str(response["Account"])
         except Exception:
             # Fallback to a default account ID for testing
             return "123456789012"

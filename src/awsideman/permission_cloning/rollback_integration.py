@@ -296,12 +296,12 @@ class PermissionCloningRollbackIntegration:
             if not operation_record:
                 raise ValueError(f"Operation {operation_id} not found")
 
-            if not isinstance(operation_record, PermissionSetCloningOperationRecord):  # type: ignore[unreachable]
+            if not isinstance(operation_record, PermissionSetCloningOperationRecord):
                 raise ValueError(
                     f"Operation {operation_id} is not a permission set cloning operation"
                 )
 
-            if operation_record.rolled_back:  # type: ignore[unreachable]
+            if operation_record.rolled_back:
                 raise ValueError(f"Operation {operation_id} has already been rolled back")
 
             logger.info(f"Rolling back permission set clone operation {operation_id}")
@@ -502,7 +502,7 @@ class PermissionCloningRollbackIntegration:
             response = sso_admin_client.list_instances()
             instances = response.get("Instances", [])
             if instances:
-                return instances[0]["InstanceArn"]  # type: ignore[no-any-return]
+                return str(instances[0]["InstanceArn"])
             else:
                 raise ValueError("No SSO instances found")
         except Exception as e:

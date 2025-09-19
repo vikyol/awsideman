@@ -1,7 +1,7 @@
 """Get user command for awsideman."""
 
 import re
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import typer
 from botocore.exceptions import ClientError
@@ -68,7 +68,7 @@ def get_user(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="AWS profile to use (uses default profile if not specified)"
     ),
-) -> Optional[dict]:
+) -> Optional[Dict[str, Any]]:
     """Get detailed information about a specific user.
 
     Retrieves and displays comprehensive information about a user by their username, email, or user ID.
@@ -334,7 +334,7 @@ def get_user(
             )
 
         # Return user data for testing purposes
-        return user
+        return dict(user) if user else None
 
     except ClientError as e:
         # Handle AWS API errors

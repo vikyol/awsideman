@@ -188,14 +188,14 @@ class CompressionProvider(CompressionProviderInterface):
 
         try:
             decompress_func = self.ALGORITHMS[algorithm]["decompress"]
-            decompressed_data = await asyncio.get_event_loop().run_in_executor(
+            decompressed_data: bytes = await asyncio.get_event_loop().run_in_executor(
                 None, decompress_func, data
             )
 
             logger.debug(
                 f"Decompressed {len(data)} bytes to {len(decompressed_data)} bytes using {algorithm}"
             )
-            return decompressed_data  # type: ignore[no-any-return]
+            return decompressed_data
 
         except Exception as e:
             logger.error(f"Decompression failed with {algorithm}: {e}")
